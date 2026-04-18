@@ -1,9 +1,9 @@
 "use client";
 
-import { DecisionEngine } from "@/src/features/dashboard/DecisionEngine";
-import SensorCard from "@/src/components/cards/SensorCard";
-import StatusPanel from "@/src/components/status/StatusPanel";
-import { useSensor } from "@/src/hooks/useSensor";
+import { DecisionEngine } from "@/features/dashboard/DecisionEngine";
+import SensorCard from "@/components/cards/SensorCard";
+import StatusPanel from "@/components/status/StatusPanel";
+import { useSensor } from "@/hooks/useSensor";
 
 export default function Home() {
   const sensor = useSensor();
