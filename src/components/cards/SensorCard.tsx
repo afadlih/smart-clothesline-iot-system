@@ -7,10 +7,10 @@ type Props = {
 
 export default function SensorCard({ title, value, subtitle, accent }: Props) {
     const borderClass = accent === "warning"
-        ? "border-yellow-300"
+        ? "border-yellow-300 dark:border-yellow-600"
         : accent === "danger"
-            ? "border-red-300"
-            : "border-gray-200";
+            ? "border-red-300 dark:border-red-700"
+            : "border-gray-200 dark:border-slate-700";
 
     const dotClass = accent === "warning"
         ? "bg-yellow-400"
@@ -20,7 +20,7 @@ export default function SensorCard({ title, value, subtitle, accent }: Props) {
 
     return (
         <div
-            className={`relative bg-white rounded-xl shadow-sm p-6 border ${borderClass} hover:shadow-md hover:-translate-y-0.5 transition-all duration-200`}
+            className={`relative bg-white dark:bg-slate-900 rounded-xl shadow-sm p-6 border ${borderClass} hover:shadow-md hover:-translate-y-0.5 transition-all duration-200`}
         >
             {accent && (
                 <span
@@ -28,11 +28,11 @@ export default function SensorCard({ title, value, subtitle, accent }: Props) {
                     aria-hidden="true"
                 />
             )}
-            <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">
+            <p className="text-xs uppercase tracking-wide text-gray-400 dark:text-slate-500 font-semibold">
                 {title}
             </p>
-            <p className="text-2xl font-semibold text-gray-900 mt-2">{value}</p>
-            {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
+            <p className="text-2xl font-semibold text-gray-900 dark:text-slate-100 mt-2">{value}</p>
+            {subtitle && <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">{subtitle}</p>}
         </div>
     );
 }

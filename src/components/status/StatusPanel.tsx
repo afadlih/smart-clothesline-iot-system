@@ -6,10 +6,14 @@ type Props = {
 export default function StatusPanel({ status, reason }: Props) {
     const isOpen = status === "TERBUKA";
     const bgColor = isOpen
-        ? "bg-green-100 border-green-300 shadow-green-100"
-        : "bg-red-100 border-red-300 shadow-red-100";
-    const textColor = isOpen ? "text-green-900" : "text-red-900";
-    const statusColor = isOpen ? "text-green-700" : "text-red-700";
+        ? "bg-green-100 border-green-300 shadow-green-100 dark:bg-green-900/30 dark:border-green-700 dark:shadow-green-900/30"
+        : "bg-red-100 border-red-300 shadow-red-100 dark:bg-red-900/30 dark:border-red-700 dark:shadow-red-900/30";
+    const textColor = isOpen
+        ? "text-green-900 dark:text-green-200"
+        : "text-red-900 dark:text-red-200";
+    const statusColor = isOpen
+        ? "text-green-700 dark:text-green-300"
+        : "text-red-700 dark:text-red-300";
     const dotColor = isOpen ? "bg-green-500" : "bg-red-500";
 
     return (
@@ -26,7 +30,7 @@ export default function StatusPanel({ status, reason }: Props) {
                 </h2>
             </div>
             <p className={`text-3xl font-bold ${textColor} mb-2`}>{status}</p>
-            <p className="text-sm text-gray-600">{reason}</p>
+            <p className="text-sm text-gray-600 dark:text-slate-300">{reason}</p>
         </div>
     );
 }

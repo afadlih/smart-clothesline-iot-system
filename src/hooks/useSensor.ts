@@ -1,21 +1,18 @@
 import { useEffect, useState } from "react";
-import { SensorService } from "../services/SensorService";
-import { SensorData } from "../models/SensorData";
+import { SensorData } from "@/models/SensorData";
+import { SensorService } from "@/services/SensorService";
 
 export function useSensor() {
     const [sensor, setSensor] = useState<SensorData | null>(null);
 
     useEffect(() => {
-        const fetchData = async () => {
-            const data = await SensorService.getSensorData();
+        const unsubscribe = SensorService.subscribeToSensorData((data) => {
             setSensor(data);
+        });
+
+        return () => {
+            unsubscribe();
         };
-
-        fetchData();
-
-        const interval = setInterval(fetchData, 3000);
-
-        return () => clearInterval(interval);
     }, []);
 
     return sensor;

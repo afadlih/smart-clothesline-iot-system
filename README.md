@@ -1,79 +1,115 @@
 # Smart Clothesline IoT Dashboard
 
-A modern IoT dashboard simulation for an automated clothesline system. It monitors environmental conditions and determines whether the clothesline should be open or closed based on rain and light intensity.
+Smart Clothesline IoT Dashboard is a real-time monitoring web app that simulates an automated clothesline system using IoT concepts and cloud messaging.
 
 ## Project Overview
 
-The system tracks:
+The dashboard monitors:
 - Temperature
 - Humidity
 - Light intensity
 - Rain detection
 
 Decision rule:
-- If rain is detected OR light is low -> clothesline closes (TERTUTUP)
-- Otherwise -> clothesline opens (TERBUKA)
+- If rain is detected OR light is low, clothesline closes (`TERTUTUP`)
+- Otherwise, clothesline opens (`TERBUKA`)
 
 ## Tech Stack
 
 - Next.js 14 (App Router)
 - TypeScript
 - Tailwind CSS
-- OOP-based architecture (Model, Service, Hook, UI)
+- MQTT (HiveMQ public broker)
+- OOP-based clean architecture (Model -> Service -> Hook -> UI)
 
 ## Architecture
 
-The project follows a clean, layered flow from data modeling to UI rendering:
+This project keeps data and UI concerns separated with a layered structure:
 
-- SensorData (Model)
-  Encapsulates sensor readings and behavior, such as rain detection and low-light checks.
-- DecisionEngine (Business logic)
-  Central decision rules for clothesline state.
-- SensorService (Data provider)
-  Provides sensor data (currently mocked).
-- useSensor (Hook)
-  Polls data periodically and delivers it to the UI.
-- UI Components
-  - StatusPanel: shows system decision and reason
-  - SensorCard: displays each sensor metric
+- `SensorData` (Model)
+  Encapsulates sensor fields and sensor behaviors (`isRaining`, `isDark`, etc.).
+- `DecisionEngine` (Business Logic)
+  Determines clothesline state and reason from sensor data.
+- `MQTTService` (Infrastructure Service)
+  Connects to broker, subscribes to topic, parses and validates JSON payload.
+- `SensorService` (Application Service)
+  Maps MQTT payload into `SensorData` model instances.
+- `useSensor` (Hook)
+  Subscribes to service updates and exposes live state to UI components.
+- UI Layer
+  - `StatusPanel`: current decision status (`TERBUKA` / `TERTUTUP`) and reason
+  - `SensorCard`: sensor metric cards with visual indicators
+
+### Data Flow
+
+`simulator.js` (publisher) -> MQTT Broker -> `MQTTService` -> `SensorService` -> `useSensor` -> Dashboard UI
 
 ## Features Implemented
 
-- Real-time dashboard simulation (auto update every few seconds)
+- Real-time cloud-based updates via MQTT
 - Smart decision system for clothesline status
 - Clean modular architecture (OOP + separation of concerns)
-- Modern SaaS-style UI dashboard
-- Status indicator (OPEN / CLOSED)
-- Sensor monitoring cards
-- System status badge (ONLINE)
-- Animated UI feedback
+- Modern SaaS-style dashboard UI
+- Status indicator (`ONLINE`) and animated feedback
+- Responsive sensor cards and status panel
+- Custom 404 page for unknown routes
 
 ## Current Status
 
-- Simulation phase with mock data
-- UI fully functional and polished
-- Architecture ready for real IoT integration
+- Project is in simulation phase using cloud MQTT + Node.js simulator
+- Dashboard UI is functional and polished
+- Core architecture is production-ready for real device integration
 
-## Next Development
+## MQTT Topic and Payload
 
-- MQTT integration
-- ESP32 connection
-- Real sensor data streaming
-- Historical data visualization (charts)
-- Alert and notification system
+- Topic: `smart-clothesline/sensor`
+- Payload format:
+
+```json
+{
+  "temperature": 30,
+  "humidity": 75,
+  "light": 220,
+  "rain": false
+}
+```
 
 ## How to Run
 
 1. Install dependencies:
-   - npm install
-2. Start the development server:
-   - npm run dev
 
-Then open http://localhost:3000 in your browser.
+```bash
+npm install
+```
+
+2. Start dashboard:
+
+```bash
+npm run dev
+```
+
+3. In another terminal, run simulator publisher:
+
+```bash
+node simulator.js
+```
+
+4. Open the app in browser:
+- `http://localhost:3000`
+- If port `3000` is busy, run `npm run dev -- -p 3001` and open `http://localhost:3001`
+
+## Next Development
+
+- Connect real hardware publisher (ESP32)
+- Add authenticated MQTT broker setup (TLS credentials)
+- Add historical charts and persistence layer
+- Add alerts/notifications for critical conditions
+- Add device health and connectivity monitoring
 
 ## Project Goal
 
 This project aims to:
-- Demonstrate IoT system design
-- Apply clean architecture in a frontend application
-- Simulate a real-world automated clothesline system
+- Demonstrate practical IoT system design with cloud messaging
+- Apply clean architecture in a frontend-centric system
+- Simulate real-world automation flow before hardware deployment
+

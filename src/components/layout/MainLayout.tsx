@@ -50,7 +50,7 @@ export default function MainLayout({
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-screen bg-gray-50 text-gray-900 dark:bg-slate-950 dark:text-slate-100 overflow-hidden transition-colors duration-300">
       {/* Mobile backdrop overlay */}
       {isMobileMenuOpen && (
         <div
@@ -69,14 +69,14 @@ export default function MainLayout({
       />
 
       {/* Main content area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden bg-transparent">
         {/* Top bar - sticky header */}
         <TopBar
           onHamburgerClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         />
 
         {/* Main scrollable content area */}
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto bg-transparent transition-colors duration-300">
           {children}
         </main>
       </div>
