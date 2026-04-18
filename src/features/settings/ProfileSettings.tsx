@@ -1,9 +1,10 @@
 "use client"; // Tambahkan ini karena kita akan pakai useState
 
 import React, { useState } from 'react';
-import { User, Bell, Smartphone, Save } from 'lucide-react';
+import { User, Bell, Smartphone, Save, BluetoothSearching } from 'lucide-react';
 import NotificationSettings from './NotifSettings';
 import DeviceSettings from './DeviceSettings';
+import PairingDeviceSettings from './PairingDeviceSettings';
 
 export default function SettingsScreen() {
   const [activeTab, setActiveTab] = useState('profile');
@@ -22,6 +23,7 @@ export default function SettingsScreen() {
             { id: 'profile', label: 'Profil', icon: <User size={18} /> },
             { id: 'notification', label: 'Notifikasi', icon: <Bell size={18} /> },
             { id: 'device', label: 'Perangkat IoT', icon: <Smartphone size={18} /> },
+            { id: 'pairing', label: 'Pairing Device', icon: <BluetoothSearching size={18} /> },
           ].map((item) => (
             <button
               key={item.id}
@@ -61,6 +63,8 @@ export default function SettingsScreen() {
           {activeTab === 'notification' && <NotificationSettings />}
           
           {activeTab === 'device' && <DeviceSettings />}
+
+          {activeTab === 'pairing' && <PairingDeviceSettings />}
 
           {/* Tombol Simpan Terpadu */}
           <div className="flex justify-end pt-4">
