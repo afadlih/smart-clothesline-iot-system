@@ -28,7 +28,7 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="m-0 p-0 h-full w-full">
+      <body className="m-0 h-full w-full bg-gray-50 text-gray-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
         <MainLayout>{children}</MainLayout>
       </body>
     </html>

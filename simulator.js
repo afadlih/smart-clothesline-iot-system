@@ -1,7 +1,7 @@
 const mqtt = require("mqtt");
 
 const BROKER_URL = "mqtt://broker.hivemq.com";
-const TOPIC = process.env.MQTT_TOPIC || "smart-clothesline/afadlih/sensor";
+const TOPIC = process.env.MQTT_TOPIC || "smart-clothesline/sensor";
 const SOURCE_ID = process.env.SENSOR_SOURCE_ID || "smart-clothesline-simulator";
 
 function parseInterval() {

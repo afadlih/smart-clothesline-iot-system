@@ -1,5 +1,9 @@
 import { SensorData } from "@/models/SensorData";
-import { mqttService, type SensorMessage } from "./MQTTService";
+import {
+    mqttService,
+    type MqttConnectionSnapshot,
+    type SensorMessage,
+} from "./MQTTService";
 
 export class SensorService {
     static subscribeToSensorData(
@@ -8,6 +12,16 @@ export class SensorService {
         return mqttService.onMessage((message) => {
             callback(SensorService.toSensorData(message));
         });
+    }
+
+    static subscribeToConnectionStatus(
+        callback: (status: MqttConnectionSnapshot) => void,
+    ): () => void {
+        return mqttService.onConnectionStatus(callback);
+    }
+
+    static getConnectionStatusSnapshot(): MqttConnectionSnapshot {
+        return mqttService.getConnectionSnapshot();
     }
 
     private static toSensorData(message: SensorMessage): SensorData {

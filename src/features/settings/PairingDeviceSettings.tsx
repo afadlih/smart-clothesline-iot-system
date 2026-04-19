@@ -10,20 +10,23 @@ import {
   Wifi,
 } from 'lucide-react';
 
-const discoveredDevices = [
-  {
-    id: 'esp32-01',
-    name: 'ESP32 Clothesline Hub',
-    signal: 'Sinyal kuat',
-    status: 'Direkomendasikan',
-  },
-  {
-    id: 'node-mcu-backup',
-    name: 'NodeMCU Backup Unit',
-    signal: 'Sinyal sedang',
-    status: 'Tersedia',
-  },
-];
+export type PairableDevice = {
+  id: string;
+  name: string;
+  signal: string;
+  status: string;
+};
+
+type PairingDeviceSettingsProps = {
+  pairingCode: string;
+  expiresInSeconds: number;
+  discoveredDevices: PairableDevice[];
+  selectedDeviceId: string | null;
+  isScanning: boolean;
+  onGenerateCode: () => void;
+  onScan: () => void;
+  onSelectDevice: (deviceId: string) => void;
+};
 
 const pairingSteps = [
   {
@@ -35,7 +38,7 @@ const pairingSteps = [
   {
     id: 'step-2',
     title: 'Hubungkan ke jaringan',
-    description: 'Pastikan ponsel atau laptop Anda berada di jaringan Wi-Fi yang sama dengan perangkat.',
+    description: 'Pastikan laptop Anda berada di jaringan Wi-Fi yang sama dengan perangkat.',
     icon: <Wifi size={18} className="text-sky-600" />,
   },
   {
@@ -46,24 +49,44 @@ const pairingSteps = [
   },
 ];
 
-export default function PairingDeviceSettings() {
+function formatCountdown(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60)
+    .toString()
+    .padStart(2, '0');
+  const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+  return `${minutes}:${seconds}`;
+}
+
+export default function PairingDeviceSettings({
+  pairingCode,
+  expiresInSeconds,
+  discoveredDevices,
+  selectedDeviceId,
+  isScanning,
+  onGenerateCode,
+  onScan,
+  onSelectDevice,
+}: PairingDeviceSettingsProps) {
+  const selectedDevice = discoveredDevices.find((item) => item.id === selectedDeviceId);
+
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-6">
+    <div className="space-y-6 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <h3 className="flex items-center gap-2 text-lg font-bold text-slate-800">
             <Bluetooth className="text-green-600" size={20} />
             Pairing Device
           </h3>
-          <p className="mt-2 text-sm text-slate-500 max-w-2xl">
-            Gunakan halaman ini untuk mensimulasikan proses penyambungan perangkat IoT ke dashboard
-            sebelum perangkat fisik siap digunakan.
+          <p className="mt-2 max-w-2xl text-sm text-slate-500">
+            Hubungkan perangkat IoT ke dashboard untuk simulasi sebelum integrasi hardware ESP32.
           </p>
         </div>
 
         <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Status pairing</p>
-          <p className="mt-1 text-sm font-bold text-emerald-800">Menunggu perangkat dipilih</p>
+          <p className="mt-1 text-sm font-bold text-emerald-800">
+            {selectedDevice ? `Terpilih: ${selectedDevice.name}` : 'Menunggu perangkat dipilih'}
+          </p>
         </div>
       </div>
 
@@ -77,21 +100,25 @@ export default function PairingDeviceSettings() {
             <KeyRound className="text-green-600" size={20} />
           </div>
           <div className="mt-4 rounded-xl border border-dashed border-green-200 bg-white px-4 py-5 text-center">
-            <p className="text-3xl font-black tracking-[0.4em] text-slate-800">SCI-4821</p>
-            <p className="mt-2 text-xs text-slate-500">Berlaku selama 05:00 menit</p>
+            <p className="text-3xl font-black tracking-[0.4em] text-slate-800">{pairingCode}</p>
+            <p className="mt-2 text-xs text-slate-500">Berlaku selama {formatCountdown(expiresInSeconds)} menit</p>
           </div>
-          <button className="mt-4 w-full rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-green-700">
+          <button
+            type="button"
+            onClick={onGenerateCode}
+            className="mt-4 w-full rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-green-700"
+          >
             Generate Kode Baru
           </button>
         </div>
 
-        <div className="rounded-2xl border border-slate-100 bg-gradient-to-br from-slate-900 to-slate-800 p-5 text-white">
+        <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-5 text-white">
           <div className="flex items-center gap-2 text-sm font-semibold text-emerald-300">
             <Router size={18} />
             Progres koneksi
           </div>
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full w-2/3 rounded-full bg-emerald-400" />
+            <div className={`h-full rounded-full bg-emerald-400 transition-all ${selectedDevice ? 'w-full' : 'w-2/3'}`} />
           </div>
           <div className="mt-4 space-y-3 text-sm">
             <div className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
@@ -104,7 +131,9 @@ export default function PairingDeviceSettings() {
             </div>
             <div className="flex items-center justify-between rounded-xl border border-dashed border-white/15 px-3 py-2">
               <span>Sinkronisasi konfigurasi</span>
-              <span className="text-xs font-semibold text-amber-300">Berjalan</span>
+              <span className="text-xs font-semibold text-amber-300">
+                {selectedDevice ? 'Selesai' : 'Menunggu'}
+              </span>
             </div>
           </div>
         </div>
@@ -117,40 +146,53 @@ export default function PairingDeviceSettings() {
               <p className="text-sm font-semibold text-slate-800">Perangkat yang terdeteksi</p>
               <p className="text-xs text-slate-500">Pilih perangkat yang ingin dihubungkan ke akun ini</p>
             </div>
-            <button className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50">
-              Scan Ulang
+            <button
+              type="button"
+              onClick={onScan}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+            >
+              {isScanning ? 'Scanning...' : 'Scan Ulang'}
             </button>
           </div>
 
           <div className="mt-4 space-y-3">
-            {discoveredDevices.map((device, index) => (
-              <div
-                key={device.id}
-                className={`rounded-xl border p-4 transition-colors ${
-                  index === 0 ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-slate-50'
-                }`}
-              >
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div className="flex items-start gap-3">
-                    <div className="rounded-xl bg-white p-2 shadow-sm">
-                      <Smartphone size={18} className="text-slate-700" />
+            {discoveredDevices.map((device) => {
+              const selected = selectedDeviceId === device.id;
+              return (
+                <div
+                  key={device.id}
+                  className={`rounded-xl border p-4 transition-colors ${
+                    selected ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-slate-50'
+                  }`}
+                >
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-xl bg-white p-2 shadow-sm">
+                        <Smartphone size={18} className="text-slate-700" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{device.name}</p>
+                        <p className="text-xs text-slate-500">{device.signal}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">{device.name}</p>
-                      <p className="text-xs text-slate-500">{device.signal}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                        {device.status}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onSelectDevice(device.id)}
+                        className={`rounded-lg px-4 py-2 text-xs font-semibold text-white transition-colors ${
+                          selected ? 'bg-green-700 hover:bg-green-800' : 'bg-slate-900 hover:bg-slate-700'
+                        }`}
+                      >
+                        {selected ? 'Paired' : 'Pair Device'}
+                      </button>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
-                      {device.status}
-                    </span>
-                    <button className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-slate-700">
-                      Pair Device
-                    </button>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
