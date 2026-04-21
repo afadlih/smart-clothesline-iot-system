@@ -1,15 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { useSensorHistory } from "@/hooks/useSensorHistory";
 
 type SortKey = "temperature" | "humidity" | "light" | "status" | null;
 
 export default function HistoryPage() {
-  const statusData: {[key:string]: number} = {
+  const statusData: Record<"TERBUKA" | "TERTUTUP", number> = {
     TERBUKA: 2,
     TERTUTUP: 1,
   };
-  const { history } = useSensor();
+  const { history, loading, error } = useSensorHistory(20);
   const [selectedDate, setSelectedDate] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>(null);
 
@@ -22,22 +23,26 @@ export default function HistoryPage() {
     return `${year}-${month}-${day}`;
   };
 
-  const availableDates = Array.from(new Set(history.map((item) => formatDateValue(item.data.timestamp))));
+  const availableDates = Array.from(
+    new Set(history.map((item) => formatDateValue(item.timestamp))),
+  );
+
   const filteredHistory = selectedDate
-    ? history.filter((item) => formatDateValue(item.data.timestamp) === selectedDate)
+    ? history.filter((item) => formatDateValue(item.timestamp) === selectedDate)
     : history;
+
   const displayedHistory = [...filteredHistory];
 
   if (sortKey === "temperature") {
-    displayedHistory.sort((a, b) => b.data.temperature - a.data.temperature);
+    displayedHistory.sort((a, b) => b.temperature - a.temperature);
   }
 
   if (sortKey === "humidity") {
-    displayedHistory.sort((a, b) => b.data.humidity - a.data.humidity);
+    displayedHistory.sort((a, b) => b.humidity - a.humidity);
   }
 
   if (sortKey === "light") {
-    displayedHistory.sort((a, b) => b.data.light - a.data.light);
+    displayedHistory.sort((a, b) => b.light - a.light);
   }
 
   if (sortKey === "status") {
@@ -127,22 +132,34 @@ export default function HistoryPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-                {displayedHistory.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-6 text-center text-gray-500 dark:text-slate-400">
+                      Memuat data history dari Firestore...
+                    </td>
+                  </tr>
+                ) : error ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-6 text-center text-red-600 dark:text-red-400">
+                      Gagal memuat history: {error}
+                    </td>
+                  </tr>
+                ) : displayedHistory.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-6 text-center text-gray-500 dark:text-slate-400">
                       {history.length === 0
-                        ? "Belum ada data history. Pastikan simulator MQTT berjalan."
+                        ? "Belum ada data history di Firestore."
                         : "Tidak ada data pada tanggal yang dipilih."}
                     </td>
                   </tr>
                 ) : (
-                  displayedHistory.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/50">
-                      <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{new Date(item.data.timestamp).toLocaleString("id-ID")}</td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{item.data.temperature.toFixed(1)} C</td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{item.data.humidity.toFixed(1)} %</td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{item.data.light.toFixed(0)}</td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{item.data.isRaining() ? "Ya" : "Tidak"}</td>
+                  displayedHistory.map((item, index) => (
+                    <tr key={`${item.timestamp}-${index}`} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/50">
+                      <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{new Date(item.timestamp).toLocaleString("id-ID")}</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{item.temperature.toFixed(1)} C</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{item.humidity.toFixed(1)} %</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{item.light.toFixed(0)}</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{item.isRaining() ? "Ya" : "Tidak"}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${item.status === "TERBUKA" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"}`}>
                           {item.status}
