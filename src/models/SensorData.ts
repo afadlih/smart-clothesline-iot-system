@@ -3,6 +3,7 @@ interface SensorDataInput {
     humidity?: number;
     light?: number;
     rain?: number;
+    status?: "TERBUKA" | "TERTUTUP";
     timestamp?: string;
 }
 
@@ -11,6 +12,7 @@ export class SensorData {
     humidity: number;
     light: number;
     rain: number;
+    status: "TERBUKA" | "TERTUTUP";
     timestamp: string;
 
     constructor(data: SensorDataInput = {}) {
@@ -18,6 +20,7 @@ export class SensorData {
         this.humidity = data.humidity ?? 0;
         this.light = data.light ?? 0;
         this.rain = data.rain ?? 0;
+        this.status = data.status ?? "TERTUTUP";
         this.timestamp = data.timestamp ?? new Date().toISOString();
     }
 

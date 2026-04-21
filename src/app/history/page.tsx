@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { useSensor } from "@/hooks/useSensor";
+import { useSensorHistory } from "@/hooks/useSensorHistory";
 
 type SortKey = "temperature" | "humidity" | "light" | "status" | null;
 
@@ -149,7 +148,7 @@ export default function HistoryPage() {
                           {item.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{item.reason}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{item.status === "TERBUKA" ? "Cuaca cerah -> jemuran dibuka" : "Hujan/cahaya rendah -> jemuran ditutup"}</td>
                     </tr>
                   ))
                 )}
