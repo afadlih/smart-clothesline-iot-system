@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { SensorData } from "@/models/SensorData";
 import { DecisionEngine } from "@/features/dashboard/DecisionEngine";
 import { getMqttClient, MQTT_TOPIC, type SensorData as MqttSensorData } from "@/lib/mqttClient";
+import { FirestoreService } from "@/services/FirestoreService";
 
 type ConnectionState = "connecting" | "online" | "reconnecting" | "offline" | "error";
 
@@ -127,6 +128,7 @@ function mapToSensorData(message: MqttSensorData, normalizedLight: number): Sens
         humidity: message.humidity,
         light: normalizedLight,
         rain: message.rain ? 1 : 0,
+        status: message.status,
         timestamp: new Date().toISOString(),
     });
 }
@@ -229,6 +231,10 @@ function startStreamIfNeeded(): void {
             if (!parsed) {
                 return;
             }
+
+            void FirestoreService.saveSensorData(parsed).catch((error) => {
+                console.error("[Firestore] Failed to save sensor data:", error);
+            });
 
             const inferred = inferLightOrientation(parsed);
             if (inferred !== "unknown" && lightOrientation !== inferred) {
