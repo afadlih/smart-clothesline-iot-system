@@ -1,21 +1,32 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
+import { useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { User, Bell, Smartphone, Save, BluetoothSearching } from 'lucide-react';
+import { User, Bell, Smartphone, Save, BluetoothSearching, HardDrive, Download, Trash2 } from 'lucide-react';
 import NotificationSettings, { type NotificationPreference } from './NotifSettings';
 import DeviceSettings from './DeviceSettings';
 import PairingDeviceSettings, { type PairableDevice } from './PairingDeviceSettings';
+import SystemControlSettings from './SystemControlSettings';
+import { systemModeManager, type SystemMode } from '@/features/system/SystemModeManager';
 import { useSensor } from '@/hooks/useSensor';
+import { FirestoreService } from '@/services/FirestoreService';
+import { DataExportService } from '@/services/DataExportService';
 
-type TabId = 'profile' | 'notification' | 'device' | 'pairing';
+type TabId = 'profile' | 'notification' | 'device' | 'pairing' | 'system' | 'data-management';
 
 type AppSettings = {
   profileName: string;
   notification: NotificationPreference;
   whatsappNumber: string;
-  rainSensitivity: number;
+  rainThreshold: number;
+  lightThreshold: number;
+  autoCloseOnRain: boolean;
+  autoCloseOnDark: boolean;
   updateIntervalSec: number;
+  controlMode: SystemMode;
+  activeStartHour: number;
+  activeEndHour: number;
 };
 
 const SETTINGS_STORAGE_KEY = 'smart-clothesline-settings-v1';
@@ -30,8 +41,14 @@ const defaultSettings: AppSettings = {
     whatsapp: false,
   },
   whatsappNumber: '',
-  rainSensitivity: 75,
+  rainThreshold: 2000,
+  lightThreshold: 3000,
+  autoCloseOnRain: true,
+  autoCloseOnDark: true,
   updateIntervalSec: 5,
+  controlMode: 'AUTO',
+  activeStartHour: 8,
+  activeEndHour: 17,
 };
 
 const initialDevices: PairableDevice[] = [
@@ -56,7 +73,7 @@ function generatePairingCode(): string {
 
 export default function SettingsScreen() {
   const searchParams = useSearchParams();
-  const { sensor } = useSensor();
+  const { sensor, isOnline, publishConfig, deviceConfig, history } = useSensor();
   const [activeTab, setActiveTab] = useState<TabId>('profile');
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [saveLabel, setSaveLabel] = useState('Simpan Perubahan');
@@ -66,10 +83,13 @@ export default function SettingsScreen() {
   const [expiresInSeconds, setExpiresInSeconds] = useState(300);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [devices, setDevices] = useState<PairableDevice[]>(initialDevices);
+  const didHydrateRef = useRef(false);
+  const [cacheStats, setCacheStats] = useState({ history: 0, queue: 0, events: 0, total: 0, totalKB: 0 });
+  const [lastCleared, setLastCleared] = useState<string | null>(null);
 
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab === 'profile' || tab === 'notification' || tab === 'device' || tab === 'pairing') {
+    if (tab === 'profile' || tab === 'notification' || tab === 'device' || tab === 'pairing' || tab === 'system' || tab === 'data-management') {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -91,13 +111,54 @@ export default function SettingsScreen() {
           whatsapp: parsed.notification?.whatsapp ?? defaultSettings.notification.whatsapp,
         },
         whatsappNumber: parsed.whatsappNumber ?? defaultSettings.whatsappNumber,
-        rainSensitivity: parsed.rainSensitivity ?? defaultSettings.rainSensitivity,
+        rainThreshold: parsed.rainThreshold ?? defaultSettings.rainThreshold,
+        lightThreshold: parsed.lightThreshold ?? defaultSettings.lightThreshold,
+        autoCloseOnRain: parsed.autoCloseOnRain ?? defaultSettings.autoCloseOnRain,
+        autoCloseOnDark: parsed.autoCloseOnDark ?? defaultSettings.autoCloseOnDark,
         updateIntervalSec: parsed.updateIntervalSec ?? defaultSettings.updateIntervalSec,
+        controlMode:
+          parsed.controlMode === 'AUTO' ||
+          parsed.controlMode === 'MANUAL' ||
+          parsed.controlMode === 'SCHEDULE'
+            ? parsed.controlMode
+            : defaultSettings.controlMode,
+        activeStartHour: parsed.activeStartHour ?? defaultSettings.activeStartHour,
+        activeEndHour: parsed.activeEndHour ?? defaultSettings.activeEndHour,
       });
     } catch {
       localStorage.removeItem(SETTINGS_STORAGE_KEY);
     }
   }, []);
+
+  useEffect(() => {
+    systemModeManager.setMode(settings.controlMode);
+  }, [settings.controlMode]);
+
+  useEffect(() => {
+    if (!didHydrateRef.current) {
+      didHydrateRef.current = true;
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      publishConfig({
+        rainThreshold: settings.rainThreshold,
+        lightThreshold: settings.lightThreshold,
+        autoCloseOnRain: settings.autoCloseOnRain,
+        autoCloseOnDark: settings.autoCloseOnDark,
+      });
+    }, 400);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    publishConfig,
+    settings.autoCloseOnDark,
+    settings.autoCloseOnRain,
+    settings.lightThreshold,
+    settings.rainThreshold,
+  ]);
 
   useEffect(() => {
     const raw = localStorage.getItem(DEVICES_STORAGE_KEY);
@@ -156,8 +217,29 @@ export default function SettingsScreen() {
     };
   }, []);
 
+  // Load cache stats on mount and when component becomes visible
+  useEffect(() => {
+    const refreshCacheStats = () => {
+      const stats = DataExportService.getCacheStats();
+      setCacheStats(stats);
+    };
+
+    refreshCacheStats();
+
+    // Refresh every 5 seconds
+    const interval = window.setInterval(refreshCacheStats, 5000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   const onSaveSettings = () => {
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    void FirestoreService.saveSystemSettings({
+      controlMode: settings.controlMode,
+      activeStartHour: settings.activeStartHour,
+      activeEndHour: settings.activeEndHour,
+    }).catch((error) => {
+      console.error('[Firestore] Failed to save system settings:', error);
+    });
     setSaveLabel('Tersimpan');
     window.setTimeout(() => {
       setSaveLabel('Simpan Perubahan');
@@ -188,7 +270,7 @@ export default function SettingsScreen() {
     }, 1200);
   };
 
-  const connectionStatus: 'ONLINE' | 'OFFLINE' = sensor ? 'ONLINE' : 'OFFLINE';
+  const connectionStatus: 'ONLINE' | 'OFFLINE' = isOnline ? 'ONLINE' : 'OFFLINE';
 
   return (
     <div className="flex min-h-screen max-w-5xl flex-col gap-6 bg-gradient-to-br from-gray-100 to-gray-200 p-6 text-slate-900 transition-colors duration-300 dark:from-slate-900 dark:to-slate-950 dark:text-slate-100">
@@ -203,7 +285,9 @@ export default function SettingsScreen() {
             { id: 'profile' as const, label: 'Profil', icon: <User size={18} /> },
             { id: 'notification' as const, label: 'Notifikasi', icon: <Bell size={18} /> },
             { id: 'device' as const, label: 'Perangkat IoT', icon: <Smartphone size={18} /> },
+            { id: 'system' as const, label: 'Control & Jadwal', icon: <Save size={18} /> },
             { id: 'pairing' as const, label: 'Pairing Device', icon: <BluetoothSearching size={18} /> },
+            { id: 'data-management' as const, label: 'Data Management', icon: <HardDrive size={18} /> },
           ].map((item) => (
             <button
               key={item.id}
@@ -285,13 +369,37 @@ export default function SettingsScreen() {
               connectionStatus={connectionStatus}
               deviceName="ESP32-STATION-01"
               ipAddress={sensor ? '192.168.1.42' : 'Tidak terdeteksi'}
-              rainSensitivity={settings.rainSensitivity}
+              rainThreshold={settings.rainThreshold}
+              lightThreshold={settings.lightThreshold}
+              autoCloseOnRain={settings.autoCloseOnRain}
+              autoCloseOnDark={settings.autoCloseOnDark}
+              configSyncState={deviceConfig.syncState}
+              configSyncMessage={deviceConfig.syncMessage}
+              configLastSyncAt={deviceConfig.lastSyncAt}
               updateIntervalSec={settings.updateIntervalSec}
               isRestarting={isRestarting}
-              onRainSensitivityChange={(value) =>
+              onRainThresholdChange={(value) =>
                 setSettings((prev) => ({
                   ...prev,
-                  rainSensitivity: value,
+                  rainThreshold: value,
+                }))
+              }
+              onLightThresholdChange={(value) =>
+                setSettings((prev) => ({
+                  ...prev,
+                  lightThreshold: value,
+                }))
+              }
+              onAutoCloseOnRainChange={(value) =>
+                setSettings((prev) => ({
+                  ...prev,
+                  autoCloseOnRain: value,
+                }))
+              }
+              onAutoCloseOnDarkChange={(value) =>
+                setSettings((prev) => ({
+                  ...prev,
+                  autoCloseOnDark: value,
                 }))
               }
               onUpdateIntervalChange={(value) =>
@@ -301,6 +409,32 @@ export default function SettingsScreen() {
                 }))
               }
               onRestart={onRestartDevice}
+            />
+          )}
+
+          {activeTab === 'system' && (
+            <SystemControlSettings
+              controlMode={settings.controlMode}
+              activeStartHour={settings.activeStartHour}
+              activeEndHour={settings.activeEndHour}
+              onControlModeChange={(value) =>
+                setSettings((prev) => ({
+                  ...prev,
+                  controlMode: value,
+                }))
+              }
+              onActiveStartHourChange={(value) =>
+                setSettings((prev) => ({
+                  ...prev,
+                  activeStartHour: value,
+                }))
+              }
+              onActiveEndHourChange={(value) =>
+                setSettings((prev) => ({
+                  ...prev,
+                  activeEndHour: value,
+                }))
+              }
             />
           )}
 
@@ -320,11 +454,152 @@ export default function SettingsScreen() {
             />
           )}
 
+          {activeTab === 'data-management' && (
+            <div className="space-y-6">
+              {/* Export Section */}
+              <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <h3 className="mb-4 text-lg font-bold text-slate-800 dark:text-slate-100">Export Sensor Data</h3>
+                <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">Download your sensor data in CSV or JSON format</p>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      DataExportService.exportLastNDays(
+                        history.map((h) => h.data),
+                        7,
+                        'csv'
+                      );
+                    }}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300"
+                  >
+                    <Download size={16} /> Last 7 Days (CSV)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      DataExportService.exportLastNDays(
+                        history.map((h) => h.data),
+                        30,
+                        'csv'
+                      );
+                    }}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300"
+                  >
+                    <Download size={16} /> Last 30 Days (CSV)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      DataExportService.exportToJSON(
+                        history.map((h) => h.data),
+                        `clothesline-all-${new Date().toISOString().split('T')[0]}.json`
+                      );
+                    }}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700 transition hover:bg-green-100 dark:border-green-900/40 dark:bg-green-900/20 dark:text-green-300"
+                  >
+                    <Download size={16} /> All Data (JSON)
+                  </button>
+                </div>
+              </div>
+
+              {/* Storage Statistics */}
+              <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <h3 className="mb-4 text-lg font-bold text-slate-800 dark:text-slate-100">Storage & Cache Statistics</h3>
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                  <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-800">
+                    <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Sensor History</p>
+                    <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{cacheStats.history}</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-400">records</p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-800">
+                    <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Queue Data</p>
+                    <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{cacheStats.queue}</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-400">pending items</p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-800">
+                    <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Event Logs</p>
+                    <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{cacheStats.events}</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-400">entries</p>
+                  </div>
+                  <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-900/20">
+                    <p className="text-xs font-semibold uppercase text-blue-600 dark:text-blue-300">Total Storage</p>
+                    <p className="mt-2 text-2xl font-bold text-blue-900 dark:text-blue-100">{cacheStats.totalKB}</p>
+                    <p className="text-xs text-blue-700 dark:text-blue-300">KB used</p>
+                  </div>
+                </div>
+                {lastCleared && (
+                  <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+                    Last cleared: {new Date(lastCleared).toLocaleString('id-ID')}
+                  </p>
+                )}
+              </div>
+
+              {/* Cache Management */}
+              <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <h3 className="mb-4 text-lg font-bold text-slate-800 dark:text-slate-100">Cache Management</h3>
+                <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">Clear cached data to free up storage space</p>
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm('Clear sensor cache? This action cannot be undone.')) {
+                        localStorage.removeItem('sensor-history');
+                        setCacheStats((prev) => ({ ...prev, history: 0 }));
+                        setLastCleared(new Date().toISOString());
+                      }
+                    }}
+                    className="w-full flex items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300"
+                  >
+                    <Trash2 size={16} /> Clear Sensor Cache
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm('Clear all cached data? This action cannot be undone.')) {
+                        localStorage.clear();
+                        setCacheStats({ history: 0, queue: 0, events: 0, total: 0, totalKB: 0 });
+                        setLastCleared(new Date().toISOString());
+                      }
+                    }}
+                    className="w-full flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300"
+                  >
+                    <Trash2 size={16} /> Clear All Data
+                  </button>
+                </div>
+              </div>
+
+              {/* Data Privacy */}
+              <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <h3 className="mb-4 text-lg font-bold text-slate-800 dark:text-slate-100">Data Privacy</h3>
+                <div className="space-y-3">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Your Data Rights</p>
+                    <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">
+                      You have the right to access, download, and delete your personal data at any time. All sensor data is stored locally and synced to our secure servers with encryption.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      DataExportService.exportToJSON(
+                        history.map((h) => h.data),
+                        `my-data-${new Date().toISOString().split('T')[0]}.json`
+                      );
+                    }}
+                    className="w-full flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                  >
+                    <Download size={16} /> Download My Data (GDPR)
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end pt-4">
             <button
               type="button"
               onClick={onSaveSettings}
-              className="flex items-center gap-2 rounded-2xl bg-[#22C55E] px-8 py-3 font-bold text-white shadow-lg transition-all hover:scale-[1.02] hover:bg-green-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+              className="flex items-center gap-2 rounded-2xl bg-green-500 px-8 py-3 font-bold text-white shadow-lg transition-all hover:scale-[1.02] hover:bg-green-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
             >
               <Save size={18} /> {saveLabel}
             </button>

@@ -4,7 +4,7 @@ type Props = {
 };
 
 export default function StatusPanel({ status, reason }: Props) {
-    const isOpen = status === "TERBUKA";
+    const isOpen = status === "TERBUKA" || status === "OPEN";
     const bgColor = isOpen
         ? "bg-green-100 border-green-300 shadow-green-100 dark:bg-green-900/30 dark:border-green-700 dark:shadow-green-900/30"
         : "bg-red-100 border-red-300 shadow-red-100 dark:bg-red-900/30 dark:border-red-700 dark:shadow-red-900/30";

@@ -9,8 +9,8 @@ import {
   Clock,
   Calendar,
   Settings,
+  BarChart3,
   ChevronRight,
-  Menu,
   X,
 } from 'lucide-react';
 
@@ -55,7 +55,7 @@ export default function Sidebar({
     {
       label: 'Dashboard',
       icon: <Home className="w-5 h-5" />,
-      href: '/',
+      href: '/dashboard',
     },
     {
       label: 'Sensor Monitor',
@@ -77,12 +77,17 @@ export default function Sidebar({
       icon: <Settings className="w-5 h-5" />,
       href: '/settings',
     },
+    {
+      label: 'Analytics',
+      icon: <BarChart3 className="w-5 h-5" />,
+      href: '/analytics',
+    },
   ];
 
   // Check if a route is active
   const isActive = (href: string): boolean => {
-    if (href === '/') {
-      return pathname === '/';
+    if (href === '/dashboard') {
+      return pathname === '/dashboard' || pathname === '/';
     }
     return pathname.startsWith(href);
   };

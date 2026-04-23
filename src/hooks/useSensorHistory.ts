@@ -6,6 +6,7 @@ export function useSensorHistory(limit: number = 20) {
   const [history, setHistory] = useState<SensorData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -20,6 +21,7 @@ export function useSensorHistory(limit: number = 20) {
           return;
         }
         setHistory(data);
+        setLastFetchedAt(Date.now());
       } catch (err) {
         if (!active) {
           return;
@@ -32,7 +34,7 @@ export function useSensorHistory(limit: number = 20) {
       }
     };
 
-    fetchHistory();
+    void fetchHistory();
 
     return () => {
       active = false;
@@ -43,5 +45,6 @@ export function useSensorHistory(limit: number = 20) {
     history,
     loading,
     error,
+    lastFetchedAt,
   };
 }

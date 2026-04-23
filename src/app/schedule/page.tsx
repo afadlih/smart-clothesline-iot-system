@@ -1,6 +1,5 @@
-// Impor komponen dari folder features
-import ScheduleScreen from "@/features/schedule/screen"; 
+import ScheduleScreen from "@/features/schedule/screen";
 
-export default function Page() {
+export default function SchedulePage() {
   return <ScheduleScreen />;
 }

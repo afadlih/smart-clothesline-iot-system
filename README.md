@@ -1,120 +1,119 @@
-# Smart Clothesline IoT Dashboard
+# Smart Clothesline IoT System
 
-Smart Clothesline IoT Dashboard is a real-time monitoring web app that simulates an automated clothesline system using IoT concepts and cloud messaging.
+Dashboard IoT berbasis Next.js untuk monitoring dan kontrol jemuran pintar secara realtime.
 
-## Project Overview
+## Ringkasan
 
-The dashboard monitors:
-- Temperature
-- Humidity
-- Light intensity
-- Rain detection
+Project ini berfokus pada:
 
-Decision rule:
-- If rain is detected OR light is low, clothesline closes (`TERTUTUP`)
-- Otherwise, clothesline opens (`TERBUKA`)
+- Monitoring sensor: suhu, kelembapan, cahaya, dan rain detection.
+- Kontrol perangkat: `OPEN`, `CLOSE`, `AUTO`.
+- Integrasi MQTT untuk stream data realtime.
+- Persistensi data ke Firestore dengan fallback queue saat offline.
+- Analitik dan riwayat operasional untuk evaluasi penggunaan perangkat.
+
+## Fitur Utama
+
+- Dashboard operasional (`/dashboard`):
+  - status koneksi, status perangkat, command sync state, event timeline.
+- Sensor monitor (`/sensor`):
+  - nilai sensor realtime + serial log stream.
+- Analytics (`/analytics`):
+  - grafik tren, health score perangkat, smart alerts, export CSV/JSON.
+- History (`/history`):
+  - ringkasan harian, filter status/cuaca, detail harian, daftar pembacaan terbaru.
+- Schedule (`/schedule`):
+  - manajemen jadwal buka/tutup berbasis jam.
+- Settings (`/settings`):
+  - konfigurasi perangkat, notifikasi, pairing, dan data management.
 
 ## Tech Stack
 
-- Next.js 14 (App Router)
-- TypeScript
+- Next.js 14 (App Router), React 18, TypeScript
 - Tailwind CSS
-- MQTT (HiveMQ public broker)
-- OOP-based clean architecture (Model -> Service -> Hook -> UI)
+- MQTT (`mqtt` package)
+- Firebase Firestore
+- Recharts
+- Zod
 
-## Architecture
+## Struktur Singkat
 
-This project keeps data and UI concerns separated with a layered structure:
-
-- `SensorData` (Model)
-  Encapsulates sensor fields and sensor behaviors (`isRaining`, `isDark`, etc.).
-- `DecisionEngine` (Business Logic)
-  Determines clothesline state and reason from sensor data.
-- `mqttClient` (Infrastructure)
-  Singleton MQTT client for WebSocket connection and broker events.
-- `useSensor` (Hook)
-  Subscribes to MQTT topic and exposes live state + connection info to UI components.
-- UI Layer
-  - `StatusPanel`: current decision status (`TERBUKA` / `TERTUTUP`) and reason
-  - `SensorCard`: sensor metric cards with visual indicators
-
-### Data Flow
-
-`simulator.js` (publisher) -> MQTT Broker -> `mqttClient` -> `useSensor` -> Dashboard UI
-
-## Features Implemented
-
-- Real-time cloud-based updates via MQTT
-- Smart decision system for clothesline status
-- Clean modular architecture (OOP + separation of concerns)
-- Modern SaaS-style dashboard UI
-- Status indicator (`ONLINE`) and animated feedback
-- Responsive sensor cards and status panel
-- Custom 404 page for unknown routes
-- Simple CI pipeline (GitHub Actions)
-
-## Current Status
-
-- Project is in simulation phase using cloud MQTT + Node.js simulator
-- Dashboard UI is functional and polished
-- Core architecture is production-ready for real device integration
-
-## MQTT Topic and Payload
-
-- Topic: `smart-clothesline/sensor`
-- Payload format:
-
-```json
-{
-  "temperature": 30,
-  "humidity": 75,
-  "light": 220,
-  "rain": false,
-  "status": "TERBUKA"
-}
+```text
+src/
+  app/                # halaman route Next.js
+  components/         # komponen UI reusable
+  features/           # modul fitur per domain
+  hooks/              # state + orchestration logic
+  services/           # service layer (MQTT, Firestore, analytics, validation)
+  models/             # tipe/model data
+  utils/              # utilitas
 ```
 
-## How to Run
+## Menjalankan Project
 
-1. Install dependencies:
+Prasyarat:
+
+- Node.js 20+ disarankan
+- npm
+
+Install dan jalankan:
 
 ```bash
 npm install
-```
-
-2. Start dashboard:
-
-```bash
 npm run dev
 ```
 
-3. In another terminal, run simulator publisher:
+Build production:
 
 ```bash
-node simulator.js
+npm run lint
+npm run build
+npm run start
 ```
 
-4. Open the app in browser:
-- `http://localhost:3000`
-- If port `3000` is busy, run `npm run dev -- -p 3001` and open `http://localhost:3001`
+## Konfigurasi Environment
 
-## CI Pipeline
+Project membaca konfigurasi Firebase dari environment variable `NEXT_PUBLIC_*`.
+Jika tidak diset, project memakai fallback value dari `src/lib/firebase.ts`.
 
-This repository includes a minimal GitHub Actions workflow at `.github/workflows/ci.yml`.
-It runs on every push to `main`, installs dependencies, runs lint/typecheck, and builds the app.
+Contoh variable yang umum dipakai:
 
-## Next Development
+```env
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+NEXT_PUBLIC_FIREBASE_APP_ID=
+```
 
-- Connect real hardware publisher (ESP32)
-- Add authenticated MQTT broker setup (TLS credentials)
-- Add historical charts and persistence layer
-- Add alerts/notifications for critical conditions
-- Add device health and connectivity monitoring
+## MQTT
 
-## Project Goal
+Default broker:
 
-This project aims to:
-- Demonstrate practical IoT system design with cloud messaging
-- Apply clean architecture in a frontend-centric system
-- Simulate real-world automation flow before hardware deployment
+- URL: `wss://broker.hivemq.com:8884/mqtt`
+- Topic sensor: `smart-clothesline/sensor`
+- Topic status: `smart-clothesline/status`
+- Topic command: `smart-clothesline/command`
+- Topic config: `smart-clothesline/config`
 
+## CI
+
+Workflow CI ada di `.github/workflows/ci.yml` dan menjalankan:
+
+1. `npm ci --no-audit --no-fund`
+2. `npm run lint`
+3. `npm run build`
+
+Catatan: `next build` sudah mencakup linting types Next.js dan validasi TypeScript untuk app.
+
+Trigger:
+
+- `push` ke `main`
+- `pull_request` ke `main`
+- manual (`workflow_dispatch`)
+
+## Catatan Operasional
+
+- Halaman history dirancang untuk pemantauan operasional harian, bukan hanya log mentah.
+- Untuk hasil build konsisten di lokal, bersihkan cache `.next` jika pernah terjadi error bundling sementara.

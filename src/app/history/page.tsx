@@ -1,14 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useSensorHistory } from "@/hooks/useSensorHistory";
-import { MdOutlineMoreHoriz } from "react-icons/md"
-import { FaAngleLeft } from "react-icons/fa6";
-import { FaAngleRight } from "react-icons/fa6";
+import { MdOutlineMoreHoriz } from "react-icons/md";
+import { FaAngleLeft, FaAngleRight } from "react-icons/fa6";
 
-
-type SortKey = "temperature" | "humidity" | "light" | "status" | null;
-type SortDirection = "desc" | "status-open-first" | "status-closed-first";
+type SortKey = "date" | "temperature" | "humidity" | "light" | "status";
+type SortDirection = "asc" | "desc";
+type StatusFilter = "all" | "TERBUKA" | "TERTUTUP";
+type WeatherFilter = "all" | "dry" | "rainy";
 
 type DailySummary = {
   dateKey: string;
@@ -20,193 +20,217 @@ type DailySummary = {
   openCount: number;
   closedCount: number;
   status: "TERBUKA" | "TERTUTUP";
+  firstReadingAt: string;
+  lastReadingAt: string;
 };
 
-export default function HistoryPage() {
-  const { history, loading, error } = useSensorHistory(100);
-  const [sortKey, setSortKey] = useState<SortKey>(null);
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const ITEMS_PER_PAGE = 10;
-  const [currentPage, setCurrentPage] = useState(1);
+const ITEMS_PER_PAGE = 8;
 
-  const formatDateValue = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
+function getTimestampMs(timestamp: string): number {
+  const parsed = new Date(timestamp).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
-    return `${year}-${month}-${day}`;
-  };
+function formatDateValue(timestamp: string): string {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
 
-  const formatDateLabel = (dateKey: string) =>
-    new Date(dateKey).toLocaleDateString("id-ID", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    });
+  return `${year}-${month}-${day}`;
+}
 
-  const dailySummaryMap = history.reduce<Record<string, DailySummary>>((accumulator, item) => {
-    const dateKey = formatDateValue(item.timestamp);
-
-    if (!accumulator[dateKey]) {
-      accumulator[dateKey] = {
-        dateKey,
-        averageTemperature: 0,
-        averageHumidity: 0,
-        averageLight: 0,
-        totalReadings: 0,
-        rainyReadings: 0,
-        openCount: 0,
-        closedCount: 0,
-        status: "TERTUTUP",
-      };
-    }
-
-    const dailySummary = accumulator[dateKey];
-    dailySummary.averageTemperature += item.temperature;
-    dailySummary.averageHumidity += item.humidity;
-    dailySummary.averageLight += item.light;
-    dailySummary.totalReadings += 1;
-
-    if (item.isRaining()) {
-      dailySummary.rainyReadings += 1;
-    }
-
-    if (item.status === "TERBUKA") {
-      dailySummary.openCount += 1;
-    } else {
-      dailySummary.closedCount += 1;
-    }
-
-    return accumulator;
-  }, {});
-
-  const dailyHistory = Object.values(dailySummaryMap).map((item) => {
-    const averageTemperature = item.averageTemperature / item.totalReadings;
-    const averageHumidity = item.averageHumidity / item.totalReadings;
-    const averageLight = item.averageLight / item.totalReadings;
-    const status = item.openCount >= item.closedCount ? "TERBUKA" : "TERTUTUP";
-
-    return {
-      ...item,
-      averageTemperature,
-      averageHumidity,
-      averageLight,
-      status,
-    };
+function formatDateLabel(dateKey: string): string {
+  return new Date(dateKey).toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
   });
+}
 
-  const displayedHistory = [...dailyHistory];
+function formatTime(timestamp: string): string {
+  return new Date(timestamp).toLocaleTimeString("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
-  const totalPages = Math.ceil(displayedHistory.length / ITEMS_PER_PAGE)
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
-
-  const paginatedHistory = displayedHistory.slice(startIndex, endIndex);
-
-  if (sortKey === "temperature") {
-    displayedHistory.sort((a, b) => b.averageTemperature - a.averageTemperature);
-  }
-
-  if (sortKey === "humidity") {
-    displayedHistory.sort((a, b) => b.averageHumidity - a.averageHumidity);
-  }
-
-  if (sortKey === "light") {
-    displayedHistory.sort((a, b) => b.averageLight - a.averageLight);
-  }
-
-  if (sortKey === "status") {
-    displayedHistory.sort((a, b) => {
-      const aRank = sortDirection === "status-closed-first"
-        ? (a.status === "TERTUTUP" ? 2 : 1)
-        : (a.status === "TERBUKA" ? 2 : 1);
-      const bRank = sortDirection === "status-closed-first"
-        ? (b.status === "TERTUTUP" ? 2 : 1)
-        : (b.status === "TERBUKA" ? 2 : 1);
-
-      return bRank - aRank;
-    });
-  }
-
-  if (sortKey === null) {
-    displayedHistory.sort((a, b) => b.dateKey.localeCompare(a.dateKey));
-  }
-
-  const toggleSort = (nextSortKey: Exclude<SortKey, null>) => {
-    if (nextSortKey === "status") {
-      if (sortKey !== "status") {
-        setSortKey("status");
-        setSortDirection("status-open-first");
-        setCurrentPage(1);
-        return;
-      }
-
-      if (sortDirection === "status-open-first") {
-        setSortDirection("status-closed-first");
-        setCurrentPage(1);
-        return;
-      }
-
-      if (sortDirection === "status-closed-first") {
-        setSortKey(null);
-        setSortDirection("desc");
-        setCurrentPage(1);
-      }
-
-      return;
-    }
-
-    setSortDirection("desc");
-    setSortKey((currentSortKey) => (currentSortKey === nextSortKey ? null : nextSortKey));
-  };
-
-  const renderSortLabel = (label: string, key: Exclude<SortKey, null>) =>
-    sortKey === key ? `${label} (desc)` : label;
-
-  const renderStatusSortLabel = (label: string) => {
-    if (sortKey !== "status") {
-      return label;
-    }
-
-    if (sortDirection === "status-open-first") {
-      return `${label} (terbuka)`;
-    }
-
-    if (sortDirection === "status-closed-first") {
-      return `${label} (tertutup)`;
-    }
-
-    return label;
-  };
-
-  // Details
+export default function HistoryPage() {
+  const { history, loading, error, lastFetchedAt } = useSensorHistory(200);
+  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [weatherFilter, setWeatherFilter] = useState<WeatherFilter>("all");
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedDataKey, setSelectedDataKey] = useState<string | null>(null);
-  const selectedDayHistory = selectedDataKey
-    ? history.filter((item) => formatDateValue(item.timestamp) === selectedDataKey) : [];
-  const orderedSelectedDayHistory = [...selectedDayHistory].sort(
-    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-  );
-  const firstReading = orderedSelectedDayHistory[0];
-  const firstTime = firstReading
-    ? new Date(firstReading.timestamp).toLocaleTimeString("id-ID")
-    : "-";
-  const lastReading = orderedSelectedDayHistory[orderedSelectedDayHistory.length - 1];
-  const lastTime = lastReading
-    ? new Date(lastReading.timestamp).toLocaleTimeString("id-ID")
-    : "-";
 
-  // Grafik
+  const sortedHistory = useMemo(
+    () => [...history].sort((a, b) => getTimestampMs(b.timestamp) - getTimestampMs(a.timestamp)),
+    [history],
+  );
+
+  const dailyHistory = useMemo(() => {
+    const dailySummaryMap = sortedHistory.reduce<Record<string, DailySummary>>((accumulator, item) => {
+      const dateKey = formatDateValue(item.timestamp);
+
+      if (!accumulator[dateKey]) {
+        accumulator[dateKey] = {
+          dateKey,
+          averageTemperature: 0,
+          averageHumidity: 0,
+          averageLight: 0,
+          totalReadings: 0,
+          rainyReadings: 0,
+          openCount: 0,
+          closedCount: 0,
+          status: "TERTUTUP",
+          firstReadingAt: item.timestamp,
+          lastReadingAt: item.timestamp,
+        };
+      }
+
+      const dailySummary = accumulator[dateKey];
+      dailySummary.averageTemperature += item.temperature;
+      dailySummary.averageHumidity += item.humidity;
+      dailySummary.averageLight += item.light;
+      dailySummary.totalReadings += 1;
+
+      if (item.isRaining()) {
+        dailySummary.rainyReadings += 1;
+      }
+
+      if (item.status === "TERBUKA") {
+        dailySummary.openCount += 1;
+      } else {
+        dailySummary.closedCount += 1;
+      }
+
+      if (getTimestampMs(item.timestamp) < getTimestampMs(dailySummary.firstReadingAt)) {
+        dailySummary.firstReadingAt = item.timestamp;
+      }
+      if (getTimestampMs(item.timestamp) > getTimestampMs(dailySummary.lastReadingAt)) {
+        dailySummary.lastReadingAt = item.timestamp;
+      }
+
+      return accumulator;
+    }, {});
+
+    return Object.values(dailySummaryMap).map<DailySummary>((item) => {
+      const averageTemperature = item.averageTemperature / item.totalReadings;
+      const averageHumidity = item.averageHumidity / item.totalReadings;
+      const averageLight = item.averageLight / item.totalReadings;
+      const status: DailySummary["status"] =
+        item.openCount >= item.closedCount ? "TERBUKA" : "TERTUTUP";
+
+      return {
+        ...item,
+        averageTemperature,
+        averageHumidity,
+        averageLight,
+        status,
+      };
+    });
+  }, [sortedHistory]);
+
+  const filteredDailyHistory = useMemo(() => {
+    const result = dailyHistory.filter((item) => {
+      if (statusFilter !== "all" && item.status !== statusFilter) {
+        return false;
+      }
+      if (weatherFilter === "rainy" && item.rainyReadings === 0) {
+        return false;
+      }
+      if (weatherFilter === "dry" && item.rainyReadings > 0) {
+        return false;
+      }
+      return true;
+    });
+
+    result.sort((a, b) => {
+      if (sortKey === "date") {
+        return sortDirection === "desc"
+          ? b.dateKey.localeCompare(a.dateKey)
+          : a.dateKey.localeCompare(b.dateKey);
+      }
+
+      if (sortKey === "status") {
+        const statusValue = (value: DailySummary["status"]) => (value === "TERBUKA" ? 1 : 0);
+        return sortDirection === "desc"
+          ? statusValue(b.status) - statusValue(a.status)
+          : statusValue(a.status) - statusValue(b.status);
+      }
+
+      const numericValue = (item: DailySummary) => {
+        if (sortKey === "temperature") {
+          return item.averageTemperature;
+        }
+        if (sortKey === "humidity") {
+          return item.averageHumidity;
+        }
+        return item.averageLight;
+      };
+
+      return sortDirection === "desc"
+        ? numericValue(b) - numericValue(a)
+        : numericValue(a) - numericValue(b);
+    });
+
+    return result;
+  }, [dailyHistory, sortDirection, sortKey, statusFilter, weatherFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredDailyHistory.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedHistory = filteredDailyHistory.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+  const selectedDateKey =
+    selectedDataKey && filteredDailyHistory.some((item) => item.dateKey === selectedDataKey)
+      ? selectedDataKey
+      : paginatedHistory[0]?.dateKey ?? null;
+
+  const orderedSelectedDayHistory = useMemo(
+    () =>
+      sortedHistory
+        .filter((item) => selectedDateKey !== null && formatDateValue(item.timestamp) === selectedDateKey)
+        .sort((a, b) => getTimestampMs(a.timestamp) - getTimestampMs(b.timestamp)),
+    [selectedDateKey, sortedHistory],
+  );
+
+  const selectedSummary = filteredDailyHistory.find((item) => item.dateKey === selectedDateKey) ?? null;
+
+  const totalRainyDays = dailyHistory.filter((item) => item.rainyReadings > 0).length;
+  const totalOpenDominantDays = dailyHistory.filter((item) => item.status === "TERBUKA").length;
+  const averageTemperature =
+    dailyHistory.length > 0
+      ? dailyHistory.reduce((sum, item) => sum + item.averageTemperature, 0) / dailyHistory.length
+      : 0;
+  const averageHumidity =
+    dailyHistory.length > 0
+      ? dailyHistory.reduce((sum, item) => sum + item.averageHumidity, 0) / dailyHistory.length
+      : 0;
+
+  const toggleSort = (key: SortKey) => {
+    setCurrentPage(1);
+    setSortKey((currentKey) => {
+      if (currentKey === key) {
+        setSortDirection((currentDirection) => (currentDirection === "desc" ? "asc" : "desc"));
+        return currentKey;
+      }
+      setSortDirection(key === "date" ? "desc" : "desc");
+      return key;
+    });
+  };
+
   const temperatureValues = orderedSelectedDayHistory.map((item) => item.temperature);
   const humidityValues = orderedSelectedDayHistory.map((item) => item.humidity);
   const lightValues = orderedSelectedDayHistory.map((item) => item.light);
+
   const buildChartPoints = (values: number[]) => {
     if (values.length === 0) {
       return "";
     }
 
     const width = 100;
-    const height = 36;
     const top = 4;
     const bottom = 32;
     const min = Math.min(...values);
@@ -223,19 +247,17 @@ export default function HistoryPage() {
       })
       .join(" ");
   };
-  const temperaturePoints = buildChartPoints(temperatureValues);
-  const humidityPoints = buildChartPoints(humidityValues);
-  const lightPoints = buildChartPoints(lightValues);
+
   const renderChartCard = (
     title: string,
     values: number[],
-    points: string,
     stroke: string,
     unit: string,
   ) => {
     const latestValue = values.length > 0 ? values[values.length - 1] : null;
     const minValue = values.length > 0 ? Math.min(...values) : 0;
     const maxValue = values.length > 0 ? Math.max(...values) : 0;
+    const points = buildChartPoints(values);
 
     return (
       <article className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -252,12 +274,7 @@ export default function HistoryPage() {
           </p>
         ) : (
           <svg viewBox="0 0 100 36" className="h-28 w-full" role="img" aria-label={`Grafik ${title}`}>
-            <polyline
-              fill="none"
-              stroke="#e2e8f0"
-              strokeWidth="0.8"
-              points="0,32 100,32"
-            />
+            <polyline fill="none" stroke="#e2e8f0" strokeWidth="0.8" points="0,32 100,32" />
             <polyline
               fill="none"
               stroke={stroke}
@@ -277,199 +294,340 @@ export default function HistoryPage() {
     );
   };
 
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 p-6 dark:from-slate-900 dark:to-slate-950">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <header>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">History Sensor Harian</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-            Setiap baris menampilkan rata-rata data sensor dari satu hari penuh.
-          </p>
+      <div className="mx-auto max-w-7xl space-y-6">
+        <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">
+              Riwayat Operasional Jemuran
+            </h1>
+            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+              Ringkasan harian dan pembacaan terbaru dari sensor jemuran pintar.
+            </p>
+          </div>
+          <div className="text-xs text-gray-500 dark:text-slate-400">
+            Last sync: {lastFetchedAt ? new Date(lastFetchedAt).toLocaleString("id-ID") : "-"}
+          </div>
         </header>
 
-        <section className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-slate-800">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-800 dark:text-slate-100">Ringkasan Harian</h2>
-            <span className="text-xs text-gray-500 dark:text-slate-400">{displayedHistory.length} hari ditampilkan</span>
+        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
+              Hari Tersimpan
+            </p>
+            <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-slate-100">{dailyHistory.length}</p>
           </div>
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
+              Rata-rata Suhu
+            </p>
+            <p className="mt-2 text-2xl font-bold text-red-600">{averageTemperature.toFixed(1)} C</p>
+          </div>
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
+              Hari Hujan
+            </p>
+            <p className="mt-2 text-2xl font-bold text-blue-600">{totalRainyDays}</p>
+          </div>
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
+              Dominan Terbuka
+            </p>
+            <p className="mt-2 text-2xl font-bold text-emerald-600">{totalOpenDominantDays}</p>
+          </div>
+        </section>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-slate-800">
-              <thead className="bg-gray-50 dark:bg-slate-800/60">
-                <tr>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Tanggal</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">
-                    <button
-                      type="button"
-                      onClick={() => toggleSort("temperature")}
-                      className="transition hover:text-sky-600 dark:hover:text-sky-300"
-                    >
-                      {renderSortLabel("Rata-rata Suhu", "temperature")}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">
-                    <button
-                      type="button"
-                      onClick={() => toggleSort("humidity")}
-                      className="transition hover:text-sky-600 dark:hover:text-sky-300"
-                    >
-                      {renderSortLabel("Rata-rata Kelembapan", "humidity")}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">
-                    <button
-                      type="button"
-                      onClick={() => toggleSort("light")}
-                      className="transition hover:text-sky-600 dark:hover:text-sky-300"
-                    >
-                      {renderSortLabel("Rata-rata Cahaya", "light")}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Jumlah Data</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Hujan</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">
-                    <button
-                      type="button"
-                      onClick={() => toggleSort("status")}
-                      className="transition hover:text-sky-600 dark:hover:text-sky-300"
-                    >
-                      {renderStatusSortLabel("Status Dominan")}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-600 dark:text-slate-300">Detail</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-                {loading ? (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-6 text-center text-gray-500 dark:text-slate-400">
-                      Memuat data history dari Firestore...
-                    </td>
-                  </tr>
-                ) : error ? (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-6 text-center text-red-600 dark:text-red-400">
-                      Gagal memuat history: {error}
-                    </td>
-                  </tr>
-                ) : displayedHistory.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-6 text-center text-gray-500 dark:text-slate-400">
-                      Belum ada data history di Firestore.
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedHistory.map((item) => (
-                    <tr key={item.dateKey} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/50">
-                      <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{formatDateLabel(item.dateKey)}</td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{item.averageTemperature.toFixed(1)} C</td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{item.averageHumidity.toFixed(1)} %</td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{item.averageLight.toFixed(0)}</td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{item.totalReadings}</td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{item.rainyReadings > 0 ? `${item.rainyReadings} kali` : "Tidak"}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${item.status === "TERBUKA" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"}`}>
-                          {item.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          type="button"
-                          className={
-                            selectedDataKey === item.dateKey
-                              ? "inline-flex items-center justify-center text-sky-600"
-                              : "inline-flex items-center justify-center"
-                          }
-                          onClick={() => setSelectedDataKey((current) => current === item.dateKey ? null : item.dateKey)}>
-                          <MdOutlineMoreHoriz />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-            <div className="flex items-center justify-between border-t border-y-gray-200 px-4 py-3 dark:border-slate-800">
-              <span className="text-sm text-gray-500 dark:text-slate-400">
-                Halaman {currentPage} dari {totalPages}
-              </span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
-                  disabled={currentPage === 1}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200">
-                  <FaAngleLeft />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))}
-                  disabled={currentPage === totalPages}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200">
-                  <FaAngleRight />
-                </button>
+        <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-800 dark:text-slate-100">
+                Filter Riwayat
+              </h2>
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                Sesuaikan daftar hari berdasarkan status operasional dan kondisi cuaca.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <label className="text-xs text-gray-500 dark:text-slate-400">
+                Status Dominan
+                <select
+                  value={statusFilter}
+                  onChange={(event) => {
+                    setStatusFilter(event.target.value as StatusFilter);
+                    setCurrentPage(1);
+                  }}
+                  className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                >
+                  <option value="all">Semua status</option>
+                  <option value="TERBUKA">Terbuka</option>
+                  <option value="TERTUTUP">Tertutup</option>
+                </select>
+              </label>
+              <label className="text-xs text-gray-500 dark:text-slate-400">
+                Kondisi Hujan
+                <select
+                  value={weatherFilter}
+                  onChange={(event) => {
+                    setWeatherFilter(event.target.value as WeatherFilter);
+                    setCurrentPage(1);
+                  }}
+                  className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                >
+                  <option value="all">Semua hari</option>
+                  <option value="dry">Tanpa hujan</option>
+                  <option value="rainy">Ada hujan</option>
+                </select>
+              </label>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
+                <p className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-slate-400">
+                  Rata-rata Kelembapan
+                </p>
+                <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-slate-100">
+                  {averageHumidity.toFixed(1)} %
+                </p>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
+                <p className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-slate-400">
+                  Data Sensor
+                </p>
+                <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-slate-100">
+                  {history.length} pembacaan
+                </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Grafik */}
-        {selectedDataKey && (
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.5fr_1fr]">
           <section className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="border-b border-gray-200 px-4 py-3 dark:border-slate-800">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-800 dark:text-slate-100">
-                Detail Harian
-              </h2>
-            </div>
-            <div className="px-4 py-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="rounded-xl bg-gray-50 p-3 dark:bg-slate-800/60">
-                <p className="text-xs text-gray-500 dark:text-slate-400">Jumlah Pembacaan</p>
-                <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">
-                  {selectedDayHistory.length}
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-gray-50 p-3 dark:bg-slate-800/60">
-                <p className="text-xs text-gray-500 dark:text-slate-400">Data Pertama</p>
-                <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">
-                  {firstTime}
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-gray-50 p-3 dark:bg-slate-800/60">
-                <p className="text-xs text-gray-500 dark:text-slate-400">Data Terakhir</p>
-                <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">
-                  {lastTime}
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-slate-800">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-800 dark:text-slate-100">
+                  Ringkasan Harian
+                </h2>
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                  {filteredDailyHistory.length} hari sesuai filter
                 </p>
               </div>
             </div>
 
-            <div className="p-4">
-              {!selectedDataKey ? (
-                <p className="text-sm text-gray-500 dark:bg-slate-400">Pilih salah satu hari dari tabel untuk melihat frafik sensor</p>
-              ) : (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-                      Detail {formatDateLabel(selectedDataKey)}
-                    </h3>
-                    <p className="text-sm text-gray-500 dark:text-slate-400">
-                      Grafik pembacaan sensor pada hari tersebut.
-                    </p>
-                  </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-slate-800">
+                <thead className="bg-gray-50 dark:bg-slate-800/60">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">
+                      <button type="button" onClick={() => toggleSort("date")}>Tanggal</button>
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">
+                      <button type="button" onClick={() => toggleSort("temperature")}>Suhu</button>
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">
+                      <button type="button" onClick={() => toggleSort("humidity")}>Kelembapan</button>
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">
+                      <button type="button" onClick={() => toggleSort("light")}>Cahaya</button>
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Data</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Hujan</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">
+                      <button type="button" onClick={() => toggleSort("status")}>Status</button>
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-600 dark:text-slate-300">Detail</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-8 text-center text-gray-500 dark:text-slate-400">
+                        Memuat data history dari Firestore...
+                      </td>
+                    </tr>
+                  ) : error ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-8 text-center text-red-600 dark:text-red-400">
+                        Gagal memuat history: {error}
+                      </td>
+                    </tr>
+                  ) : paginatedHistory.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-8 text-center text-gray-500 dark:text-slate-400">
+                        Tidak ada data yang cocok dengan filter saat ini.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedHistory.map((item) => (
+                      <tr key={item.dateKey} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/50">
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">
+                          <p className="font-medium">{formatDateLabel(item.dateKey)}</p>
+                          <p className="text-xs text-gray-500 dark:text-slate-400">
+                            {formatTime(item.firstReadingAt)} - {formatTime(item.lastReadingAt)}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">
+                          {item.averageTemperature.toFixed(1)} C
+                        </td>
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">
+                          {item.averageHumidity.toFixed(1)} %
+                        </td>
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">
+                          {item.averageLight.toFixed(0)} lux
+                        </td>
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">
+                          {item.totalReadings}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">
+                          {item.rainyReadings > 0 ? `${item.rainyReadings} kali` : "Tidak"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                              item.status === "TERBUKA"
+                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                            }`}
+                          >
+                            {item.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            type="button"
+                            className={`inline-flex items-center justify-center ${
+                              selectedDateKey === item.dateKey ? "text-sky-600" : "text-gray-500"
+                            }`}
+                            onClick={() => setSelectedDataKey(item.dateKey)}
+                          >
+                            <MdOutlineMoreHoriz />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    {renderChartCard("Suhu", temperatureValues, temperaturePoints, "#ef4444", "C")}
-                    {renderChartCard("Kelembapan", humidityValues, humidityPoints, "#3b82f6", "%")}
-                    {renderChartCard("Cahaya", lightValues, lightPoints, "#f59e0b", "lux")}
-                  </div>
-                </div>
-              )}
+            <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3 dark:border-slate-800">
+              <span className="text-sm text-gray-500 dark:text-slate-400">
+                Halaman {safeCurrentPage} dari {totalPages}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+                  disabled={safeCurrentPage === 1}
+                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200"
+                >
+                  <FaAngleLeft />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))}
+                  disabled={safeCurrentPage === totalPages}
+                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200"
+                >
+                  <FaAngleRight />
+                </button>
+              </div>
             </div>
           </section>
-        )}
+
+          <section className="space-y-6">
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="border-b border-gray-200 px-4 py-3 dark:border-slate-800">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-800 dark:text-slate-100">
+                  Detail Harian
+                </h2>
+              </div>
+              <div className="p-4">
+                {!selectedSummary ? (
+                  <p className="text-sm text-gray-500 dark:text-slate-400">
+                    Pilih salah satu hari untuk melihat detail operasional.
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+                        {formatDateLabel(selectedSummary.dateKey)}
+                      </h3>
+                      <p className="text-sm text-gray-500 dark:text-slate-400">
+                        Pembacaan {selectedSummary.totalReadings} data, rentang waktu{" "}
+                        {formatTime(selectedSummary.firstReadingAt)} - {formatTime(selectedSummary.lastReadingAt)}.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-xl bg-gray-50 p-3 dark:bg-slate-800/60">
+                        <p className="text-xs text-gray-500 dark:text-slate-400">Status Dominan</p>
+                        <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">
+                          {selectedSummary.status}
+                        </p>
+                      </div>
+                      <div className="rounded-xl bg-gray-50 p-3 dark:bg-slate-800/60">
+                        <p className="text-xs text-gray-500 dark:text-slate-400">Rain Events</p>
+                        <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">
+                          {selectedSummary.rainyReadings}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4">
+                      {renderChartCard("Suhu", temperatureValues, "#ef4444", "C")}
+                      {renderChartCard("Kelembapan", humidityValues, "#3b82f6", "%")}
+                      {renderChartCard("Cahaya", lightValues, "#f59e0b", "lux")}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="border-b border-gray-200 px-4 py-3 dark:border-slate-800">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-800 dark:text-slate-100">
+                  Pembacaan Terbaru
+                </h2>
+              </div>
+              <div className="max-h-[420px] overflow-y-auto p-4">
+                {orderedSelectedDayHistory.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-slate-400">
+                    Belum ada pembacaan untuk hari yang dipilih.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {orderedSelectedDayHistory.slice().reverse().map((item) => (
+                      <div
+                        key={`${item.timestamp}-${item.temperature}-${item.humidity}`}
+                        className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-slate-800 dark:bg-slate-950"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                            {formatTime(item.timestamp)}
+                          </p>
+                          <span
+                            className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
+                              item.isRaining()
+                                ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                                : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+                            }`}
+                          >
+                            {item.isRaining() ? "Hujan" : "Kering"}
+                          </span>
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-gray-600 dark:text-slate-300">
+                          <p>Suhu: {item.temperature.toFixed(1)} C</p>
+                          <p>Kelembapan: {item.humidity.toFixed(1)} %</p>
+                          <p>Cahaya: {item.light.toFixed(0)} lux</p>
+                          <p>Status: {item.status}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );

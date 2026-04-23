@@ -11,6 +11,7 @@ import {
   User,
   RefreshCcw,
 } from 'lucide-react';
+import { useSystemState } from '@/hooks/useSystemState';
 
 interface TopBarProps {
   onHamburgerClick: () => void;
@@ -20,6 +21,7 @@ const SETTINGS_STORAGE_KEY = 'smart-clothesline-settings-v1';
 
 export default function TopBar({ onHamburgerClick }: TopBarProps) {
   const router = useRouter();
+  const { isOnline, mode, decision, uiState, lastUpdate } = useSystemState();
   const [isDark, setIsDark] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
@@ -148,6 +150,14 @@ export default function TopBar({ onHamburgerClick }: TopBarProps) {
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('') || 'OP';
 
+  const lastUpdateSeconds = lastUpdate === null
+    ? null
+    : Math.max(0, Math.floor((Date.now() - lastUpdate) / 1000));
+  const isStale = uiState.stream !== 'STREAMING';
+  const liveStatusClass = isOnline
+    ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+    : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300';
+
   if (!mounted) {
     return (
       <header className="h-16 border-b border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-900" />
@@ -173,6 +183,24 @@ export default function TopBar({ onHamburgerClick }: TopBarProps) {
               Smart Clothesline Dashboard
             </p>
             <p className="text-xs text-gray-500 dark:text-slate-400">Cloud IoT Monitoring</p>
+          </div>
+          <div className="hidden min-w-0 items-center gap-2 lg:flex">
+            <span
+              className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold ${liveStatusClass}`}
+              title={lastUpdateSeconds === null ? 'Last update: -' : `Last update: ${lastUpdateSeconds}s ago`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-red-500'} ${isStale ? 'animate-pulse' : ''}`}
+                aria-hidden="true"
+              />
+              {isOnline ? 'ONLINE' : 'OFFLINE'}
+            </span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+              {mode ?? '--'}
+            </span>
+            <span className="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+              {decision.decisionSource}
+            </span>
           </div>
         </div>
 

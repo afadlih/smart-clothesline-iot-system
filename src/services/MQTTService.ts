@@ -1,251 +1,311 @@
-import mqtt, { MqttClient } from "mqtt";
+import mqtt, { type MqttClient } from "mqtt";
+import { SensorValidator, ValidationError } from "./ValidationService";
 
-export type SensorMessage = {
-    temperature: number;
-    humidity: number;
-    light: number;
-    rain: boolean;
-    sourceId?: string;
-};
+export const MQTT_BROKER_URL = "wss://broker.hivemq.com:8884/mqtt";
+export const SENSOR_TOPIC = "smart-clothesline/sensor";
+export const STATUS_TOPIC = "smart-clothesline/status";
+export const COMMAND_TOPIC = "smart-clothesline/command";
+export const CONFIG_TOPIC = "smart-clothesline/config";
 
-export type MqttConnectionState =
-    | "connecting"
-    | "online"
-    | "reconnecting"
-    | "offline"
-    | "error";
+type SubscribeCallback = (topic: string, payload: string) => void;
+type TopicCallback = (payload: string) => void;
+type ConnectionState = "connecting" | "online" | "reconnecting" | "offline" | "error";
 
 export type MqttConnectionSnapshot = {
-    state: MqttConnectionState;
-    isOnline: boolean;
-    topic: string;
-    lastError: string | null;
-    lastMessageAt: string | null;
+  state: ConnectionState;
+  isOnline: boolean;
+  topic: string;
+  lastError: string | null;
+  lastMessageAt: string | null;
 };
 
-type MessageCallback = (message: SensorMessage) => void;
-type StatusCallback = (status: MqttConnectionSnapshot) => void;
+export type SensorMessage = {
+  deviceId?: string;
+  temperature: number;
+  humidity: number;
+  light: number;
+  rain: boolean;
+  status?: "OPEN" | "CLOSED";
+  mode?: "AUTO" | "MANUAL";
+  timestamp?: number;
+};
 
-const MQTT_BROKER_URL = "wss://broker.hivemq.com:8884/mqtt";
-const MQTT_TOPIC = process.env.NEXT_PUBLIC_MQTT_TOPIC ?? "smart-clothesline/sensor";
-const EXPECTED_SOURCE_ID =
-    process.env.NEXT_PUBLIC_MQTT_SOURCE_ID ?? "smart-clothesline-simulator";
+type SensorMessageCallback = (message: SensorMessage) => void;
+type ConnectionCallback = (snapshot: MqttConnectionSnapshot) => void;
 
-const MIN_TEMPERATURE = -20;
-const MAX_TEMPERATURE = 80;
-const MIN_HUMIDITY = 0;
-const MAX_HUMIDITY = 100;
-const MIN_LIGHT = 0;
-const MAX_LIGHT = 5000;
+// ===== RETRY STRATEGY =====
+class RetryStrategy {
+  private retryCount = 0;
+  private readonly maxRetries = 10;
+  private readonly baseDelayMs = 5000; // 5 seconds
+  private readonly maxDelayMs = 120000; // 2 minutes
+  private retryTimeoutId: NodeJS.Timeout | null = null;
 
-class MQTTService {
-    private client: MqttClient | null = null;
-    private listeners = new Set<MessageCallback>();
-    private statusListeners = new Set<StatusCallback>();
-    private connectionStatus: MqttConnectionSnapshot = {
-        state: "connecting",
-        isOnline: false,
-        topic: MQTT_TOPIC,
-        lastError: null,
-        lastMessageAt: null,
-    };
+  isMaxRetriesExceeded(): boolean {
+    return this.retryCount >= this.maxRetries;
+  }
 
-    constructor() {
-        if (typeof window !== "undefined") {
-            this.connect();
-        }
+  getNextDelay(): number {
+    // Exponential backoff: 5s, 10s, 20s, 40s, 80s, 160s, ...
+    const exponentialDelay = this.baseDelayMs * Math.pow(2, this.retryCount);
+    const cappedDelay = Math.min(exponentialDelay, this.maxDelayMs);
+    return cappedDelay;
+  }
+
+  incrementRetry(): number {
+    return ++this.retryCount;
+  }
+
+  reset(): void {
+    if (this.retryTimeoutId) {
+      clearTimeout(this.retryTimeoutId);
+      this.retryTimeoutId = null;
     }
+    this.retryCount = 0;
+  }
 
-    onMessage(callback: MessageCallback): () => void {
-        this.connect();
-        this.listeners.add(callback);
+  scheduleRetry(callback: () => void): NodeJS.Timeout {
+    const delay = this.getNextDelay();
+    const timeoutId = setTimeout(callback, delay);
+    this.retryTimeoutId = timeoutId;
 
-        return () => {
-            this.listeners.delete(callback);
-        };
+    console.info("[MQTT][RETRY]", {
+      attempt: this.retryCount + 1,
+      maxRetries: this.maxRetries,
+      delayMs: delay,
+      delaySeconds: (delay / 1000).toFixed(1),
+    });
+
+    return timeoutId;
+  }
+
+  cancel(): void {
+    if (this.retryTimeoutId) {
+      clearTimeout(this.retryTimeoutId);
+      this.retryTimeoutId = null;
     }
-
-    onConnectionStatus(callback: StatusCallback): () => void {
-        this.connect();
-        this.statusListeners.add(callback);
-        callback(this.getConnectionSnapshot());
-
-        return () => {
-            this.statusListeners.delete(callback);
-        };
-    }
-
-    getConnectionSnapshot(): MqttConnectionSnapshot {
-        return { ...this.connectionStatus };
-    }
-
-    private updateConnectionStatus(
-        patch: Partial<Omit<MqttConnectionSnapshot, "topic">>,
-    ): void {
-        this.connectionStatus = {
-            ...this.connectionStatus,
-            ...patch,
-        };
-
-        const snapshot = this.getConnectionSnapshot();
-        for (const listener of this.statusListeners) {
-            listener(snapshot);
-        }
-    }
-
-    private connect(): void {
-        if (this.client) {
-            return;
-        }
-
-        this.updateConnectionStatus({
-            state: "connecting",
-            isOnline: false,
-            lastError: null,
-        });
-
-        this.client = mqtt.connect(MQTT_BROKER_URL, {
-            reconnectPeriod: 10000,
-            connectTimeout: 10000,
-            clean: true,
-        });
-
-        this.client.on("connect", () => {
-            console.info("[MQTT] Connected to broker");
-            this.updateConnectionStatus({
-                state: "online",
-                isOnline: true,
-                lastError: null,
-            });
-
-            this.client?.subscribe(MQTT_TOPIC, (error) => {
-                if (error) {
-                    console.error("[MQTT] Failed to subscribe:", error.message);
-                    this.updateConnectionStatus({
-                        state: "error",
-                        isOnline: false,
-                        lastError: error.message,
-                    });
-                    return;
-                }
-
-                console.info(`[MQTT] Subscribed to topic: ${MQTT_TOPIC}`);
-            });
-        });
-
-        this.client.on("reconnect", () => {
-            console.info("[MQTT] Reconnecting...");
-            this.updateConnectionStatus({
-                state: "reconnecting",
-                isOnline: false,
-                lastError: null,
-            });
-        });
-
-        this.client.on("error", (error) => {
-            console.error("[MQTT] Connection error:", error.message);
-            this.updateConnectionStatus({
-                state: "error",
-                isOnline: false,
-                lastError: error.message,
-            });
-        });
-
-        this.client.on("offline", () => {
-            console.warn("[MQTT] Client offline");
-            this.updateConnectionStatus({
-                state: "offline",
-                isOnline: false,
-            });
-        });
-
-        this.client.on("close", () => {
-            this.updateConnectionStatus({
-                state: "offline",
-                isOnline: false,
-            });
-        });
-
-        this.client.on("message", (topic, payload) => {
-            if (topic !== MQTT_TOPIC) {
-                return;
-            }
-
-            const parsed = this.parseMessage(payload.toString());
-            if (!parsed) {
-                return;
-            }
-
-            if (!this.isExpectedSource(parsed)) {
-                return;
-            }
-
-            this.updateConnectionStatus({
-                state: "online",
-                isOnline: true,
-                lastError: null,
-                lastMessageAt: new Date().toISOString(),
-            });
-
-            for (const listener of this.listeners) {
-                listener(parsed);
-            }
-        });
-    }
-
-    private parseMessage(raw: string): SensorMessage | null {
-        try {
-            const data = JSON.parse(raw) as Partial<SensorMessage>;
-
-            if (
-                typeof data.temperature !== "number" ||
-                typeof data.humidity !== "number" ||
-                typeof data.light !== "number" ||
-                typeof data.rain !== "boolean"
-            ) {
-                console.warn("[MQTT] Invalid payload shape:", data);
-                return null;
-            }
-
-            if (
-                data.temperature < MIN_TEMPERATURE ||
-                data.temperature > MAX_TEMPERATURE ||
-                data.humidity < MIN_HUMIDITY ||
-                data.humidity > MAX_HUMIDITY ||
-                data.light < MIN_LIGHT ||
-                data.light > MAX_LIGHT
-            ) {
-                console.warn("[MQTT] Sensor value out of expected range:", data);
-                return null;
-            }
-
-            return {
-                temperature: data.temperature,
-                humidity: data.humidity,
-                light: data.light,
-                rain: data.rain,
-                sourceId: data.sourceId,
-            };
-        } catch (error) {
-            console.warn("[MQTT] Failed to parse JSON message:", error);
-            return null;
-        }
-    }
-
-    private isExpectedSource(message: SensorMessage): boolean {
-        if (!EXPECTED_SOURCE_ID) {
-            return true;
-        }
-
-        if (message.sourceId !== EXPECTED_SOURCE_ID) {
-            console.warn(
-                `[MQTT] Ignored message from unknown source: ${message.sourceId ?? "unknown"}`,
-            );
-            return false;
-        }
-
-        return true;
-    }
+  }
 }
 
-export const mqttService = new MQTTService();
+class MqttService {
+  private client: MqttClient | null = null;
+  private subscribers = new Set<SubscribeCallback>();
+  private topicSubscribers = new Map<string, Set<TopicCallback>>();
+  private sensorSubscribers = new Set<SensorMessageCallback>();
+  private connectionSubscribers = new Set<ConnectionCallback>();
+  private connection: MqttConnectionSnapshot = {
+    state: "connecting",
+    isOnline: false,
+    topic: SENSOR_TOPIC,
+    lastError: null,
+    lastMessageAt: null,
+  };
+  private retryStrategy = new RetryStrategy();
+
+  private notifyConnection() {
+    const snapshot = this.getConnectionSnapshot();
+    for (const callback of this.connectionSubscribers) {
+      callback(snapshot);
+    }
+  }
+
+  private setConnection(patch: Partial<MqttConnectionSnapshot>) {
+    this.connection = { ...this.connection, ...patch };
+    this.notifyConnection();
+  }
+
+  private parseSensorMessage(raw: string): SensorMessage | null {
+    try {
+      const data = this.safeParseJson<Partial<SensorMessage>>(raw);
+      if (!data) {
+        return null;
+      }
+
+      // Validate using Zod schema
+      try {
+        const validated = SensorValidator.validate(data);
+        return validated as SensorMessage;
+      } catch (validationError) {
+        if (validationError instanceof ValidationError) {
+          SensorValidator.logValidationError(validationError);
+        } else {
+          console.warn("[MQTT] Validation error:", validationError);
+        }
+        return null;
+      }
+    } catch (error) {
+      console.warn("[MQTT] Failed to parse sensor message:", error);
+      return null;
+    }
+  }
+
+  private safeParseJson<T>(raw: string): T | null {
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  private publishToTopicSubscribers(topic: string, raw: string) {
+    const callbacks = this.topicSubscribers.get(topic);
+    if (!callbacks) {
+      return;
+    }
+
+    for (const callback of callbacks) {
+      callback(raw);
+    }
+  }
+
+  private connect() {
+    if (this.client || typeof window === "undefined") {
+      return;
+    }
+
+    if (this.retryStrategy.isMaxRetriesExceeded()) {
+      console.error("[MQTT] Max retries exceeded, giving up");
+      this.setConnection({
+        state: "error",
+        isOnline: false,
+        lastError: "Max reconnection attempts exceeded",
+      });
+      return;
+    }
+
+    this.client = mqtt.connect(MQTT_BROKER_URL, {
+      reconnectPeriod: 0, // Disable auto-reconnect, we handle it manually
+      connectTimeout: 10000,
+      clean: true,
+    });
+    this.setConnection({ state: "connecting", isOnline: false, lastError: null });
+
+    this.client.on("connect", () => {
+      this.retryStrategy.reset();
+      this.client?.subscribe([SENSOR_TOPIC, STATUS_TOPIC, CONFIG_TOPIC], (error) => {
+        if (error) {
+          console.error("[MQTT] Failed to subscribe:", error.message);
+        }
+      });
+      this.setConnection({ state: "online", isOnline: true, lastError: null });
+      console.info("[MQTT] Connected successfully");
+    });
+
+    this.client.on("reconnect", () => {
+      console.info("[MQTT] Reconnecting...");
+      this.setConnection({ state: "reconnecting", isOnline: false });
+    });
+
+    this.client.on("offline", () => {
+      console.warn("[MQTT] Connection offline");
+      this.setConnection({ state: "offline", isOnline: false });
+      this.scheduleReconnect();
+    });
+
+    this.client.on("close", () => {
+      console.warn("[MQTT] Connection closed");
+      this.setConnection({ state: "offline", isOnline: false });
+      this.scheduleReconnect();
+    });
+
+    this.client.on("message", (topic, payload) => {
+      const raw = payload.toString();
+      console.info(`[MQTT][RECV][${topic}]: ${raw}`);
+
+      for (const callback of this.subscribers) {
+        callback(topic, raw);
+      }
+      this.publishToTopicSubscribers(topic, raw);
+
+      if (topic === SENSOR_TOPIC) {
+        const parsed = this.parseSensorMessage(raw);
+        if (parsed) {
+          for (const callback of this.sensorSubscribers) {
+            callback(parsed);
+          }
+        }
+      }
+
+      this.setConnection({
+        state: "online",
+        isOnline: true,
+        lastError: null,
+        lastMessageAt: new Date().toISOString(),
+      });
+    });
+
+    this.client.on("error", (error) => {
+      console.error("[MQTT] Connection error:", error.message);
+      this.setConnection({ state: "error", isOnline: false, lastError: error.message });
+      this.scheduleReconnect();
+    });
+  }
+
+  private scheduleReconnect() {
+    this.retryStrategy.incrementRetry();
+    this.retryStrategy.scheduleRetry(() => {
+      this.client = null;
+      this.connect();
+    });
+  }
+
+  subscribe(callback: SubscribeCallback): () => void {
+    this.connect();
+    this.subscribers.add(callback);
+
+    return () => {
+      this.subscribers.delete(callback);
+    };
+  }
+
+  subscribeTopic(topic: string, callback: TopicCallback): () => void {
+    this.connect();
+    const existing = this.topicSubscribers.get(topic) ?? new Set<TopicCallback>();
+    existing.add(callback);
+    this.topicSubscribers.set(topic, existing);
+
+    return () => {
+      const callbacks = this.topicSubscribers.get(topic);
+      if (!callbacks) {
+        return;
+      }
+      callbacks.delete(callback);
+      if (callbacks.size === 0) {
+        this.topicSubscribers.delete(topic);
+      }
+    };
+  }
+
+  publish(topic: string, payload: string | Record<string, unknown>) {
+    this.connect();
+    const message = typeof payload === "string" ? payload : JSON.stringify(payload);
+    this.client?.publish(topic, message);
+  }
+
+  onMessage(callback: SensorMessageCallback): () => void {
+    this.connect();
+    this.sensorSubscribers.add(callback);
+    return () => {
+      this.sensorSubscribers.delete(callback);
+    };
+  }
+
+  onConnectionStatus(callback: ConnectionCallback): () => void {
+    this.connect();
+    this.connectionSubscribers.add(callback);
+    callback(this.getConnectionSnapshot());
+    return () => {
+      this.connectionSubscribers.delete(callback);
+    };
+  }
+
+  getConnectionSnapshot(): MqttConnectionSnapshot {
+    return { ...this.connection };
+  }
+
+  isConnected(): boolean {
+    return this.client?.connected === true;
+  }
+}
+
+export const mqttService = new MqttService();
