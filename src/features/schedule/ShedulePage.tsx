@@ -1,255 +1,186 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, RefreshCw, Loader2, Clock } from "lucide-react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
+import { Plus, RefreshCw, Loader2, Lock, AlertTriangle, Clock, ShieldCheck } from "lucide-react";
 import { useSystemState } from "@/hooks/useSystemState";
 import { mqttService, COMMAND_TOPIC } from "@/services/MQTTService";
 import { ScheduleManager, ScheduleItem } from "../system/ScheduleManager";
-import { ScheduleCard } from "@/components/cards/ScheduleCards";
+import { ScheduleCard } from "@/components/cards/ScheduleCards"; 
 import { ScheduleForm } from "@/components/form/ScheduleForm";
 
-// ==============================
-// SENSOR TYPE
-// ==============================
 interface LocalSensorData {
   status?: string;
-  mode?: string; // Berisi "AUTO" atau "MANUAL" dari ESP32/Firebase
 }
 
-// ==============================
-// HELPER: Cek Waktu
-// ==============================
-const isWithinSchedule = (schedule: ScheduleItem, now: Date): boolean => {
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-  const start = ScheduleManager.toMinutes(schedule.timeOpen);
-  const end = ScheduleManager.toMinutes(schedule.timeClose);
-  return nowMin >= start && nowMin < end;
-};
-
-// ==============================
-// PAGE COMPONENT
-// ==============================
 export default function SchedulePage() {
-  const { sensor: rawSensor } = useSystemState();
+  const { sensor: rawSensor, mode, isOnline } = useSystemState();
   const sensor = rawSensor as unknown as LocalSensorData;
 
-  // --- STATE ---
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
+  const [isFormOpen, setIsFormOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ name: "", timeOpen: "08:00", timeClose: "10:00" });
+  const [errorMessage, setErrorMessage] = useState("");
   const [isHydrated, setIsHydrated] = useState(false);
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    timeOpen: "08:00",
-    timeClose: "10:00",
-  });
-  const [errorMessage, setErrorMessage] = useState("");
+  const [userAllowedAuto, setUserAllowedAuto] = useState(false);
+  const wasActiveRef = useRef<boolean>(false);
 
-  // Ref untuk mengunci agar perintah tidak loop terus menerus
-  const hasLockedManual = useRef(false);
-
-  // --- LOAD JADWAL ---
-  const fetchSchedules = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      const data = await ScheduleManager.loadFromFirebase();
-      setSchedules(data);
-    } catch (error) {
-      console.error("Load Error:", error);
+      const [scheduleData, overrideStatus] = await Promise.all([
+        ScheduleManager.loadFromFirebase(),
+        ScheduleManager.getSystemOverride()
+      ]);
+      setSchedules(scheduleData);
+      setUserAllowedAuto(overrideStatus);
+    } catch {
+      console.error("Gagal memuat data");
     } finally {
       setLoading(false);
       setIsHydrated(true);
     }
   };
 
-  useEffect(() => {
-    fetchSchedules();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
-  // --- LIVE CLOCK ---
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // --- MEMO: APAKAH ADA JADWAL AKTIF SEKARANG? ---
-  const isScheduleActive = useMemo(() => {
+  const isCurrentlyActive = useMemo(() => {
     if (schedules.length === 0) return false;
-    return schedules.some(
-      (item) => item.isActive && isWithinSchedule(item, currentTime)
-    );
+    const nowMin = currentTime.getHours() * 60 + currentTime.getMinutes();
+    return schedules.some((item) => {
+      if (!item.isActive) return false;
+      const start = ScheduleManager.toMinutes(item.timeOpen);
+      const end = ScheduleManager.toMinutes(item.timeClose);
+      return nowMin >= start && nowMin < end;
+    });
   }, [schedules, currentTime]);
 
-  // ==============================
-  // LOGIKA UTAMA: MQTT & AUTO-LOCK
-  // ==============================
   useEffect(() => {
-    if (!isHydrated || !sensor || schedules.length === 0) return;
-
-    const status = String(sensor.status || "").toUpperCase();
-    const mode = String(sensor.mode || "MANUAL").toUpperCase();
-    const isOpen = status === "OPEN" || status === "TERBUKA";
-
-    // 1. JIKA JADWAL SEDANG AKTIF
-    if (isScheduleActive) {
-      // Buka kunci manual karena sudah masuk periode jadwal lagi
-      hasLockedManual.current = false; 
-      
-      // HANYA buka jika alat di mode AUTO dan statusnya sedang tertutup
-      if (!isOpen && mode === "AUTO") {
-        console.log("LOG: Jadwal Aktif & Mode AUTO -> OPEN Command");
-        mqttService.publish(COMMAND_TOPIC, { command: "OPEN" });
-      }
-    } 
-    
-    // 2. JIKA JADWAL SUDAH SELESAI
-    else {
-      // Jika mode masih AUTO, artinya jadwal baru saja habis
-      if (mode === "AUTO" && !hasLockedManual.current) {
-        console.log("LOG: Jadwal HABIS! Paksa ke MANUAL Mode");
-        
-        // URUTAN EKSEKUSI:
-        // 1. Matikan AUTO dulu
-        mqttService.publish(COMMAND_TOPIC, { command: "MANUAL" });
-
-        // 2. Baru tutup
-        mqttService.publish(COMMAND_TOPIC, { command: "CLOSE" });
-        
-        // C. Simpan status di Database (system_settings/global)
-        ScheduleManager.updateSystemMode("MANUAL");
-
-        // Kunci agar tidak kirim perintah berkali-kali setiap detik
-        hasLockedManual.current = true;
-      }
+    if (wasActiveRef.current === true && isCurrentlyActive === false) {
+      setUserAllowedAuto(false);
+      ScheduleManager.setSystemOverride(false);
     }
-  }, [isScheduleActive, sensor.mode, sensor.status, schedules.length, isHydrated]);
+    wasActiveRef.current = isCurrentlyActive;
+  }, [isCurrentlyActive]);
 
-  // --- ACTION: RESET KE AUTO ---
-  const handleResetToAuto = async () => {
-    hasLockedManual.current = false;
+  // --- LOGIKA INTEGRASI: SINKRONISASI OTOMATIS ---
+  useEffect(() => {
+    if (!isHydrated || mode === null || mode === undefined || schedules.length === 0) return;
     
-    // 1. Update Firebase
-    await ScheduleManager.updateSystemMode("AUTO");
-    
-    // 2. Kirim MQTT agar ESP32 kembali ke logika sensor
-    mqttService.publish(COMMAND_TOPIC, { command: "AUTO" });
-  };
+    const syncTimer = setTimeout(() => {
+      const currentMode = String(mode).toUpperCase();
+      const currentStatus = String(sensor?.status || "").toUpperCase();
+      const isOpen = currentStatus === "OPEN" || currentStatus === "TERBUKA";
 
-  // --- ACTION: SUBMIT JADWAL BARU ---
+      if (isCurrentlyActive) {
+        // Jika masuk jadwal, kirim perintah AUTO
+        // Ini memastikan mode berubah jadi AUTO dan jemuran terbuka jika terang
+        if (currentMode === "MANUAL" || !isOpen) {
+          console.log("SYNC: Jadwal Dimulai. Mengaktifkan Mode AUTO.");
+          mqttService.publish(COMMAND_TOPIC, { command: "AUTO", timestamp: Date.now() });
+        }
+      } else {
+        // Jika jadwal habis, kunci ke MANUAL
+        if (!userAllowedAuto && currentMode === "AUTO") {
+          console.warn("SYNC: Jadwal Berakhir. Mengunci Mode MANUAL.");
+          mqttService.publish(COMMAND_TOPIC, { command: "CLOSE", timestamp: Date.now() });
+        }
+      }
+    }, 2500);
+    
+    return () => clearTimeout(syncTimer);
+  }, [isCurrentlyActive, mode, sensor?.status, isHydrated, schedules.length, userAllowedAuto]);
+
   const onSubmitSchedule = async () => {
-    setErrorMessage("");
     if (!form.name.trim()) {
       setErrorMessage("Nama wajib diisi.");
       return;
     }
-    if (!ScheduleManager.isValidRange(form.timeOpen, form.timeClose)) {
-      setErrorMessage("Waktu tidak valid (Buka harus < Tutup).");
-      return;
+    try {
+      const payload = { ...form, isActive: true, enabled: true, startHour: form.timeOpen, endHour: form.timeClose };
+      await ScheduleManager.addSchedule(payload as unknown as Parameters<typeof ScheduleManager.addSchedule>[0]);
+      setForm({ name: "", timeOpen: "08:00", timeClose: "10:00" });
+      setIsFormOpen(false);
+      setErrorMessage("");
+      fetchData();
+    } catch {
+      setErrorMessage("Gagal menyimpan ke Firebase.");
     }
+  };
 
-    await ScheduleManager.addSchedule({ ...form, isActive: true });
-    setForm({ name: "", timeOpen: "08:00", timeClose: "10:00" });
-    setIsFormOpen(false);
-    fetchSchedules();
+  const handleResetToAuto = async () => {
+    setUserAllowedAuto(true);
+    await ScheduleManager.setSystemOverride(true);
+    mqttService.publish(COMMAND_TOPIC, { command: "AUTO" });
   };
 
   return (
-    <div className="flex min-h-screen flex-col gap-6 p-6 bg-slate-50">
-      
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="flex min-h-screen flex-col gap-6 bg-slate-50 p-6 dark:bg-slate-950">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Penjadwalan Alat</h1>
-          <p className="text-sm text-slate-500">
-            Mode akan terkunci ke <b>MANUAL</b> saat jadwal berakhir.
-          </p>
+          <h1 className="text-2xl font-bold dark:text-slate-100">Penjadwalan Alat</h1>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-sm text-slate-500">Koneksi: {isOnline ? "🟢 Online" : "🔴 Offline"}</p>
+            <div className={`flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded border ${
+              mode === "AUTO" ? "bg-green-50 text-green-700 border-green-100" : "bg-amber-50 text-amber-700 border-amber-100"
+            }`}>
+              {mode === "AUTO" ? <ShieldCheck size={10} /> : <Lock size={10} />}
+              MODE: {mode ?? 'SYNCING...'}
+            </div>
+          </div>
         </div>
-
-        <div className="flex gap-3">
-          {/* Tombol Reset */}
-          <button
-            onClick={handleResetToAuto}
-            className={`flex items-center gap-2 px-4 py-2 border rounded-lg shadow-sm text-sm font-medium transition-all ${
-              sensor?.mode === "AUTO"
-                ? "bg-green-50 border-green-200 text-green-700"
-                : "bg-white text-slate-700 hover:bg-slate-100"
-            }`}
-          >
-            <RefreshCw size={16} className={sensor?.mode === "AUTO" ? "animate-spin-slow" : "text-blue-500"} />
-            {sensor?.mode === "AUTO" ? "Mode AUTO Aktif" : "Reset ke AUTO"}
+        <div className="flex gap-2">
+          <button onClick={handleResetToAuto} className="flex items-center gap-2 rounded-lg bg-white border px-4 py-2 text-sm font-medium dark:bg-slate-800">
+            <RefreshCw size={18} /> Reset ke Auto
           </button>
-
-          <button
-            onClick={() => setIsFormOpen(!isFormOpen)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm text-sm font-medium"
-          >
-            <Plus size={16} /> Tambah
+          <button onClick={() => setIsFormOpen(!isFormOpen)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-md">
+            <Plus size={18} /> {isFormOpen ? "Tutup" : "Tambah"}
           </button>
         </div>
       </div>
 
-      <hr className="border-slate-200" />
-
-      {/* FORM MODAL-LIKE */}
       {isFormOpen && (
-        <ScheduleForm
-          form={form}
-          setForm={setForm}
-          onSubmit={onSubmitSchedule}
-          errorMessage={errorMessage}
-        />
+        <div className="animate-in fade-in zoom-in duration-300">
+          <ScheduleForm 
+            form={form} 
+            setForm={setForm} 
+            onSubmit={onSubmitSchedule} 
+            errorMessage={errorMessage} 
+          />
+        </div>
       )}
 
-      {/* DAFTAR JADWAL */}
-      <div className="grid gap-4">
+      <div className="w-full space-y-4"> 
         {loading ? (
-          <div className="flex flex-col items-center py-10">
-            <Loader2 className="animate-spin text-blue-500" size={32} />
-          </div>
+          <Loader2 className="animate-spin mx-auto mt-10 text-blue-500" size={32} />
         ) : (
-          schedules.map((item) => (
-            <ScheduleCard
-              key={item.id}
-              schedule={item}
-              isActiveNow={isWithinSchedule(item, currentTime)}
-              onToggle={() =>
-                ScheduleManager.toggleStatus(item.id!, item.isActive).then(fetchSchedules)
-              }
-              onDelete={() =>
-                ScheduleManager.deleteSchedule(item.id!).then(fetchSchedules)
-              }
+          schedules.map((s) => (
+            <ScheduleCard 
+              key={s.id} 
+              schedule={s} 
+              isActiveNow={isCurrentlyActive && s.isActive}
+              onToggle={() => ScheduleManager.toggleStatus(String(s.id), s.isActive).then(fetchData)}
+              onDelete={() => ScheduleManager.deleteSchedule(String(s.id)).then(fetchData)}
             />
           ))
         )}
       </div>
 
-      {/* FOOTER STATUS BAR */}
-      <div className="mt-auto p-4 bg-white border border-slate-200 rounded-lg flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-4 text-sm font-medium">
-          <div className="flex items-center gap-2">
-            <div
-              className={`w-3 h-3 rounded-full ${
-                isScheduleActive ? "bg-green-500 animate-pulse" : "bg-slate-300"
-              }`}
-            />
-            {isScheduleActive ? "Jadwal Sedang Berjalan" : "Tidak Ada Jadwal"}
-          </div>
-
-          <div
-            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-              sensor?.mode === "AUTO"
-                ? "bg-green-100 text-green-700"
-                : "bg-orange-100 text-orange-700"
-            }`}
-          >
-            MODE: {sensor?.mode || "OFFLINE"}
-          </div>
+      <div className="mt-auto bg-white border rounded-xl p-4 flex items-center justify-between dark:bg-slate-900">
+        <div className="flex items-center gap-2 text-amber-600">
+           <AlertTriangle size={16} />
+           <p className="text-[10px] text-slate-500">
+             {userAllowedAuto ? "Cloud Override Aktif." : "Mode MANUAL terkunci otomatis saat jadwal berakhir."}
+           </p>
         </div>
-
-        <div className="text-sm text-slate-500 font-mono flex items-center gap-2 bg-slate-100 px-3 py-1 rounded border border-slate-200">
-          <Clock size={14} />
-          {currentTime.toLocaleTimeString()}
+        <div className="text-sm font-mono flex items-center gap-2 dark:text-slate-300">
+          <Clock size={14} /> {currentTime.toLocaleTimeString()}
         </div>
       </div>
     </div>

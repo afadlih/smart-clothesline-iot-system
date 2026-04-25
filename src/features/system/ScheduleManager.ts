@@ -1,17 +1,16 @@
-// features/system/ScheduleManager.ts
-
-import { normalizeSchedules } from "@/features/system/ScheduleEngine";
 import { db } from "@/lib/firebase";
 import {
   collection,
   getDocs,
+  getDoc,
   addDoc,
   deleteDoc,
   doc,
   updateDoc,
   query,
   orderBy,
-  DocumentData, // Import ini untuk pengganti 'any'
+  DocumentData,
+  setDoc,
 } from "firebase/firestore";
 
 export type ScheduleItem = {
@@ -25,19 +24,28 @@ export type ScheduleItem = {
 export class ScheduleManager {
   private static collectionRef = collection(db, "schedules");
 
-  // ==============================
-  // UPDATE GLOBAL MODE
-  // Sesuai screenshot: system_settings/global -> controlMode
-  // ==============================
-  static async updateSystemMode(mode: "AUTO" | "MANUAL") {
+  static async getSystemOverride(): Promise<boolean> {
     try {
-      const statusDoc = doc(db, "system_settings", "global");
-      await updateDoc(statusDoc, { 
-        controlMode: mode,
+      const docRef = doc(db, "system_settings", "global");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return docSnap.data().userAllowedAuto || false;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  static async setSystemOverride(status: boolean): Promise<void> {
+    try {
+      const docRef = doc(db, "system_settings", "global");
+      await setDoc(docRef, { 
+        userAllowedAuto: status,
         updatedAt: new Date().toISOString() 
-      });
+      }, { merge: true });
     } catch (error) {
-      console.error("Gagal update mode sistem:", error);
+      console.error("Gagal update override:", error);
     }
   }
 
@@ -45,33 +53,20 @@ export class ScheduleManager {
     const clean = (value || "00:00").trim();
     const parts = clean.split(":");
     if (parts.length !== 2) return "00:00";
-    const hour = parts[0].padStart(2, "0");
-    const minute = parts[1].padStart(2, "0");
-    return `${hour}:${minute}`;
+    return `${parts[0].padStart(2, "0")}:${parts[1].padStart(2, "0")}`;
   }
 
   static toMinutes(time: string): number {
-    const fixed = this.normalizeTime(time);
-    const [h, m] = fixed.split(":").map(Number);
+    const [h, m] = this.normalizeTime(time).split(":").map(Number);
     return h * 60 + m;
   }
 
-  static isValidRange(start: string, end: string): boolean {
-    return this.toMinutes(start) < this.toMinutes(end);
-  }
-
-  // ==============================
-  // LOAD FIREBASE (FIXED ANY ERROR)
-  // ==============================
   static async loadFromFirebase(): Promise<ScheduleItem[]> {
     try {
       const q = query(this.collectionRef, orderBy("name", "asc"));
       const querySnapshot = await getDocs(q);
-      
       return querySnapshot.docs.map((item) => {
-        // Menggunakan DocumentData alih-alih any untuk ESLint
         const data = item.data() as DocumentData; 
-        
         return {
           id: item.id,
           name: String(data.name || "Tanpa Nama").trim(),
@@ -80,8 +75,7 @@ export class ScheduleManager {
           isActive: typeof data.isActive === "boolean" ? data.isActive : true,
         };
       });
-    } catch (error) {
-      console.error("Error loading schedules:", error);
+    } catch {
       return [];
     }
   }
@@ -101,18 +95,6 @@ export class ScheduleManager {
   }
 
   static async deleteSchedule(docId: string) {
-    const scheduleDoc = doc(db, "schedules", docId);
-    return await deleteDoc(scheduleDoc);
-  }
-
-  static toNormalized(schedules: ScheduleItem[]) {
-    return normalizeSchedules(
-      schedules.map((item) => ({
-        id: item.id || Math.random().toString(),
-        timeOpen: this.normalizeTime(item.timeOpen),
-        timeClose: this.normalizeTime(item.timeClose),
-        isActive: item.isActive,
-      }))
-    );
+    return await deleteDoc(doc(db, "schedules", docId));
   }
 }
