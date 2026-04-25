@@ -1,19 +1,26 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
-import { useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { User, Bell, Smartphone, Save, BluetoothSearching, HardDrive, Download, Trash2 } from 'lucide-react';
-import NotificationSettings, { type NotificationPreference } from './NotifSettings';
-import DeviceSettings from './DeviceSettings';
-import PairingDeviceSettings, { type PairableDevice } from './PairingDeviceSettings';
-import SystemControlSettings from './SystemControlSettings';
-import { systemModeManager, type SystemMode } from '@/features/system/SystemModeManager';
-import { useSensor } from '@/hooks/useSensor';
-import { FirestoreService } from '@/services/FirestoreService';
-import { DataExportService } from '@/services/DataExportService';
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import {
+  Bell,
+  BluetoothSearching,
+  Download,
+  HardDrive,
+  Save,
+  Smartphone,
+  Trash2,
+  User,
+} from "lucide-react";
+import NotificationSettings, { type NotificationPreference } from "./NotifSettings";
+import DeviceSettings from "./DeviceSettings";
+import PairingDeviceSettings, { type PairableDevice } from "./PairingDeviceSettings";
+import { useSensor } from "@/hooks/useSensor";
+import { DataExportService } from "@/services/DataExportService";
+import { ScheduleService, type ScheduleSummary } from "@/services/ScheduleService";
 
-type TabId = 'profile' | 'notification' | 'device' | 'pairing' | 'system' | 'data-management';
+type TabId = "profile" | "notification" | "device" | "pairing" | "data-management";
 
 type AppSettings = {
   profileName: string;
@@ -24,47 +31,48 @@ type AppSettings = {
   autoCloseOnRain: boolean;
   autoCloseOnDark: boolean;
   updateIntervalSec: number;
-  controlMode: SystemMode;
-  activeStartHour: number;
-  activeEndHour: number;
 };
 
-const SETTINGS_STORAGE_KEY = 'smart-clothesline-settings-v1';
-const DEVICES_STORAGE_KEY = 'smart-clothesline-devices-v1';
+const SETTINGS_STORAGE_KEY = "smart-clothesline-settings-v1";
+const DEVICES_STORAGE_KEY = "smart-clothesline-devices-v1";
 
 const defaultSettings: AppSettings = {
-  profileName: 'Salsa',
+  profileName: "Operator",
   notification: {
     rain: true,
     dry: true,
     report: false,
     whatsapp: false,
   },
-  whatsappNumber: '',
+  whatsappNumber: "",
   rainThreshold: 2000,
   lightThreshold: 3000,
   autoCloseOnRain: true,
   autoCloseOnDark: true,
   updateIntervalSec: 5,
-  controlMode: 'AUTO',
-  activeStartHour: 8,
-  activeEndHour: 17,
 };
 
 const initialDevices: PairableDevice[] = [
   {
-    id: 'esp32-01',
-    name: 'ESP32 Clothesline Hub',
-    signal: 'Sinyal kuat',
-    status: 'Direkomendasikan',
+    id: "esp32-01",
+    name: "ESP32 Clothesline Hub",
+    signal: "Strong signal",
+    status: "Recommended",
   },
   {
-    id: 'node-mcu-backup',
-    name: 'NodeMCU Backup Unit',
-    signal: 'Sinyal sedang',
-    status: 'Tersedia',
+    id: "node-mcu-backup",
+    name: "NodeMCU Backup Unit",
+    signal: "Medium signal",
+    status: "Available",
   },
 ];
+
+const defaultScheduleSummary: ScheduleSummary = {
+  totalCount: 0,
+  activeCount: 0,
+  isActiveNow: false,
+  activeWindow: null,
+};
 
 function generatePairingCode(): string {
   const random = Math.floor(1000 + Math.random() * 9000);
@@ -74,22 +82,24 @@ function generatePairingCode(): string {
 export default function SettingsScreen() {
   const searchParams = useSearchParams();
   const { sensor, isOnline, publishConfig, deviceConfig, history } = useSensor();
-  const [activeTab, setActiveTab] = useState<TabId>('profile');
+  const [activeTab, setActiveTab] = useState<TabId>("profile");
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
-  const [saveLabel, setSaveLabel] = useState('Simpan Perubahan');
+  const [saveLabel, setSaveLabel] = useState("Save Changes");
   const [isRestarting, setIsRestarting] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [pairingCode, setPairingCode] = useState(generatePairingCode());
   const [expiresInSeconds, setExpiresInSeconds] = useState(300);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [devices, setDevices] = useState<PairableDevice[]>(initialDevices);
+  const [scheduleSummary, setScheduleSummary] = useState<ScheduleSummary>(defaultScheduleSummary);
+  const [scheduleFallback, setScheduleFallback] = useState(false);
   const didHydrateRef = useRef(false);
   const [cacheStats, setCacheStats] = useState({ history: 0, queue: 0, events: 0, total: 0, totalKB: 0 });
   const [lastCleared, setLastCleared] = useState<string | null>(null);
 
   useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab === 'profile' || tab === 'notification' || tab === 'device' || tab === 'pairing' || tab === 'system' || tab === 'data-management') {
+    const tab = searchParams.get("tab");
+    if (tab === "profile" || tab === "notification" || tab === "device" || tab === "pairing" || tab === "data-management") {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -101,7 +111,7 @@ export default function SettingsScreen() {
     }
 
     try {
-      const parsed = JSON.parse(raw) as AppSettings;
+      const parsed = JSON.parse(raw) as Partial<AppSettings>;
       setSettings({
         profileName: parsed.profileName ?? defaultSettings.profileName,
         notification: {
@@ -116,23 +126,11 @@ export default function SettingsScreen() {
         autoCloseOnRain: parsed.autoCloseOnRain ?? defaultSettings.autoCloseOnRain,
         autoCloseOnDark: parsed.autoCloseOnDark ?? defaultSettings.autoCloseOnDark,
         updateIntervalSec: parsed.updateIntervalSec ?? defaultSettings.updateIntervalSec,
-        controlMode:
-          parsed.controlMode === 'AUTO' ||
-          parsed.controlMode === 'MANUAL' ||
-          parsed.controlMode === 'SCHEDULE'
-            ? parsed.controlMode
-            : defaultSettings.controlMode,
-        activeStartHour: parsed.activeStartHour ?? defaultSettings.activeStartHour,
-        activeEndHour: parsed.activeEndHour ?? defaultSettings.activeEndHour,
       });
     } catch {
       localStorage.removeItem(SETTINGS_STORAGE_KEY);
     }
   }, []);
-
-  useEffect(() => {
-    systemModeManager.setMode(settings.controlMode);
-  }, [settings.controlMode]);
 
   useEffect(() => {
     if (!didHydrateRef.current) {
@@ -161,6 +159,28 @@ export default function SettingsScreen() {
   ]);
 
   useEffect(() => {
+    const loadScheduleSummary = async () => {
+      const result = await ScheduleService.loadSchedules();
+      setScheduleFallback(result.fromCache);
+      setScheduleSummary(ScheduleService.getSummary(result.schedules, new Date().getHours()));
+    };
+
+    void loadScheduleSummary();
+    const onScheduleUpdated = () => {
+      void loadScheduleSummary();
+    };
+    window.addEventListener("schedule-updated", onScheduleUpdated);
+    const timer = window.setInterval(() => {
+      void loadScheduleSummary();
+    }, 10000);
+
+    return () => {
+      window.removeEventListener("schedule-updated", onScheduleUpdated);
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
     const raw = localStorage.getItem(DEVICES_STORAGE_KEY);
     if (!raw) {
       return;
@@ -176,15 +196,15 @@ export default function SettingsScreen() {
         setDevices(
           parsed.devices.filter(
             (device) =>
-              typeof device.id === 'string' &&
-              typeof device.name === 'string' &&
-              typeof device.signal === 'string' &&
-              typeof device.status === 'string',
+              typeof device.id === "string" &&
+              typeof device.name === "string" &&
+              typeof device.signal === "string" &&
+              typeof device.status === "string",
           ),
         );
       }
 
-      if (typeof parsed.selectedDeviceId === 'string' || parsed.selectedDeviceId === null) {
+      if (typeof parsed.selectedDeviceId === "string" || parsed.selectedDeviceId === null) {
         setSelectedDeviceId(parsed.selectedDeviceId ?? null);
       }
     } catch {
@@ -217,7 +237,6 @@ export default function SettingsScreen() {
     };
   }, []);
 
-  // Load cache stats on mount and when component becomes visible
   useEffect(() => {
     const refreshCacheStats = () => {
       const stats = DataExportService.getCacheStats();
@@ -225,24 +244,15 @@ export default function SettingsScreen() {
     };
 
     refreshCacheStats();
-
-    // Refresh every 5 seconds
     const interval = window.setInterval(refreshCacheStats, 5000);
     return () => window.clearInterval(interval);
   }, []);
 
   const onSaveSettings = () => {
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-    void FirestoreService.saveSystemSettings({
-      controlMode: settings.controlMode,
-      activeStartHour: settings.activeStartHour,
-      activeEndHour: settings.activeEndHour,
-    }).catch((error) => {
-      console.error('[Firestore] Failed to save system settings:', error);
-    });
-    setSaveLabel('Tersimpan');
+    setSaveLabel("Saved");
     window.setTimeout(() => {
-      setSaveLabel('Simpan Perubahan');
+      setSaveLabel("Save Changes");
     }, 1400);
   };
 
@@ -259,9 +269,9 @@ export default function SettingsScreen() {
       setDevices((prev) => {
         const nextScanDevice: PairableDevice = {
           id: `esp32-scan-${Date.now()}`,
-          name: 'ESP32 Clothesline Scan Result',
-          signal: 'Sinyal baru terdeteksi',
-          status: 'Baru',
+          name: "ESP32 Clothesline Scan Result",
+          signal: "New signal detected",
+          status: "New",
         };
 
         return [nextScanDevice, ...prev].slice(0, 5);
@@ -270,24 +280,23 @@ export default function SettingsScreen() {
     }, 1200);
   };
 
-  const connectionStatus: 'ONLINE' | 'OFFLINE' = isOnline ? 'ONLINE' : 'OFFLINE';
+  const connectionStatus: "ONLINE" | "OFFLINE" = isOnline ? "ONLINE" : "OFFLINE";
 
   return (
     <div className="flex min-h-screen max-w-5xl flex-col gap-6 bg-gradient-to-br from-gray-100 to-gray-200 p-6 text-slate-900 transition-colors duration-300 dark:from-slate-900 dark:to-slate-950 dark:text-slate-100">
       <div>
         <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Settings</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Konfigurasi sistem Smart Clothesline Anda</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Manage Smart Clothesline preferences and device behavior</p>
       </div>
 
       <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
         <div className="flex flex-col gap-1">
           {[
-            { id: 'profile' as const, label: 'Profil', icon: <User size={18} /> },
-            { id: 'notification' as const, label: 'Notifikasi', icon: <Bell size={18} /> },
-            { id: 'device' as const, label: 'Perangkat IoT', icon: <Smartphone size={18} /> },
-            { id: 'system' as const, label: 'Control & Jadwal', icon: <Save size={18} /> },
-            { id: 'pairing' as const, label: 'Pairing Device', icon: <BluetoothSearching size={18} /> },
-            { id: 'data-management' as const, label: 'Data Management', icon: <HardDrive size={18} /> },
+            { id: "profile" as const, label: "Profile", icon: <User size={18} /> },
+            { id: "notification" as const, label: "Notifications", icon: <Bell size={18} /> },
+            { id: "device" as const, label: "IoT Device", icon: <Smartphone size={18} /> },
+            { id: "pairing" as const, label: "Device Pairing", icon: <BluetoothSearching size={18} /> },
+            { id: "data-management" as const, label: "Data Management", icon: <HardDrive size={18} /> },
           ].map((item) => (
             <button
               key={item.id}
@@ -295,8 +304,8 @@ export default function SettingsScreen() {
               onClick={() => setActiveTab(item.id)}
               className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all ${
                 activeTab === item.id
-                  ? 'bg-green-600 text-white shadow-md'
-                    : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                  ? "bg-green-600 text-white shadow-md"
+                  : "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
               }`}
             >
               {item.icon}
@@ -306,43 +315,82 @@ export default function SettingsScreen() {
         </div>
 
         <div className="space-y-6 md:col-span-3">
-          {activeTab === 'profile' && (
-            <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h3 className="mb-4 text-lg font-bold text-slate-800 dark:text-slate-100">Informasi Profil</h3>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Nama</label>
-                  <input
-                    type="text"
-                    value={settings.profileName}
-                    onChange={(event) =>
-                      setSettings((prev) => ({
-                        ...prev,
-                        profileName: event.target.value,
-                      }))
-                    }
-                    placeholder="Masukkan nama"
-                    aria-label="Nama profil"
-                    title="Nama profil"
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-sm text-slate-900 outline-none focus:border-green-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Role</label>
-                  <input
-                    type="text"
-                    value="Operator Dashboard"
-                    disabled
-                    aria-label="Role pengguna"
-                    title="Role pengguna"
-                    className="w-full rounded-lg border border-slate-200 bg-slate-100 p-2.5 text-sm text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
-                  />
+          {activeTab === "profile" && (
+            <>
+              <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <h3 className="mb-4 text-lg font-bold text-slate-800 dark:text-slate-100">Profile Information</h3>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Name</label>
+                    <input
+                      type="text"
+                      value={settings.profileName}
+                      onChange={(event) =>
+                        setSettings((prev) => ({
+                          ...prev,
+                          profileName: event.target.value,
+                        }))
+                      }
+                      placeholder="Enter name"
+                      aria-label="Profile name"
+                      title="Profile name"
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-sm text-slate-900 outline-none focus:border-green-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Role</label>
+                    <input
+                      type="text"
+                      value="Dashboard Operator"
+                      disabled
+                      aria-label="User role"
+                      title="User role"
+                      className="w-full rounded-lg border border-slate-200 bg-slate-100 p-2.5 text-sm text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
+
+              <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Schedule Summary</h3>
+                  <Link
+                    href="/schedule"
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    Open Schedule
+                  </Link>
+                </div>
+                {scheduleFallback && (
+                  <p className="mb-3 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                    Firestore unavailable. Showing cached schedule summary.
+                  </p>
+                )}
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Total Schedules</p>
+                    <p className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">{scheduleSummary.totalCount}</p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Enabled</p>
+                    <p className="mt-1 text-lg font-bold text-green-600 dark:text-green-300">{scheduleSummary.activeCount}</p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Active Now</p>
+                    <p className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">
+                      {scheduleSummary.isActiveNow ? "Yes" : "No"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Active Window</p>
+                    <p className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">{scheduleSummary.activeWindow ?? "-"}</p>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
 
-          {activeTab === 'notification' && (
+          {activeTab === "notification" && (
             <NotificationSettings
               value={settings.notification}
               onToggle={(key) => {
@@ -364,11 +412,11 @@ export default function SettingsScreen() {
             />
           )}
 
-          {activeTab === 'device' && (
+          {activeTab === "device" && (
             <DeviceSettings
               connectionStatus={connectionStatus}
               deviceName="ESP32-STATION-01"
-              ipAddress={sensor ? '192.168.1.42' : 'Tidak terdeteksi'}
+              ipAddress={sensor ? "192.168.1.42" : "Not detected"}
               rainThreshold={settings.rainThreshold}
               lightThreshold={settings.lightThreshold}
               autoCloseOnRain={settings.autoCloseOnRain}
@@ -412,33 +460,7 @@ export default function SettingsScreen() {
             />
           )}
 
-          {activeTab === 'system' && (
-            <SystemControlSettings
-              controlMode={settings.controlMode}
-              activeStartHour={settings.activeStartHour}
-              activeEndHour={settings.activeEndHour}
-              onControlModeChange={(value) =>
-                setSettings((prev) => ({
-                  ...prev,
-                  controlMode: value,
-                }))
-              }
-              onActiveStartHourChange={(value) =>
-                setSettings((prev) => ({
-                  ...prev,
-                  activeStartHour: value,
-                }))
-              }
-              onActiveEndHourChange={(value) =>
-                setSettings((prev) => ({
-                  ...prev,
-                  activeEndHour: value,
-                }))
-              }
-            />
-          )}
-
-          {activeTab === 'pairing' && (
+          {activeTab === "pairing" && (
             <PairingDeviceSettings
               pairingCode={pairingCode}
               expiresInSeconds={expiresInSeconds}
@@ -454,12 +476,11 @@ export default function SettingsScreen() {
             />
           )}
 
-          {activeTab === 'data-management' && (
+          {activeTab === "data-management" && (
             <div className="space-y-6">
-              {/* Export Section */}
               <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <h3 className="mb-4 text-lg font-bold text-slate-800 dark:text-slate-100">Export Sensor Data</h3>
-                <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">Download your sensor data in CSV or JSON format</p>
+                <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">Download sensor data in CSV or JSON format</p>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <button
                     type="button"
@@ -467,7 +488,7 @@ export default function SettingsScreen() {
                       DataExportService.exportLastNDays(
                         history.map((h) => h.data),
                         7,
-                        'csv'
+                        "csv",
                       );
                     }}
                     className="flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300"
@@ -480,7 +501,7 @@ export default function SettingsScreen() {
                       DataExportService.exportLastNDays(
                         history.map((h) => h.data),
                         30,
-                        'csv'
+                        "csv",
                       );
                     }}
                     className="flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300"
@@ -492,7 +513,7 @@ export default function SettingsScreen() {
                     onClick={() => {
                       DataExportService.exportToJSON(
                         history.map((h) => h.data),
-                        `clothesline-all-${new Date().toISOString().split('T')[0]}.json`
+                        `clothesline-all-${new Date().toISOString().split("T")[0]}.json`,
                       );
                     }}
                     className="flex items-center justify-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700 transition hover:bg-green-100 dark:border-green-900/40 dark:bg-green-900/20 dark:text-green-300"
@@ -502,7 +523,6 @@ export default function SettingsScreen() {
                 </div>
               </div>
 
-              {/* Storage Statistics */}
               <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <h3 className="mb-4 text-lg font-bold text-slate-800 dark:text-slate-100">Storage & Cache Statistics</h3>
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -529,66 +549,40 @@ export default function SettingsScreen() {
                 </div>
                 {lastCleared && (
                   <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
-                    Last cleared: {new Date(lastCleared).toLocaleString('id-ID')}
+                    Last cleared: {new Date(lastCleared).toLocaleString("en-US")}
                   </p>
                 )}
               </div>
 
-              {/* Cache Management */}
               <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <h3 className="mb-4 text-lg font-bold text-slate-800 dark:text-slate-100">Cache Management</h3>
-                <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">Clear cached data to free up storage space</p>
+                <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">Clear cached data to free storage space</p>
                 <div className="space-y-3">
                   <button
                     type="button"
                     onClick={() => {
-                      if (confirm('Clear sensor cache? This action cannot be undone.')) {
-                        localStorage.removeItem('sensor-history');
+                      if (confirm("Clear sensor cache? This action cannot be undone.")) {
+                        localStorage.removeItem("sensor-history");
                         setCacheStats((prev) => ({ ...prev, history: 0 }));
                         setLastCleared(new Date().toISOString());
                       }
                     }}
-                    className="w-full flex items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300"
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300"
                   >
                     <Trash2 size={16} /> Clear Sensor Cache
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      if (confirm('Clear all cached data? This action cannot be undone.')) {
+                      if (confirm("Clear all cached data? This action cannot be undone.")) {
                         localStorage.clear();
                         setCacheStats({ history: 0, queue: 0, events: 0, total: 0, totalKB: 0 });
                         setLastCleared(new Date().toISOString());
                       }
                     }}
-                    className="w-full flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300"
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300"
                   >
                     <Trash2 size={16} /> Clear All Data
-                  </button>
-                </div>
-              </div>
-
-              {/* Data Privacy */}
-              <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <h3 className="mb-4 text-lg font-bold text-slate-800 dark:text-slate-100">Data Privacy</h3>
-                <div className="space-y-3">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
-                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Your Data Rights</p>
-                    <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">
-                      You have the right to access, download, and delete your personal data at any time. All sensor data is stored locally and synced to our secure servers with encryption.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      DataExportService.exportToJSON(
-                        history.map((h) => h.data),
-                        `my-data-${new Date().toISOString().split('T')[0]}.json`
-                      );
-                    }}
-                    className="w-full flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                  >
-                    <Download size={16} /> Download My Data (GDPR)
                   </button>
                 </div>
               </div>

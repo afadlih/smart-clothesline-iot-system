@@ -31,20 +31,20 @@ type PairingDeviceSettingsProps = {
 const pairingSteps = [
   {
     id: 'step-1',
-    title: 'Aktifkan mode pairing',
-    description: 'Tekan tombol pairing pada perangkat IoT selama 3 detik sampai LED berkedip.',
+    title: 'Enable pairing mode',
+    description: 'Hold the pairing button on the IoT device for 3 seconds until the LED blinks.',
     icon: <Radio size={18} className="text-green-600" />,
   },
   {
     id: 'step-2',
-    title: 'Hubungkan ke jaringan',
-    description: 'Pastikan laptop Anda berada di jaringan Wi-Fi yang sama dengan perangkat.',
+    title: 'Connect to network',
+    description: 'Ensure your laptop is on the same Wi-Fi network as the device.',
     icon: <Wifi size={18} className="text-sky-600" />,
   },
   {
     id: 'step-3',
-    title: 'Verifikasi kode keamanan',
-    description: 'Masukkan kode pairing agar perangkat hanya dapat diklaim oleh akun yang benar.',
+    title: 'Verify security code',
+    description: 'Enter the pairing code so the device can only be claimed by the correct account.',
     icon: <ShieldCheck size={18} className="text-amber-600" />,
   },
 ];
@@ -78,14 +78,14 @@ export default function PairingDeviceSettings({
             Pairing Device
           </h3>
           <p className="mt-2 max-w-2xl text-sm text-slate-500">
-            Hubungkan perangkat IoT ke dashboard untuk simulasi sebelum integrasi hardware ESP32.
+            Connect IoT devices to the dashboard for simulation before full ESP32 hardware integration.
           </p>
         </div>
 
         <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Status pairing</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Pairing status</p>
           <p className="mt-1 text-sm font-bold text-emerald-800">
-            {selectedDevice ? `Terpilih: ${selectedDevice.name}` : 'Menunggu perangkat dipilih'}
+            {selectedDevice ? `Selected: ${selectedDevice.name}` : 'Waiting for device selection'}
           </p>
         </div>
       </div>
@@ -95,44 +95,44 @@ export default function PairingDeviceSettings({
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-slate-800">Pairing Code</p>
-              <p className="text-xs text-slate-500">Kode verifikasi sementara untuk perangkat baru</p>
+              <p className="text-xs text-slate-500">Temporary verification code for a new device</p>
             </div>
             <KeyRound className="text-green-600" size={20} />
           </div>
           <div className="mt-4 rounded-xl border border-dashed border-green-200 bg-white px-4 py-5 text-center">
             <p className="text-3xl font-black tracking-[0.4em] text-slate-800">{pairingCode}</p>
-            <p className="mt-2 text-xs text-slate-500">Berlaku selama {formatCountdown(expiresInSeconds)} menit</p>
+            <p className="mt-2 text-xs text-slate-500">Valid for {formatCountdown(expiresInSeconds)} minutes</p>
           </div>
           <button
             type="button"
             onClick={onGenerateCode}
             className="mt-4 w-full rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-green-700"
           >
-            Generate Kode Baru
+            Generate New Code
           </button>
         </div>
 
         <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-5 text-white">
           <div className="flex items-center gap-2 text-sm font-semibold text-emerald-300">
             <Router size={18} />
-            Progres koneksi
+            Connection progress
           </div>
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
             <div className={`h-full rounded-full bg-emerald-400 transition-all ${selectedDevice ? 'w-full' : 'w-2/3'}`} />
           </div>
           <div className="mt-4 space-y-3 text-sm">
             <div className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
-              <span>Mencari perangkat</span>
+              <span>Scanning devices</span>
               <CheckCircle2 size={16} className="text-emerald-300" />
             </div>
             <div className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
-              <span>Validasi kode pairing</span>
+              <span>Validate pairing code</span>
               <CheckCircle2 size={16} className="text-emerald-300" />
             </div>
-            <div className="flex items-center justify-between rounded-xl border border-dashed border-white/15 px-3 py-2">
-              <span>Sinkronisasi konfigurasi</span>
+            <div className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
+              <span>Configuration sync</span>
               <span className="text-xs font-semibold text-amber-300">
-                {selectedDevice ? 'Selesai' : 'Menunggu'}
+                {selectedDevice ? 'Completed' : 'Waiting'}
               </span>
             </div>
           </div>
@@ -143,15 +143,15 @@ export default function PairingDeviceSettings({
         <div className="rounded-2xl border border-slate-100 p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-slate-800">Perangkat yang terdeteksi</p>
-              <p className="text-xs text-slate-500">Pilih perangkat yang ingin dihubungkan ke akun ini</p>
+              <p className="text-sm font-semibold text-slate-800">Detected devices</p>
+              <p className="text-xs text-slate-500">Choose the device you want to connect to this account</p>
             </div>
             <button
               type="button"
               onClick={onScan}
               className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
             >
-              {isScanning ? 'Scanning...' : 'Scan Ulang'}
+              {isScanning ? 'Scanning...' : 'Scan Again'}
             </button>
           </div>
 
@@ -197,7 +197,7 @@ export default function PairingDeviceSettings({
         </div>
 
         <div className="rounded-2xl border border-slate-100 p-5">
-          <p className="text-sm font-semibold text-slate-800">Langkah pairing</p>
+          <p className="text-sm font-semibold text-slate-800">Pairing steps</p>
           <div className="mt-4 space-y-4">
             {pairingSteps.map((step) => (
               <div key={step.id} className="flex items-start gap-3">
@@ -211,9 +211,9 @@ export default function PairingDeviceSettings({
           </div>
 
           <div className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Default jaringan</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Default network</p>
             <p className="mt-2 text-sm font-semibold text-slate-800">Smart-Clothesline-Lab</p>
-            <p className="mt-1 text-xs text-slate-500">Wi-Fi mock untuk kebutuhan demo integrasi awal</p>
+            <p className="mt-1 text-xs text-slate-500">Mock Wi-Fi for initial integration demos</p>
           </div>
         </div>
       </div>

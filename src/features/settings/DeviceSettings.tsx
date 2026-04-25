@@ -56,14 +56,14 @@ export default function DeviceSettings({
     <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <h3 className="mb-5 flex items-center gap-2 text-lg font-bold text-slate-800 dark:text-slate-100">
         <Cpu className="text-green-600" size={20} />
-        Informasi Perangkat IoT
+        IoT Device Information
       </h3>
 
       <div className="space-y-4">
         <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
           <div className="mb-2 flex items-center justify-between">
             <span className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300">
-              <Wifi size={16} /> Status Koneksi
+              <Wifi size={16} /> Connection Status
             </span>
             <span
               className={`rounded-md px-2 py-1 text-xs font-bold ${
@@ -88,7 +88,7 @@ export default function DeviceSettings({
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">{configSyncMessage}</p>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Last sync: {configLastSyncAt ? new Date(configLastSyncAt).toLocaleTimeString('id-ID') : '-'}
+              Last sync: {configLastSyncAt ? new Date(configLastSyncAt).toLocaleTimeString('en-US') : '-'}
             </p>
           </div>
 
@@ -150,7 +150,7 @@ export default function DeviceSettings({
           <div className="flex items-center justify-between rounded-lg border border-dashed border-slate-200 p-3 dark:border-slate-700">
             <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
               <RefreshCw size={16} className="text-slate-400 dark:text-slate-500" />
-              <span>Interval Update Data</span>
+              <span>Data Update Interval</span>
             </div>
             <select
               value={updateIntervalSec}
@@ -159,9 +159,9 @@ export default function DeviceSettings({
               title="Interval update data"
               className="bg-transparent text-sm font-bold text-slate-700 outline-none dark:text-slate-200"
             >
-              <option value={3}>3 Detik</option>
-              <option value={5}>5 Detik</option>
-              <option value={10}>10 Detik</option>
+              <option value={3}>3 Seconds</option>
+              <option value={5}>5 Seconds</option>
+              <option value={10}>10 Seconds</option>
             </select>
           </div>
         </div>
@@ -173,7 +173,7 @@ export default function DeviceSettings({
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-red-100 py-2 text-sm font-medium text-red-500 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:text-red-300 dark:hover:bg-red-900/20"
         >
           <RefreshCw size={14} className={isRestarting ? 'animate-spin' : ''} />
-          {isRestarting ? 'Merestart Perangkat...' : 'Restart Perangkat'}
+          {isRestarting ? 'Restarting Device...' : 'Restart Device'}
         </button>
       </div>
     </div>

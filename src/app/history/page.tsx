@@ -41,7 +41,7 @@ function formatDateValue(timestamp: string): string {
 }
 
 function formatDateLabel(dateKey: string): string {
-  return new Date(dateKey).toLocaleDateString("id-ID", {
+  return new Date(dateKey).toLocaleDateString("en-US", {
     day: "2-digit",
     month: "long",
     year: "numeric",
@@ -49,10 +49,14 @@ function formatDateLabel(dateKey: string): string {
 }
 
 function formatTime(timestamp: string): string {
-  return new Date(timestamp).toLocaleTimeString("id-ID", {
+  return new Date(timestamp).toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function toStatusLabel(status: "TERBUKA" | "TERTUTUP"): "OPEN" | "CLOSED" {
+  return status === "TERBUKA" ? "OPEN" : "CLOSED";
 }
 
 export default function HistoryPage() {
@@ -270,10 +274,10 @@ export default function HistoryPage() {
 
         {values.length < 2 ? (
           <p className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-xs text-gray-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-            Data belum cukup untuk menampilkan grafik.
+            Not enough data to display the chart.
           </p>
         ) : (
-          <svg viewBox="0 0 100 36" className="h-28 w-full" role="img" aria-label={`Grafik ${title}`}>
+          <svg viewBox="0 0 100 36" className="h-28 w-full" role="img" aria-label={`${title} chart`}>
             <polyline fill="none" stroke="#e2e8f0" strokeWidth="0.8" points="0,32 100,32" />
             <polyline
               fill="none"
@@ -300,39 +304,39 @@ export default function HistoryPage() {
         <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">
-              Riwayat Operasional Jemuran
+              Clothesline Operational History
             </h1>
             <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-              Ringkasan harian dan pembacaan terbaru dari sensor jemuran pintar.
+              Daily summaries and latest readings from the smart clothesline sensor.
             </p>
           </div>
           <div className="text-xs text-gray-500 dark:text-slate-400">
-            Last sync: {lastFetchedAt ? new Date(lastFetchedAt).toLocaleString("id-ID") : "-"}
+            Last sync: {lastFetchedAt ? new Date(lastFetchedAt).toLocaleString("en-US") : "-"}
           </div>
         </header>
 
         <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
-              Hari Tersimpan
+              Stored Days
             </p>
             <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-slate-100">{dailyHistory.length}</p>
           </div>
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
-              Rata-rata Suhu
+              Average Temperature
             </p>
             <p className="mt-2 text-2xl font-bold text-red-600">{averageTemperature.toFixed(1)} C</p>
           </div>
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
-              Hari Hujan
+              Rainy Days
             </p>
             <p className="mt-2 text-2xl font-bold text-blue-600">{totalRainyDays}</p>
           </div>
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
-              Dominan Terbuka
+              Open-Dominant Days
             </p>
             <p className="mt-2 text-2xl font-bold text-emerald-600">{totalOpenDominantDays}</p>
           </div>
@@ -342,15 +346,15 @@ export default function HistoryPage() {
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-800 dark:text-slate-100">
-                Filter Riwayat
+                History Filter
               </h2>
               <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                Sesuaikan daftar hari berdasarkan status operasional dan kondisi cuaca.
+                Filter days by operational status and weather conditions.
               </p>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <label className="text-xs text-gray-500 dark:text-slate-400">
-                Status Dominan
+                Dominant Status
                 <select
                   value={statusFilter}
                   onChange={(event) => {
@@ -359,13 +363,13 @@ export default function HistoryPage() {
                   }}
                   className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 >
-                  <option value="all">Semua status</option>
-                  <option value="TERBUKA">Terbuka</option>
-                  <option value="TERTUTUP">Tertutup</option>
+                  <option value="all">All statuses</option>
+                  <option value="TERBUKA">Open</option>
+                  <option value="TERTUTUP">Closed</option>
                 </select>
               </label>
               <label className="text-xs text-gray-500 dark:text-slate-400">
-                Kondisi Hujan
+                Rain Condition
                 <select
                   value={weatherFilter}
                   onChange={(event) => {
@@ -374,14 +378,14 @@ export default function HistoryPage() {
                   }}
                   className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 >
-                  <option value="all">Semua hari</option>
-                  <option value="dry">Tanpa hujan</option>
-                  <option value="rainy">Ada hujan</option>
+                  <option value="all">All days</option>
+                  <option value="dry">No rain</option>
+                  <option value="rainy">Has rain</option>
                 </select>
               </label>
               <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
                 <p className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-slate-400">
-                  Rata-rata Kelembapan
+                  Average Humidity
                 </p>
                 <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-slate-100">
                   {averageHumidity.toFixed(1)} %
@@ -389,10 +393,10 @@ export default function HistoryPage() {
               </div>
               <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
                 <p className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-slate-400">
-                  Data Sensor
+                  Sensor Data
                 </p>
                 <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-slate-100">
-                  {history.length} pembacaan
+                  {history.length} readings
                 </p>
               </div>
             </div>
@@ -404,10 +408,10 @@ export default function HistoryPage() {
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-slate-800">
               <div>
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-800 dark:text-slate-100">
-                  Ringkasan Harian
+                  Daily Summary
                 </h2>
                 <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                  {filteredDailyHistory.length} hari sesuai filter
+                  {filteredDailyHistory.length} days matching filters
                 </p>
               </div>
             </div>
@@ -417,42 +421,42 @@ export default function HistoryPage() {
                 <thead className="bg-gray-50 dark:bg-slate-800/60">
                   <tr>
                     <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">
-                      <button type="button" onClick={() => toggleSort("date")}>Tanggal</button>
+                      <button type="button" onClick={() => toggleSort("date")}>Date</button>
                     </th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">
-                      <button type="button" onClick={() => toggleSort("temperature")}>Suhu</button>
+                      <button type="button" onClick={() => toggleSort("temperature")}>Temperature</button>
                     </th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">
-                      <button type="button" onClick={() => toggleSort("humidity")}>Kelembapan</button>
+                      <button type="button" onClick={() => toggleSort("humidity")}>Humidity</button>
                     </th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">
-                      <button type="button" onClick={() => toggleSort("light")}>Cahaya</button>
+                      <button type="button" onClick={() => toggleSort("light")}>Light</button>
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Data</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Hujan</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Readings</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Rain</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">
                       <button type="button" onClick={() => toggleSort("status")}>Status</button>
                     </th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-600 dark:text-slate-300">Detail</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-600 dark:text-slate-300">Details</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
                   {loading ? (
                     <tr>
                       <td colSpan={8} className="px-4 py-8 text-center text-gray-500 dark:text-slate-400">
-                        Memuat data history dari Firestore...
+                        Loading history data from Firestore...
                       </td>
                     </tr>
                   ) : error ? (
                     <tr>
                       <td colSpan={8} className="px-4 py-8 text-center text-red-600 dark:text-red-400">
-                        Gagal memuat history: {error}
+                        Failed to load history: {error}
                       </td>
                     </tr>
                   ) : paginatedHistory.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-4 py-8 text-center text-gray-500 dark:text-slate-400">
-                        Tidak ada data yang cocok dengan filter saat ini.
+                        No data matches the current filters.
                       </td>
                     </tr>
                   ) : (
@@ -477,7 +481,7 @@ export default function HistoryPage() {
                           {item.totalReadings}
                         </td>
                         <td className="px-4 py-3 text-gray-700 dark:text-slate-100">
-                          {item.rainyReadings > 0 ? `${item.rainyReadings} kali` : "Tidak"}
+                          {item.rainyReadings > 0 ? `${item.rainyReadings} times` : "No"}
                         </td>
                         <td className="px-4 py-3">
                           <span
@@ -487,7 +491,7 @@ export default function HistoryPage() {
                                 : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
                             }`}
                           >
-                            {item.status}
+                            {toStatusLabel(item.status)}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -510,7 +514,7 @@ export default function HistoryPage() {
 
             <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3 dark:border-slate-800">
               <span className="text-sm text-gray-500 dark:text-slate-400">
-                Halaman {safeCurrentPage} dari {totalPages}
+                Page {safeCurrentPage} of {totalPages}
               </span>
               <div className="flex gap-2">
                 <button
@@ -537,13 +541,13 @@ export default function HistoryPage() {
             <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="border-b border-gray-200 px-4 py-3 dark:border-slate-800">
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-800 dark:text-slate-100">
-                  Detail Harian
+                  Daily Details
                 </h2>
               </div>
               <div className="p-4">
                 {!selectedSummary ? (
                   <p className="text-sm text-gray-500 dark:text-slate-400">
-                    Pilih salah satu hari untuk melihat detail operasional.
+                    Select a day to view operational details.
                   </p>
                 ) : (
                   <div className="space-y-4">
@@ -552,16 +556,16 @@ export default function HistoryPage() {
                         {formatDateLabel(selectedSummary.dateKey)}
                       </h3>
                       <p className="text-sm text-gray-500 dark:text-slate-400">
-                        Pembacaan {selectedSummary.totalReadings} data, rentang waktu{" "}
+                        {selectedSummary.totalReadings} readings, time range{" "}
                         {formatTime(selectedSummary.firstReadingAt)} - {formatTime(selectedSummary.lastReadingAt)}.
                       </p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div className="rounded-xl bg-gray-50 p-3 dark:bg-slate-800/60">
-                        <p className="text-xs text-gray-500 dark:text-slate-400">Status Dominan</p>
+                        <p className="text-xs text-gray-500 dark:text-slate-400">Dominant Status</p>
                         <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">
-                          {selectedSummary.status}
+                          {toStatusLabel(selectedSummary.status)}
                         </p>
                       </div>
                       <div className="rounded-xl bg-gray-50 p-3 dark:bg-slate-800/60">
@@ -573,9 +577,9 @@ export default function HistoryPage() {
                     </div>
 
                     <div className="grid grid-cols-1 gap-4">
-                      {renderChartCard("Suhu", temperatureValues, "#ef4444", "C")}
-                      {renderChartCard("Kelembapan", humidityValues, "#3b82f6", "%")}
-                      {renderChartCard("Cahaya", lightValues, "#f59e0b", "lux")}
+                      {renderChartCard("Temperature", temperatureValues, "#ef4444", "C")}
+                      {renderChartCard("Humidity", humidityValues, "#3b82f6", "%")}
+                      {renderChartCard("Light", lightValues, "#f59e0b", "lux")}
                     </div>
                   </div>
                 )}
@@ -585,13 +589,13 @@ export default function HistoryPage() {
             <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="border-b border-gray-200 px-4 py-3 dark:border-slate-800">
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-800 dark:text-slate-100">
-                  Pembacaan Terbaru
+                  Latest Readings
                 </h2>
               </div>
               <div className="max-h-[420px] overflow-y-auto p-4">
                 {orderedSelectedDayHistory.length === 0 ? (
                   <p className="text-sm text-gray-500 dark:text-slate-400">
-                    Belum ada pembacaan untuk hari yang dipilih.
+                    No readings available for the selected day.
                   </p>
                 ) : (
                   <div className="space-y-3">
@@ -611,14 +615,14 @@ export default function HistoryPage() {
                                 : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
                             }`}
                           >
-                            {item.isRaining() ? "Hujan" : "Kering"}
+                            {item.isRaining() ? "Rainy" : "Dry"}
                           </span>
                         </div>
                         <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-gray-600 dark:text-slate-300">
-                          <p>Suhu: {item.temperature.toFixed(1)} C</p>
-                          <p>Kelembapan: {item.humidity.toFixed(1)} %</p>
-                          <p>Cahaya: {item.light.toFixed(0)} lux</p>
-                          <p>Status: {item.status}</p>
+                          <p>Temperature: {item.temperature.toFixed(1)} C</p>
+                          <p>Humidity: {item.humidity.toFixed(1)} %</p>
+                          <p>Light: {item.light.toFixed(0)} lux</p>
+                          <p>Status: {toStatusLabel(item.status as "TERBUKA" | "TERTUTUP")}</p>
                         </div>
                       </div>
                     ))}

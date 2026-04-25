@@ -14,11 +14,10 @@ export default function NotFound() {
                     </div>
 
                     <h1 className="mt-4 text-3xl font-bold tracking-tight text-gray-900">
-                        Halaman tidak ditemukan
+                        Page not found
                     </h1>
                     <p className="mt-2 text-sm text-gray-600">
-                        Perujukan halaman yang Anda buka tidak tersedia atau sudah
-                        dipindahkan.
+                        The page you requested is unavailable or has been moved.
                     </p>
 
                     <div className="mt-8 h-px bg-gray-200" />
@@ -28,13 +27,13 @@ export default function NotFound() {
                             href="/"
                             className="inline-flex items-center rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition-all duration-200 hover:bg-gray-800"
                         >
-                            Kembali ke Dashboard
+                            Back to Dashboard
                         </Link>
                         <Link
                             href="/sensor"
                             className="inline-flex items-center rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-all duration-200 hover:bg-gray-50"
                         >
-                            Buka Monitor Sensor
+                            Open Sensor Monitor
                         </Link>
                     </div>
                 </section>

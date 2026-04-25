@@ -339,7 +339,7 @@ export default function AnalyticsPage() {
               <p className="text-sm font-semibold text-yellow-800 mb-2">Detected Anomalies:</p>
               <ul className="text-sm text-yellow-700 space-y-1">
                 {deviceHealth.anomalies.map((anomaly, i) => (
-                  <li key={i}>• {anomaly}</li>
+                  <li key={i}>- {anomaly}</li>
                 ))}
               </ul>
             </div>

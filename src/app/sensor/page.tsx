@@ -27,7 +27,7 @@ export default function SensorMonitorPage() {
         <div className="mx-auto max-w-6xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Sensor Monitor</h1>
           <p className="mt-2 text-sm text-gray-500 dark:text-slate-400">
-            Menunggu stream MQTT. Status saat ini: {connectionLabel}. Jalankan simulator agar data sensor masuk.
+            Waiting for MQTT stream. Current status: {connectionLabel}. Start the simulator to send sensor data.
           </p>
         </div>
       </div>
@@ -45,7 +45,7 @@ export default function SensorMonitorPage() {
               {connectionLabel}
             </span>
           </div>
-          <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Realtime data stream + serial log perangkat ({streamLabel})</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Realtime data stream + device serial logs ({streamLabel})</p>
         </header>
 
         <StatusPanel status={status ?? "--"} reason="Realtime state from MQTT device" />
@@ -86,7 +86,7 @@ export default function SensorMonitorPage() {
           </div>
           <div className="max-h-[360px] overflow-y-auto p-3 font-mono text-xs">
             {serialLogs.length === 0 ? (
-              <p className="rounded-lg border border-slate-800 bg-slate-900/80 p-3 text-slate-400">Belum ada log serial.</p>
+              <p className="rounded-lg border border-slate-800 bg-slate-900/80 p-3 text-slate-400">No serial logs yet.</p>
             ) : (
               <div className="space-y-2">
                 {serialLogs.map((log) => (

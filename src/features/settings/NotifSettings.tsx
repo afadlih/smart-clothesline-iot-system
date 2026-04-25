@@ -24,26 +24,26 @@ export default function NotificationSettings({
   const settings = [
     {
       id: 'rain' as const,
-      label: 'Peringatan Hujan',
-      desc: 'Notifikasi saat hujan terdeteksi',
+      label: 'Rain Alert',
+      desc: 'Notify when rain is detected',
       icon: <Bell size={18} />,
     },
     {
       id: 'dry' as const,
-      label: 'Jemuran Kering',
-      desc: 'Notifikasi saat kelembapan menurun',
+      label: 'Clothes Dry',
+      desc: 'Notify when humidity drops',
       icon: <Smartphone size={18} />,
     },
     {
       id: 'report' as const,
-      label: 'Laporan Harian',
-      desc: 'Ringkasan aktivitas jemuran setiap sore',
+      label: 'Daily Report',
+      desc: 'Evening summary of clothesline activity',
       icon: <Mail size={18} />,
     },
     {
       id: 'whatsapp' as const,
-      label: 'Notifikasi WhatsApp',
-      desc: 'Rencana channel notifikasi cloud ke WhatsApp',
+      label: 'WhatsApp Notification',
+      desc: 'Planned cloud notification channel via WhatsApp',
       icon: <Smartphone size={18} />,
     },
   ];
@@ -52,7 +52,7 @@ export default function NotificationSettings({
     <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <h3 className="mb-5 flex items-center gap-2 text-lg font-bold text-slate-800 dark:text-slate-100">
         <Bell className="text-green-600" size={20} />
-        Pengaturan Notifikasi
+        Notification Settings
       </h3>
 
       <div className="space-y-6">
@@ -81,30 +81,29 @@ export default function NotificationSettings({
       </div>
 
       <div className="mt-6 rounded-xl border border-emerald-100 bg-emerald-50 p-4 dark:border-emerald-900/40 dark:bg-emerald-900/20">
-        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Roadmap Integrasi</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Integration Roadmap</p>
         <p className="mt-1 text-sm font-semibold text-emerald-800 dark:text-emerald-200">Channel WhatsApp (Planned)</p>
         <p className="mt-1 text-xs leading-relaxed text-emerald-700 dark:text-emerald-300/90">
-          Tahap berikutnya akan menambahkan pengiriman notifikasi ke WhatsApp setelah backend cloud dan
-          kredensial API siap.
+          The next phase will enable WhatsApp notifications after cloud backend and API credentials are ready.
         </p>
 
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto] md:items-end">
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase text-emerald-700 dark:text-emerald-300">
-              Nomor WhatsApp Tujuan
+              Destination WhatsApp Number
             </label>
             <input
               type="tel"
               value={whatsappNumber}
               onChange={(event) => onWhatsAppNumberChange(event.target.value)}
-              placeholder="Contoh: +628123456789"
-              aria-label="Nomor WhatsApp notifikasi"
-              title="Nomor WhatsApp notifikasi"
+              placeholder="Example: +628123456789"
+              aria-label="WhatsApp notification number"
+              title="WhatsApp notification number"
               className="w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 outline-none focus:border-emerald-500 dark:border-emerald-900/40 dark:bg-slate-950 dark:text-emerald-100"
             />
           </div>
           <span className="inline-flex rounded-md bg-emerald-200 px-3 py-2 text-xs font-semibold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
-            Belum Aktif API
+            API Not Active Yet
           </span>
         </div>
       </div>

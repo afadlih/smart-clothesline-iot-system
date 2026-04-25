@@ -26,7 +26,7 @@ export default function StatusPanel({ status, reason }: Props) {
                     aria-hidden="true"
                 />
                 <h2 className={`text-xs uppercase tracking-wide font-semibold ${statusColor}`}>
-                    Status Jemuran
+                    Clothesline Status
                 </h2>
             </div>
             <p className={`text-3xl font-bold ${textColor} mb-2`}>{status}</p>

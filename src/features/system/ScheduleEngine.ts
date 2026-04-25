@@ -134,7 +134,7 @@ export function getFinalState({
       overriddenBySafety: false,
       decisionSource: "MANUAL",
       recommendedStatus: pendingManual === "OPEN" ? "OPEN" : "CLOSED",
-      reason: `Manual command ${pendingManual} sedang menunggu ACK device.`,
+      reason: `Manual command ${pendingManual} is waiting for device ACK.`,
     };
   }
 

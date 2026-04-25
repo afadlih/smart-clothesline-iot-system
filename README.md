@@ -1,69 +1,57 @@
 # Smart Clothesline IoT System
 
-Dashboard IoT berbasis Next.js untuk monitoring dan kontrol jemuran pintar secara realtime.
+A Next.js IoT dashboard for monitoring and controlling a smart clothesline system in real time.
 
-## Ringkasan
+## Overview
 
-Project ini berfokus pada:
+Key capabilities:
 
-- Monitoring sensor: suhu, kelembapan, cahaya, dan rain detection.
-- Kontrol perangkat: `OPEN`, `CLOSE`, `AUTO`.
-- Integrasi MQTT untuk stream data realtime.
-- Persistensi data ke Firestore dengan fallback queue saat offline.
-- Analitik dan riwayat operasional untuk evaluasi penggunaan perangkat.
+- Realtime sensor monitoring (temperature, humidity, light, rain)
+- Device control (`OPEN`, `CLOSE`, `AUTO`) over MQTT
+- Firestore persistence for telemetry and schedule state
+- Dashboard decision flow with schedule + safety + manual priority
+- Analytics and history views for operational review
 
-## Fitur Utama
+## Main Features
 
-- Dashboard operasional (`/dashboard`):
-  - status koneksi, status perangkat, command sync state, event timeline.
-- Sensor monitor (`/sensor`):
-  - nilai sensor realtime + serial log stream.
-- Analytics (`/analytics`):
-  - grafik tren, health score perangkat, smart alerts, export CSV/JSON.
-- History (`/history`):
-  - ringkasan harian, filter status/cuaca, detail harian, daftar pembacaan terbaru.
-- Schedule (`/schedule`):
-  - manajemen jadwal buka/tutup berbasis jam.
-- Settings (`/settings`):
-  - konfigurasi perangkat, notifikasi, pairing, dan data management.
+- `/dashboard`: live status, decision source, schedule active indicator, alerts
+- `/sensor`: realtime telemetry cards, serial stream, health/debug context
+- `/history`: daily summaries, filters, charts, detailed reading timeline
+- `/analytics`: trends, health score, alerts, export
+- `/schedule`: Firestore-backed schedule CRUD (single source of truth)
+- `/settings`: profile/device/notification/pairing/data management + schedule summary
+
+## Schedule Architecture
+
+- Firestore is the authoritative source for schedules (`schedules` collection).
+- `system_settings/global` is used for schedule-related override flags.
+- Local storage is only used as a read-only fallback cache if Firestore is unavailable.
+- One-time legacy local-schedule migration is handled automatically in the client.
 
 ## Tech Stack
 
 - Next.js 14 (App Router), React 18, TypeScript
 - Tailwind CSS
-- MQTT (`mqtt` package)
+- MQTT (`mqtt`)
 - Firebase Firestore
 - Recharts
 - Zod
 
-## Struktur Singkat
+## Local Development
 
-```text
-src/
-  app/                # halaman route Next.js
-  components/         # komponen UI reusable
-  features/           # modul fitur per domain
-  hooks/              # state + orchestration logic
-  services/           # service layer (MQTT, Firestore, analytics, validation)
-  models/             # tipe/model data
-  utils/              # utilitas
-```
+Requirements:
 
-## Menjalankan Project
-
-Prasyarat:
-
-- Node.js 20+ disarankan
+- Node.js 20+
 - npm
 
-Install dan jalankan:
+Install and run:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Build production:
+Production checks:
 
 ```bash
 npm run lint
@@ -71,12 +59,9 @@ npm run build
 npm run start
 ```
 
-## Konfigurasi Environment
+## Environment Variables
 
-Project membaca konfigurasi Firebase dari environment variable `NEXT_PUBLIC_*`.
-Jika tidak diset, project memakai fallback value dari `src/lib/firebase.ts`.
-
-Contoh variable yang umum dipakai:
+Configure Firebase via `NEXT_PUBLIC_*` values:
 
 ```env
 NEXT_PUBLIC_FIREBASE_API_KEY=
@@ -87,33 +72,26 @@ NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
 NEXT_PUBLIC_FIREBASE_APP_ID=
 ```
 
-## MQTT
+## MQTT Defaults
 
-Default broker:
-
-- URL: `wss://broker.hivemq.com:8884/mqtt`
-- Topic sensor: `smart-clothesline/sensor`
-- Topic status: `smart-clothesline/status`
-- Topic command: `smart-clothesline/command`
-- Topic config: `smart-clothesline/config`
+- Broker: `wss://broker.hivemq.com:8884/mqtt`
+- Sensor topic: `smart-clothesline/sensor`
+- Status topic: `smart-clothesline/status`
+- Command topic: `smart-clothesline/command`
+- Config topic: `smart-clothesline/config`
 
 ## CI
 
-Workflow CI ada di `.github/workflows/ci.yml` dan menjalankan:
+Workflow file: `.github/workflows/ci.yml`
+
+Pipeline steps:
 
 1. `npm ci --no-audit --no-fund`
 2. `npm run lint`
 3. `npm run build`
 
-Catatan: `next build` sudah mencakup linting types Next.js dan validasi TypeScript untuk app.
+Triggers:
 
-Trigger:
-
-- `push` ke `main`
-- `pull_request` ke `main`
-- manual (`workflow_dispatch`)
-
-## Catatan Operasional
-
-- Halaman history dirancang untuk pemantauan operasional harian, bukan hanya log mentah.
-- Untuk hasil build konsisten di lokal, bersihkan cache `.next` jika pernah terjadi error bundling sementara.
+- `push` to `main`
+- `pull_request` to `main`
+- `workflow_dispatch`

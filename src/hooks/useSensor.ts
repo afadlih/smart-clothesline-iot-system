@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { DecisionEngine } from "@/features/dashboard/DecisionEngine";
 import {
     getFinalState,
-    loadSchedulesFromStorage,
     type ScheduleDecision,
     type StoredScheduleItem,
 } from "@/features/system/ScheduleEngine";
@@ -21,6 +20,7 @@ import { pushSystemEvent } from "@/hooks/useNotificationEngine";
 import { commandRateLimiter } from "@/utils/rateLimiter";
 import { DeviceHealthService } from "@/services/DeviceHealthService";
 import { SmartAlertsService } from "@/services/SmartAlertsService";
+import { ScheduleService } from "@/services/ScheduleService";
 
 type ConnectionState = "connecting" | "online" | "reconnecting" | "offline" | "error";
 type DeviceStatus = "OPEN" | "CLOSED";
@@ -168,7 +168,7 @@ const sharedState: SensorSnapshot = {
         autoCloseOnDark: true,
         syncState: "IDLE",
         lastSyncAt: null,
-        syncMessage: "Belum sinkron",
+        syncMessage: "Not synced yet",
     },
     uiState: {
         connection: "DISCONNECTED",
@@ -458,8 +458,8 @@ function detectRealtimeAlerts(sensor: SensorData | null, status: DeviceStatus | 
 
     if (sensor.isRaining() && status === "OPEN") {
         pushAlertIfNeeded(
-            "Hujan terdeteksi, jemuran terbuka",
-            "Device masih OPEN saat rain=true.",
+            "Rain detected while clothesline is OPEN",
+            "Device remains OPEN while rain=true.",
             "alert-rain-open",
             timestamp,
         );
@@ -467,8 +467,8 @@ function detectRealtimeAlerts(sensor: SensorData | null, status: DeviceStatus | 
 
     if (sensor.humidity < 50 && sensor.temperature > 30) {
         pushAlertIfNeeded(
-            "Jemuran kemungkinan sudah kering",
-            "Humidity < 50% dan suhu > 30C.",
+            "Clothes are likely dry",
+            "Humidity < 50% and temperature > 30C.",
             "alert-dry-clothes",
             timestamp,
         );
@@ -499,7 +499,7 @@ function detectOfflineAlert(now: number): void {
     offlineAlertRaised = true;
     pushAlertIfNeeded(
         "Device offline",
-        "Tidak ada data MQTT baru > 10 detik.",
+        "No fresh MQTT data for more than 10 seconds.",
         "alert-device-offline",
         now,
     );
@@ -829,7 +829,7 @@ export function publishConfig(config: Omit<DeviceConfig, "syncState" | "lastSync
     sharedState.deviceConfig = {
         ...sharedState.deviceConfig,
         syncState: "PENDING",
-        syncMessage: "Sinkronisasi config ke device...",
+        syncMessage: "Syncing config to device...",
     };
     sharedState.configSentAt = now;
     notifyListeners();
@@ -873,13 +873,34 @@ export function useSensor() {
     }, []);
 
     useEffect(() => {
+        let active = true;
+        const refreshSchedules = async () => {
+            const result = await ScheduleService.loadSchedules();
+            if (!active) {
+                return;
+            }
+            setSchedules(result.schedules);
+        };
+
+        void ScheduleService.migrateLegacyLocalSchedulesOnce().then(() => {
+            void refreshSchedules();
+        });
+
+        const onScheduleUpdated = () => {
+            void refreshSchedules();
+        };
+        window.addEventListener("schedule-updated", onScheduleUpdated);
+
+        const scheduleRefreshTimer = window.setInterval(() => {
+            void refreshSchedules();
+        }, 5000);
+
         const timer = window.setInterval(() => {
             const nextNow = Date.now();
             setNow(nextNow);
             updateUiState(nextNow);
             detectOfflineAlert(nextNow);
             notifyListeners();
-            setSchedules(loadSchedulesFromStorage(window.localStorage));
         }, 1000);
 
         // ===== FIRESTORE QUEUE SYNC =====
@@ -904,11 +925,14 @@ export function useSensor() {
             }
         }, 10000); // Every 10 seconds
 
-        setSchedules(loadSchedulesFromStorage(window.localStorage));
+        void refreshSchedules();
 
         return () => {
+            active = false;
             window.clearInterval(timer);
+            window.clearInterval(scheduleRefreshTimer);
             window.clearInterval(queueSyncTimer);
+            window.removeEventListener("schedule-updated", onScheduleUpdated);
         };
     }, []);
 

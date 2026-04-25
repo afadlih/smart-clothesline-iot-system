@@ -1,22 +1,22 @@
 import { SensorData } from "../../models/SensorData";
 
 export class DecisionEngine {
-    static getClotheslineStatus(sensor: SensorData): string {
-        if (sensor.isRaining() || sensor.isDark()) {
-            return "TERTUTUP";
-        }
-        return "TERBUKA";
+  static getClotheslineStatus(sensor: SensorData): string {
+    if (sensor.isRaining() || sensor.isDark()) {
+      return "CLOSED";
+    }
+    return "OPEN";
+  }
+
+  static getReason(sensor: SensorData): string {
+    if (sensor.isRaining()) {
+      return "Rain detected -> clothesline closed";
     }
 
-    static getReason(sensor: SensorData): string {
-        if (sensor.isRaining()) {
-            return "Hujan terdeteksi → jemuran ditutup";
-        }
-
-        if (sensor.isDark()) {
-            return "Cahaya rendah → jemuran ditutup";
-        }
-
-        return "Cuaca cerah → jemuran dibuka";
+    if (sensor.isDark()) {
+      return "Low light -> clothesline closed";
     }
+
+    return "Clear weather -> clothesline open";
+  }
 }

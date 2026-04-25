@@ -35,8 +35,8 @@ export class SensorData {
     }
 
     getWeatherStatus(): string {
-        if (this.isRaining()) return "HUJAN";
-        if (this.isDark()) return "MENDUNG";
-        return "CERAH";
+        if (this.isRaining()) return "RAINY";
+        if (this.isDark()) return "CLOUDY";
+        return "CLEAR";
     }
 }

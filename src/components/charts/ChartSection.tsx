@@ -44,7 +44,7 @@ function Sparkline({ title, colorClass, stroke, unit, values }: SparklineProps) 
 
 			{values.length < 2 ? (
 				<p className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-xs text-gray-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-					Menunggu data masuk untuk menampilkan grafik.
+					Waiting for enough data to render chart.
 				</p>
 			) : (
 				<svg viewBox={`0 0 ${viewWidth} ${viewHeight}`} className="h-28 w-full" role="img" aria-label={`${title} chart`}>
@@ -82,26 +82,26 @@ export default function ChartSection({ history }: ChartSectionProps) {
 	return (
 		<section className="space-y-3">
 			<div className="flex items-center justify-between">
-				<h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Grafik Sensor Realtime</h2>
-				<span className="text-xs text-gray-500 dark:text-slate-400">{history.length} titik data terakhir</span>
+				<h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Realtime Sensor Charts</h2>
+				<span className="text-xs text-gray-500 dark:text-slate-400">{history.length} latest data points</span>
 			</div>
 			<div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
 				<Sparkline
-					title="Suhu"
+					title="Temperature"
 					unit="C"
 					values={temperature}
 					stroke="#ef4444"
 					colorClass="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
 				/>
 				<Sparkline
-					title="Kelembapan"
+					title="Humidity"
 					unit="%"
 					values={humidity}
 					stroke="#3b82f6"
 					colorClass="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
 				/>
 				<Sparkline
-					title="Cahaya"
+					title="Light"
 					unit="lux"
 					values={light}
 					stroke="#f59e0b"

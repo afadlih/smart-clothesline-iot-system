@@ -1,4 +1,4 @@
-import ScheduleScreen from "@/features/schedule/ShedulePage";
+import ScheduleScreen from "@/features/schedule/screen";
 
 export default function SchedulePage() {
   return <ScheduleScreen />;

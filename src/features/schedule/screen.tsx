@@ -1,642 +1,341 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Calendar,
+  AlertTriangle,
   Clock,
+  Loader2,
+  Lock,
   Plus,
-  Trash2,
   Power,
-  AlertCircle,
-  ChevronDown,
-  ChevronUp,
+  RefreshCw,
+  ShieldCheck,
+  Trash2,
 } from "lucide-react";
 import { useSystemState } from "@/hooks/useSystemState";
-import {
-  SCHEDULE_STORAGE_KEY,
-  isWithinSchedule,
-  normalizeSchedules,
-} from "@/features/system/ScheduleEngine";
-import { DryingTimePredictor } from "@/services/DryingTimePredictor";
+import { isWithinSchedule, type StoredScheduleItem } from "@/features/system/ScheduleEngine";
+import { ScheduleService, type FirebaseScheduleItem } from "@/services/ScheduleService";
 
-type ScheduleItem = {
-  id: number;
-  name: string;
-  timeOpen: string;
-  timeClose: string;
-  isActive: boolean;
-};
-
-type NewScheduleForm = {
+type FormState = {
   name: string;
   timeOpen: string;
   timeClose: string;
 };
 
-const initialSchedules: ScheduleItem[] = [
-  {
-    id: 1,
-    name: "Jemur Pagi Rutin",
-    timeOpen: "08:00",
-    timeClose: "11:00",
-    isActive: true,
-  },
-  {
-    id: 2,
-    name: "Jemur Ulang Siang",
-    timeOpen: "13:00",
-    timeClose: "15:30",
-    isActive: false,
-  },
-];
-
-const initialForm: NewScheduleForm = {
+const initialForm: FormState = {
   name: "",
   timeOpen: "08:00",
   timeClose: "10:00",
 };
 
+function parseHour(value: string): number {
+  const [hour] = value.split(":");
+  return Number(hour);
+}
+
 function isValidTimeRange(start: string, end: string): boolean {
   return start < end;
 }
 
-function toNormalizedSchedules(schedules: ScheduleItem[]) {
-  return normalizeSchedules(
-    schedules.map((item) => ({
-      id: item.id,
-      timeOpen: item.timeOpen,
-      timeClose: item.timeClose,
-      isActive: item.isActive,
-    })),
-  );
+function toStoredSchedules(schedules: FirebaseScheduleItem[]): StoredScheduleItem[] {
+  return schedules.map((item) => ({
+    id: item.id,
+    startHour: item.startHour,
+    endHour: item.endHour,
+    enabled: item.enabled,
+  }));
+}
+
+function formatWindow(startHour: number, endHour: number): string {
+  return `${String(startHour).padStart(2, "0")}:00-${String(endHour).padStart(2, "0")}:00`;
 }
 
 export default function SchedulePage() {
-  const { sensor, decision } = useSystemState();
-  const [schedules, setSchedules] = useState<ScheduleItem[]>(initialSchedules);
+  const { mode, isOnline, decision } = useSystemState();
+  const [loading, setLoading] = useState(true);
+  const [fromCache, setFromCache] = useState(false);
+  const [schedules, setSchedules] = useState<FirebaseScheduleItem[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [form, setForm] = useState<NewScheduleForm>(initialForm);
+  const [form, setForm] = useState<FormState>(initialForm);
   const [errorMessage, setErrorMessage] = useState("");
-  const [isHydrated, setIsHydrated] = useState(false);
-  const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
-  const [autoCloseEnabled, setAutoCloseEnabled] = useState(true);
-  const [autoOpenEnabled, setAutoOpenEnabled] = useState(true);
-  const [humidityThreshold, setHumidityThreshold] = useState(70);
-  const [tempThreshold, setTempThreshold] = useState(25);
-  const [showAutoAdjust, setShowAutoAdjust] = useState(false);
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+  const [userAllowedAuto, setUserAllowedAuto] = useState(false);
+  const [isSettingOverride, setIsSettingOverride] = useState(false);
+  const wasActiveRef = useRef<boolean>(false);
+
+  const loadScheduleData = async () => {
+    setLoading(true);
+    const [scheduleResult, override] = await Promise.all([
+      ScheduleService.loadDetailedSchedules(),
+      ScheduleService.getSystemOverride(),
+    ]);
+    setSchedules(scheduleResult.schedules);
+    setFromCache(scheduleResult.fromCache);
+    setUserAllowedAuto(override);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    const raw = localStorage.getItem(SCHEDULE_STORAGE_KEY);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as ScheduleItem[];
-        if (Array.isArray(parsed)) {
-          setSchedules(
-            parsed.filter(
-              (item) =>
-                typeof item.id === "number" &&
-                typeof item.name === "string" &&
-                typeof item.timeOpen === "string" &&
-                typeof item.timeClose === "string" &&
-                typeof item.isActive === "boolean",
-            ),
-          );
-        }
-      } catch {
-        localStorage.removeItem(SCHEDULE_STORAGE_KEY);
-      }
-    }
-
-    setIsHydrated(true);
+    void ScheduleService.migrateLegacyLocalSchedulesOnce().then(() => {
+      void loadScheduleData();
+    });
   }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      setCurrentHour(new Date().getHours());
+      setCurrentTime(new Date());
     }, 1000);
-
-    return () => {
-      window.clearInterval(timer);
-    };
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    if (!isHydrated) {
-      return;
+    const onScheduleUpdated = () => {
+      void loadScheduleData();
+    };
+    window.addEventListener("schedule-updated", onScheduleUpdated);
+    return () => window.removeEventListener("schedule-updated", onScheduleUpdated);
+  }, []);
+
+  const storedSchedules = useMemo(() => toStoredSchedules(schedules), [schedules]);
+
+  const isCurrentlyActive = useMemo(() => {
+    const currentHour = currentTime.getHours();
+    return storedSchedules.some((item) => isWithinSchedule(item, currentHour));
+  }, [currentTime, storedSchedules]);
+
+  useEffect(() => {
+    if (wasActiveRef.current === true && isCurrentlyActive === false) {
+      setUserAllowedAuto(false);
+      void ScheduleService.setSystemOverride(false);
     }
+    wasActiveRef.current = isCurrentlyActive;
+  }, [isCurrentlyActive]);
 
-    localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedules));
-  }, [isHydrated, schedules]);
-
-  const activeSchedulesCount = useMemo(
-    () => schedules.filter((item) => item.isActive).length,
-    [schedules],
-  );
-
-  const normalizedSchedules = useMemo(() => toNormalizedSchedules(schedules), [schedules]);
-  const activeScheduleId =
-    decision.activeSchedule !== null ? Number(decision.activeSchedule.id) : null;
-
-  const onToggleSchedule = (id: number) => {
-    setSchedules((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              isActive: !item.isActive,
-            }
-          : item,
-      ),
-    );
-  };
-
-  const onDeleteSchedule = (id: number) => {
-    setSchedules((prev) => prev.filter((item) => item.id !== id));
-  };
-
-  const onSubmitSchedule = () => {
+  const onSubmitSchedule = async () => {
     const trimmedName = form.name.trim();
-
     if (!trimmedName) {
-      setErrorMessage("Nama jadwal wajib diisi.");
+      setErrorMessage("Schedule name is required.");
       return;
     }
-
     if (!isValidTimeRange(form.timeOpen, form.timeClose)) {
-      setErrorMessage("Jam buka harus lebih kecil dari jam tutup.");
+      setErrorMessage("Start time must be earlier than end time.");
       return;
     }
 
-    const nextId =
-      schedules.length === 0
-        ? 1
-        : Math.max(...schedules.map((item) => item.id)) + 1;
-
-    setSchedules((prev) => [
-      {
-        id: nextId,
+    try {
+      await ScheduleService.addSchedule({
         name: trimmedName,
-        timeOpen: form.timeOpen,
-        timeClose: form.timeClose,
-        isActive: true,
-      },
-      ...prev,
-    ]);
+        startHour: parseHour(form.timeOpen),
+        endHour: parseHour(form.timeClose),
+        enabled: true,
+      });
+      setForm(initialForm);
+      setIsFormOpen(false);
+      setErrorMessage("");
+      void loadScheduleData();
+    } catch {
+      setErrorMessage("Failed to save schedule to Firestore.");
+    }
+  };
 
-    setForm(initialForm);
-    setErrorMessage("");
-    setIsFormOpen(false);
+  const onResetToAuto = async () => {
+    setIsSettingOverride(true);
+    try {
+      await ScheduleService.setSystemOverride(true);
+      setUserAllowedAuto(true);
+    } finally {
+      setIsSettingOverride(false);
+    }
   };
 
   return (
-    <div className="flex min-h-screen flex-col gap-6 bg-gradient-to-br from-gray-100 to-gray-200 p-6 text-gray-900 transition-colors duration-300 dark:from-slate-900 dark:to-slate-950 dark:text-slate-100">
+    <div className="flex min-h-screen flex-col gap-6 bg-slate-50 p-6 dark:bg-slate-950">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-            Penjadwalan Otomatis
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Atur waktu operasional jemuran pintar Anda
-          </p>
+          <h1 className="text-2xl font-bold dark:text-slate-100">Schedule Manager</h1>
+          <div className="mt-1 flex items-center gap-2">
+            <p className="text-sm text-slate-500">Connection: {isOnline ? "Online" : "Offline"}</p>
+            <div
+              className={`flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-mono ${
+                mode === "AUTO"
+                  ? "border-green-100 bg-green-50 text-green-700"
+                  : "border-amber-100 bg-amber-50 text-amber-700"
+              }`}
+            >
+              {mode === "AUTO" ? <ShieldCheck size={10} /> : <Lock size={10} />}
+              MODE: {mode ?? "SYNCING..."}
+            </div>
+            <div
+              className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${
+                decision.scheduleActive
+                  ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                  : "border-slate-200 bg-slate-100 text-slate-600"
+              }`}
+            >
+              Schedule {decision.scheduleActive ? "ACTIVE" : "INACTIVE"}
+            </div>
+            {fromCache && (
+              <div className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                CACHE FALLBACK
+              </div>
+            )}
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setIsFormOpen((prev) => !prev);
-            setErrorMessage("");
-          }}
-          className="flex items-center gap-2 rounded-lg bg-green-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-green-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-        >
-          <Plus size={18} /> {isFormOpen ? "Tutup Form" : "Tambah Jadwal"}
-        </button>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onResetToAuto}
+            disabled={isSettingOverride}
+            className="flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium disabled:opacity-60 dark:bg-slate-800"
+          >
+            <RefreshCw size={18} className={isSettingOverride ? "animate-spin" : ""} />
+            Reset to Auto
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsFormOpen((prev) => !prev);
+              setErrorMessage("");
+            }}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-md"
+          >
+            <Plus size={18} /> {isFormOpen ? "Close" : "Add"}
+          </button>
+        </div>
       </div>
 
       {isFormOpen && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="animate-in zoom-in fade-in duration-300 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
-            Jadwal Baru
+            New Schedule
           </h2>
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
             <input
               type="text"
               value={form.name}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, name: event.target.value }))
-              }
-              placeholder="Nama jadwal"
+              onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+              placeholder="Schedule name"
               className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-green-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
             />
             <input
               type="time"
               value={form.timeOpen}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, timeOpen: event.target.value }))
-              }
-              aria-label="Jam buka jadwal"
-              title="Jam buka jadwal"
+              onChange={(event) => setForm((prev) => ({ ...prev, timeOpen: event.target.value }))}
               className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-green-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              aria-label="Schedule open time"
+              title="Schedule open time"
             />
             <input
               type="time"
               value={form.timeClose}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, timeClose: event.target.value }))
-              }
-              aria-label="Jam tutup jadwal"
-              title="Jam tutup jadwal"
+              onChange={(event) => setForm((prev) => ({ ...prev, timeClose: event.target.value }))}
               className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-green-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              aria-label="Schedule close time"
+              title="Schedule close time"
             />
           </div>
 
-          {errorMessage && (
-            <p className="mt-3 text-xs font-semibold text-red-600 dark:text-red-400">
-              {errorMessage}
-            </p>
-          )}
+          {errorMessage && <p className="mt-3 text-xs font-semibold text-red-600 dark:text-red-400">{errorMessage}</p>}
 
           <div className="mt-4 flex justify-end">
             <button
               type="button"
               onClick={onSubmitSchedule}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white dark:bg-slate-100 dark:text-slate-900"
             >
-              Simpan Jadwal
+              Save Schedule
             </button>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
-          {schedules.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-              Belum ada jadwal. Silakan tambahkan jadwal baru.
-            </div>
-          ) : (
-            schedules.map((schedule) => {
-              const normalized = normalizedSchedules.find((item) => Number(item.id) === schedule.id);
-              const isActiveNow =
-                normalized !== undefined && isWithinSchedule(normalized, currentHour);
+      <div className="w-full space-y-4">
+        {loading ? (
+          <Loader2 className="mx-auto mt-10 animate-spin text-blue-500" size={32} />
+        ) : schedules.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-white p-5 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+            No schedules found. Add one to start automation.
+          </div>
+        ) : (
+          schedules.map((schedule) => {
+            const stored = storedSchedules.find((item) => item.id === schedule.id);
+            const isActiveNow = stored ? isWithinSchedule(stored, currentTime.getHours()) : false;
 
-              return (
-                <div
-                  key={schedule.id}
-                  className={`group flex items-center justify-between rounded-2xl border bg-white p-5 shadow-sm transition-all dark:bg-slate-900 ${
-                    isActiveNow
-                      ? "border-green-300 shadow-green-100 dark:border-emerald-700"
-                      : "border-slate-100 hover:border-green-200 dark:border-slate-800 dark:hover:border-emerald-700"
-                  }`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div
-                      className={`rounded-xl p-3 ${
-                        schedule.isActive
-                          ? "bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-300"
-                          : "bg-slate-50 text-slate-400 dark:bg-slate-800 dark:text-slate-500"
-                      }`}
-                    >
-                      <Clock size={24} />
-                    </div>
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-bold text-slate-800 dark:text-slate-100">
-                          {schedule.name}
-                        </h3>
-                        {isActiveNow && (
-                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700 dark:bg-green-900/30 dark:text-green-300">
-                            ACTIVE NOW
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-1 flex items-center gap-3 text-sm">
-                        <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-                          {schedule.timeOpen}
-                        </span>
-                        <span className="text-slate-300 dark:text-slate-600">-</span>
-                        <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-                          {schedule.timeClose}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onToggleSchedule(schedule.id)}
-                      aria-label={
-                        schedule.isActive
-                          ? "Nonaktifkan jadwal"
-                          : "Aktifkan jadwal"
-                      }
-                      title={
-                        schedule.isActive
-                          ? "Nonaktifkan jadwal"
-                          : "Aktifkan jadwal"
-                      }
-                      className={`rounded-lg border p-2 transition-colors ${
-                        schedule.isActive
-                          ? "border-green-100 bg-green-50 text-green-600 dark:border-green-900/40 dark:bg-green-900/20 dark:text-green-300"
-                          : "border-slate-100 text-slate-400 dark:border-slate-700 dark:text-slate-500"
-                      }`}
-                    >
-                      <Power size={18} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteSchedule(schedule.id)}
-                      aria-label="Hapus jadwal"
-                      title="Hapus jadwal"
-                      className="rounded-lg p-2 text-slate-400 transition-all hover:bg-red-50 hover:text-red-500 dark:text-slate-500 dark:hover:bg-red-900/20 dark:hover:text-red-300"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        <div className="space-y-6">
-          {/* Auto-Adjust Settings */}
-          <button
-            type="button"
-            onClick={() => setShowAutoAdjust(!showAutoAdjust)}
-            className="w-full rounded-2xl border border-slate-100 bg-white p-6 shadow-sm transition-all dark:border-slate-800 dark:bg-slate-900"
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100">
-                Auto-Adjust Settings
-              </h3>
-              {showAutoAdjust ? (
-                <ChevronUp size={20} className="text-slate-600 dark:text-slate-400" />
-              ) : (
-                <ChevronDown size={20} className="text-slate-600 dark:text-slate-400" />
-              )}
-            </div>
-
-            {showAutoAdjust && (
-              <div className="mt-6 space-y-6 border-t border-slate-100 pt-6 dark:border-slate-800">
-                {/* Humidity-Based Auto-Close */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                      Auto-Close at High Humidity
-                    </label>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAutoCloseEnabled(!autoCloseEnabled);
-                      }}
-                      aria-label="Toggle auto-close at high humidity"
-                      title="Toggle auto-close at high humidity"
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        autoCloseEnabled
-                          ? "bg-green-500"
-                          : "bg-slate-300 dark:bg-slate-600"
-                      }`}
-                    >
-                      <span className="sr-only">Toggle auto-close at high humidity</span>
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          autoCloseEnabled ? "translate-x-6" : "translate-x-1"
-                        }`}
-                      />
-                    </button>
-                  </div>
-                  {autoCloseEnabled && (
-                    <div className="space-y-2">
-                      <input
-                        type="range"
-                        min="30"
-                        max="90"
-                        value={humidityThreshold}
-                        onChange={(e) => setHumidityThreshold(Number(e.target.value))}
-                        onClick={(e) => e.stopPropagation()}
-                        aria-label="Humidity threshold"
-                        title="Humidity threshold"
-                        className="w-full"
-                      />
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-slate-600 dark:text-slate-400">
-                          Close when humidity &gt; {humidityThreshold}%
-                        </span>
-                        <span className="font-mono font-semibold text-slate-800 dark:text-slate-100">
-                          {humidityThreshold}%
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Info: Prevents mold and mildew by closing during high humidity
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Temperature-Based Auto-Open */}
-                <div className="space-y-3 border-t border-slate-100 pt-4 dark:border-slate-800">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                      Auto-Open at High Temperature
-                    </label>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAutoOpenEnabled(!autoOpenEnabled);
-                      }}
-                      aria-label="Toggle auto-open at high temperature"
-                      title="Toggle auto-open at high temperature"
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        autoOpenEnabled
-                          ? "bg-green-500"
-                          : "bg-slate-300 dark:bg-slate-600"
-                      }`}
-                    >
-                      <span className="sr-only">Toggle auto-open at high temperature</span>
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          autoOpenEnabled ? "translate-x-6" : "translate-x-1"
-                        }`}
-                      />
-                    </button>
-                  </div>
-                  {autoOpenEnabled && (
-                    <div className="space-y-2">
-                      <input
-                        type="range"
-                        min="15"
-                        max="35"
-                        value={tempThreshold}
-                        onChange={(e) => setTempThreshold(Number(e.target.value))}
-                        onClick={(e) => e.stopPropagation()}
-                        aria-label="Temperature threshold"
-                        title="Temperature threshold"
-                        className="w-full"
-                      />
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-slate-600 dark:text-slate-400">
-                          Open when temp &gt; {tempThreshold} C
-                        </span>
-                        <span className="font-mono font-semibold text-slate-800 dark:text-slate-100">
-                          {tempThreshold} C
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Info: Optimizes drying by opening during warm weather
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Drying Time Estimate */}
-                {sensor && (
-                  <div className="space-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-                    {(() => {
-                      const estimate = DryingTimePredictor.getDryingEstimate(
-                        sensor.humidity,
-                        sensor.temperature
-                      );
-                      return (
-                        <>
-                          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                            Estimated Drying Time
-                          </p>
-                          <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
-                            <p className="text-sm font-bold text-blue-900 dark:text-blue-200">
-                              {estimate.message}
-                            </p>
-                            {estimate.readyTime && (
-                              <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
-                                Ready at: {estimate.readyTime.toLocaleTimeString("id-ID", {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </p>
-                            )}
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                )}
-
-                {/* Current Conditions */}
-                {sensor && (
-                  <div className="space-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                      Current Conditions
-                    </p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded bg-slate-100 p-2 text-sm dark:bg-slate-800">
-                        <p className="text-xs text-slate-600 dark:text-slate-400">Humidity</p>
-                        <p className="font-bold text-slate-900 dark:text-slate-100">
-                          {sensor.humidity.toFixed(1)}%
-                        </p>
-                      </div>
-                      <div className="rounded bg-slate-100 p-2 text-sm dark:bg-slate-800">
-                        <p className="text-xs text-slate-600 dark:text-slate-400">Temperature</p>
-                        <p className="font-bold text-slate-900 dark:text-slate-100">
-                          {sensor.temperature.toFixed(1)} C
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </button>
-
-          <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-6 text-white shadow-lg dark:bg-slate-950">
-            <div className="relative z-10">
-              <div className="mb-4 flex items-center gap-2 text-green-400">
-                <AlertCircle size={20} />
-                <h3 className="font-semibold">Sistem Prioritas</h3>
-              </div>
-              <p className="mb-6 text-sm leading-relaxed text-slate-300">
-                Prioritas keputusan: Manual, Safety, Schedule, lalu Auto fallback.
-              </p>
-              <div className="space-y-3 rounded-xl border border-white/10 bg-white/10 p-4">
-                <div className="flex items-center justify-between text-sm">
-                  <span>Decision Source</span>
-                  <span className="rounded bg-white/10 px-2 py-1 text-[10px] font-bold">
-                    {decision.decisionSource}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span>Schedule Active</span>
-                  <span
-                    className={`rounded px-2 py-1 text-[10px] font-bold ${
-                      decision.scheduleActive
-                        ? "bg-green-500 text-white"
-                        : "bg-slate-700 text-slate-100"
+            return (
+              <div
+                key={schedule.id}
+                className={`group flex items-center justify-between rounded-2xl border bg-white p-5 shadow-sm transition-all dark:bg-slate-900 ${
+                  isActiveNow ? "border-green-300 shadow-green-100 dark:border-emerald-700" : "border-slate-100 dark:border-slate-800"
+                }`}
+              >
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`rounded-xl p-3 ${
+                      schedule.enabled
+                        ? "bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-300"
+                        : "bg-slate-50 text-slate-400 dark:bg-slate-800"
                     }`}
                   >
-                    {decision.scheduleActive ? "ACTIVE" : "INACTIVE"}
-                  </span>
+                    <Clock size={24} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-slate-800 dark:text-slate-100">{schedule.name}</h3>
+                      {isActiveNow && (
+                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">
+                          ACTIVE NOW
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 flex items-center gap-3 text-sm text-slate-500">
+                      <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs dark:bg-slate-800">
+                        {formatWindow(schedule.startHour, schedule.endHour)}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                {decision.overriddenBySafety && (
-                  <p className="text-xs font-semibold text-amber-300">
-                    SCHEDULE OVERRIDDEN BY SAFETY
-                  </p>
-                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void ScheduleService.toggleSchedule(schedule.id, schedule.enabled)}
+                    className={`rounded-lg border p-2 ${
+                      schedule.enabled
+                        ? "border-green-100 bg-green-50 text-green-600"
+                        : "border-slate-100 text-slate-400 dark:border-slate-700 dark:text-slate-500"
+                    }`}
+                    aria-label={schedule.enabled ? "Disable schedule" : "Enable schedule"}
+                    title={schedule.enabled ? "Disable schedule" : "Enable schedule"}
+                  >
+                    <Power size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void ScheduleService.deleteSchedule(schedule.id)}
+                    className="rounded-lg p-2 text-slate-400 hover:text-red-500"
+                    aria-label="Delete schedule"
+                    title="Delete schedule"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="absolute -bottom-4 -right-4 h-24 w-24 rounded-full bg-green-500/10 blur-2xl" />
-          </div>
+            );
+          })
+        )}
+      </div>
 
-          <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100">
-              Ringkasan Jadwal
-            </h3>
-            <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-              <div className="flex items-center justify-between">
-                <span>Total jadwal</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-100">
-                  {schedules.length}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Jadwal aktif</span>
-                <span className="font-semibold text-green-600 dark:text-green-300">
-                  {activeSchedulesCount}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Aktif sekarang</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-100">
-                  {activeScheduleId !== null ? `#${activeScheduleId}` : "Tidak ada"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Cuaca saat ini</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-100">
-                  {sensor ? sensor.getWeatherStatus() : "N/A"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Final decision</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-100">
-                  {decision.recommendedStatus}
-                </span>
-              </div>
-            </div>
-            <div className="mt-4 rounded-lg bg-slate-50 p-3 text-xs italic text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-              {decision.reason}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-              <Calendar size={16} className="text-green-600" />
-              Tips Operasional
-            </h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Hindari jadwal setelah pukul 17:00 untuk meminimalkan risiko embun
-              dan kelembapan tinggi.
-            </p>
-          </div>
+      <div className="mt-auto flex items-center justify-between rounded-xl border bg-white p-4 dark:bg-slate-900">
+        <div className="flex items-center gap-2 text-amber-600">
+          <AlertTriangle size={16} />
+          <p className="text-[10px] text-slate-500">
+            {userAllowedAuto
+              ? "Cloud override enabled."
+              : "Manual lock is automatically applied when schedule window ends."}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-sm font-mono dark:text-slate-300">
+          <Clock size={14} /> {currentTime.toLocaleTimeString("en-US")}
         </div>
       </div>
     </div>
