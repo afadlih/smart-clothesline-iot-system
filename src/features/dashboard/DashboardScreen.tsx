@@ -4,6 +4,7 @@ import Link from "next/link";
 import EventTimeline from "@/components/events/EventTimeline";
 import StatusPanel from "@/components/status/StatusPanel";
 import OperationalHealthPanel from "@/components/status/OperationalHealth";
+import PageContainer from "@/components/layout/PageContainer";
 import { useNotificationEngine } from "@/hooks/useNotificationEngine";
 import { useSystemState } from "@/hooks/useSystemState";
 
@@ -89,7 +90,7 @@ export default function DashboardScreen() {
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 transition-colors duration-300 dark:from-slate-900 dark:to-slate-950">
-      <div className="mx-auto max-w-7xl space-y-8 p-6">
+      <PageContainer>
         {toasts.length > 0 && (
           <div className="fixed right-4 top-20 z-50 space-y-2">
             {toasts.map((toast) => (
@@ -422,7 +423,7 @@ export default function DashboardScreen() {
             </section>
           </aside>
         </div>
-      </div>
+      </PageContainer>
     </main>
   );
 }

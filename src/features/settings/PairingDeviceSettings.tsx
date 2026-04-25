@@ -70,14 +70,14 @@ export default function PairingDeviceSettings({
   const selectedDevice = discoveredDevices.find((item) => item.id === selectedDeviceId);
 
   return (
-    <div className="space-y-6 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+    <div className="space-y-8 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h3 className="flex items-center gap-2 text-lg font-bold text-slate-800">
+          <h3 className="flex items-center gap-2 text-lg font-bold text-slate-800 dark:text-slate-100">
             <Bluetooth className="text-green-600" size={20} />
             Pairing Device
           </h3>
-          <p className="mt-2 max-w-2xl text-sm text-slate-500">
+          <p className="mt-2 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
             Connect IoT devices to the dashboard for simulation before full ESP32 hardware integration.
           </p>
         </div>
@@ -91,17 +91,17 @@ export default function PairingDeviceSettings({
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
+        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-950">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-slate-800">Pairing Code</p>
-              <p className="text-xs text-slate-500">Temporary verification code for a new device</p>
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Pairing Code</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Temporary verification code for a new device</p>
             </div>
             <KeyRound className="text-green-600" size={20} />
           </div>
-          <div className="mt-4 rounded-xl border border-dashed border-green-200 bg-white px-4 py-5 text-center">
-            <p className="text-3xl font-black tracking-[0.4em] text-slate-800">{pairingCode}</p>
-            <p className="mt-2 text-xs text-slate-500">Valid for {formatCountdown(expiresInSeconds)} minutes</p>
+          <div className="mt-4 rounded-xl border border-dashed border-green-200 bg-white px-4 py-5 text-center dark:border-green-900/40 dark:bg-slate-900">
+            <p className="text-3xl font-black tracking-[0.4em] text-slate-800 dark:text-slate-100">{pairingCode}</p>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Valid for {formatCountdown(expiresInSeconds)} minutes</p>
           </div>
           <button
             type="button"
@@ -140,16 +140,16 @@ export default function PairingDeviceSettings({
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-2xl border border-slate-100 p-5">
+        <div className="rounded-2xl border border-slate-100 p-5 dark:border-slate-800">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-slate-800">Detected devices</p>
-              <p className="text-xs text-slate-500">Choose the device you want to connect to this account</p>
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Detected devices</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Choose the device you want to connect to this account</p>
             </div>
             <button
               type="button"
               onClick={onScan}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               {isScanning ? 'Scanning...' : 'Scan Again'}
             </button>
@@ -162,21 +162,23 @@ export default function PairingDeviceSettings({
                 <div
                   key={device.id}
                   className={`rounded-xl border p-4 transition-colors ${
-                    selected ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-slate-50'
+                    selected
+                      ? 'border-green-200 bg-green-50 dark:border-green-900/40 dark:bg-green-900/20'
+                      : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60'
                   }`}
                 >
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-start gap-3">
-                      <div className="rounded-xl bg-white p-2 shadow-sm">
-                        <Smartphone size={18} className="text-slate-700" />
+                      <div className="rounded-xl bg-white p-2 shadow-sm dark:bg-slate-900">
+                        <Smartphone size={18} className="text-slate-700 dark:text-slate-200" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-slate-800">{device.name}</p>
-                        <p className="text-xs text-slate-500">{device.signal}</p>
+                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{device.name}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{device.signal}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                         {device.status}
                       </span>
                       <button
@@ -196,24 +198,24 @@ export default function PairingDeviceSettings({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-100 p-5">
-          <p className="text-sm font-semibold text-slate-800">Pairing steps</p>
+        <div className="rounded-2xl border border-slate-100 p-5 dark:border-slate-800">
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Pairing steps</p>
           <div className="mt-4 space-y-4">
             {pairingSteps.map((step) => (
               <div key={step.id} className="flex items-start gap-3">
-                <div className="mt-0.5 rounded-xl bg-slate-50 p-2">{step.icon}</div>
+                <div className="mt-0.5 rounded-xl bg-slate-50 p-2 dark:bg-slate-800">{step.icon}</div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-700">{step.title}</p>
-                  <p className="text-xs leading-5 text-slate-500">{step.description}</p>
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{step.title}</p>
+                  <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">{step.description}</p>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Default network</p>
-            <p className="mt-2 text-sm font-semibold text-slate-800">Smart-Clothesline-Lab</p>
-            <p className="mt-1 text-xs text-slate-500">Mock Wi-Fi for initial integration demos</p>
+          <div className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Default network</p>
+            <p className="mt-2 text-sm font-semibold text-slate-800 dark:text-slate-100">Smart-Clothesline-Lab</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Mock Wi-Fi for initial integration demos</p>
           </div>
         </div>
       </div>

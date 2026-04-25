@@ -199,21 +199,23 @@ export default function Sidebar({
       {/* Mobile Sidebar - Drawer overlay */}
       <aside
         className={`
-          md:hidden fixed inset-y-16 left-0 right-auto
+          md:hidden fixed top-16 bottom-0 left-0
+          flex flex-col
           bg-slate-900 text-white
-          w-60 z-30
+          w-[min(15rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)]
+          z-40
           transform transition-transform duration-300 ease-in-out
           ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-          overflow-y-auto shadow-2xl
+          overflow-hidden shadow-2xl
         `}
       >
         {/* Mobile menu header */}
         <div className="flex items-center justify-between px-4 py-4 border-b border-slate-700">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <div className="flex-shrink-0 w-8 h-8 rounded bg-green-600 flex items-center justify-center">
               <span className="text-white font-bold text-sm">SC</span>
             </div>
-            <span className="text-sm font-semibold">Smart Clothesline</span>
+            <span className="truncate text-sm font-semibold">Smart Clothesline</span>
           </div>
           <button
             onClick={() => onMobileMenuChange(false)}
@@ -225,29 +227,31 @@ export default function Sidebar({
         </div>
 
         {/* Mobile menu items */}
-        <nav className="px-2 py-6 space-y-2">
-          {menuItems.map((item) => {
-            const active = isActive(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => onMobileMenuChange(false)}
-                className={`
-                  flex items-center gap-3 px-3 py-2.5 rounded-lg
-                  transition-all duration-300 ease-in-out
-                  ${
-                    active
-                      ? 'bg-green-600 text-white shadow-lg'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }
-                `}
-              >
-                <span className="flex-shrink-0">{item.icon}</span>
-                <span className="text-sm font-medium">{item.label}</span>
-              </Link>
-            );
-          })}
+        <nav className="flex-1 overflow-y-auto px-2 py-4">
+          <div className="space-y-2 pb-4">
+            {menuItems.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => onMobileMenuChange(false)}
+                  className={`
+                    flex min-w-0 items-center gap-3 rounded-lg px-3 py-2.5
+                    transition-all duration-300 ease-in-out
+                    ${
+                      active
+                        ? 'bg-green-600 text-white shadow-lg'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }
+                  `}
+                >
+                  <span className="flex-shrink-0">{item.icon}</span>
+                  <span className="truncate text-sm font-medium">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
         </nav>
       </aside>
     </>
