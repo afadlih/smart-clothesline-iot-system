@@ -16,6 +16,7 @@ import {
 import NotificationSettings, { type NotificationPreference } from "./NotifSettings";
 import DeviceSettings from "./DeviceSettings";
 import PairingDeviceSettings, { type PairableDevice } from "./PairingDeviceSettings";
+import PageContainer from "@/components/layout/PageContainer";
 import { useSensor } from "@/hooks/useSensor";
 import { DataExportService } from "@/services/DataExportService";
 import { ScheduleService, type ScheduleSummary } from "@/services/ScheduleService";
@@ -283,14 +284,15 @@ export default function SettingsScreen() {
   const connectionStatus: "ONLINE" | "OFFLINE" = isOnline ? "ONLINE" : "OFFLINE";
 
   return (
-    <div className="flex min-h-screen max-w-5xl flex-col gap-6 bg-gradient-to-br from-gray-100 to-gray-200 p-6 text-slate-900 transition-colors duration-300 dark:from-slate-900 dark:to-slate-950 dark:text-slate-100">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Settings</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Manage Smart Clothesline preferences and device behavior</p>
-      </div>
+    <main className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 transition-colors duration-300 dark:from-slate-900 dark:to-slate-950">
+      <PageContainer className="text-slate-900 dark:text-slate-100">
+        <header className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-800 dark:text-slate-100">Settings</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Manage Smart Clothesline preferences and device behavior</p>
+        </header>
 
-      <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
-        <div className="flex flex-col gap-1">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+          <div className="flex flex-col gap-2 xl:col-span-3">
           {[
             { id: "profile" as const, label: "Profile", icon: <User size={18} /> },
             { id: "notification" as const, label: "Notifications", icon: <Bell size={18} /> },
@@ -302,7 +304,7 @@ export default function SettingsScreen() {
               key={item.id}
               type="button"
               onClick={() => setActiveTab(item.id)}
-              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all ${
+              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium transition-all ${
                 activeTab === item.id
                   ? "bg-green-600 text-white shadow-md"
                   : "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
@@ -312,9 +314,9 @@ export default function SettingsScreen() {
               {item.label}
             </button>
           ))}
-        </div>
+          </div>
 
-        <div className="space-y-6 md:col-span-3">
+          <div className="space-y-8 xl:col-span-9">
           {activeTab === "profile" && (
             <>
               <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -477,7 +479,7 @@ export default function SettingsScreen() {
           )}
 
           {activeTab === "data-management" && (
-            <div className="space-y-6">
+            <div className="space-y-8">
               <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <h3 className="mb-4 text-lg font-bold text-slate-800 dark:text-slate-100">Export Sensor Data</h3>
                 <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">Download sensor data in CSV or JSON format</p>
@@ -589,7 +591,7 @@ export default function SettingsScreen() {
             </div>
           )}
 
-          <div className="flex justify-end pt-4">
+            <div className="flex justify-end pt-2">
             <button
               type="button"
               onClick={onSaveSettings}
@@ -597,9 +599,10 @@ export default function SettingsScreen() {
             >
               <Save size={18} /> {saveLabel}
             </button>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
+      </PageContainer>
+    </main>
   );
 }
