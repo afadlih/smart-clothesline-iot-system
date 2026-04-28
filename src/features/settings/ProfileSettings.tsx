@@ -162,8 +162,11 @@ export default function SettingsScreen() {
   useEffect(() => {
     const loadScheduleSummary = async () => {
       const result = await ScheduleService.loadSchedules();
+      const now = new Date();
+      const currentDecimalHour = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+
       setScheduleFallback(result.fromCache);
-      setScheduleSummary(ScheduleService.getSummary(result.schedules, new Date().getHours()));
+      setScheduleSummary(ScheduleService.getSummary(result.schedules, currentDecimalHour));
     };
 
     void loadScheduleSummary();
@@ -171,9 +174,10 @@ export default function SettingsScreen() {
       void loadScheduleSummary();
     };
     window.addEventListener("schedule-updated", onScheduleUpdated);
+    
     const timer = window.setInterval(() => {
       void loadScheduleSummary();
-    }, 10000);
+    }, 1000);
 
     return () => {
       window.removeEventListener("schedule-updated", onScheduleUpdated);

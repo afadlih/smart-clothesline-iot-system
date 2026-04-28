@@ -1,59 +1,27 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  AlertTriangle,
-  Clock,
-  Loader2,
-  Lock,
-  Plus,
-  Power,
-  RefreshCw,
-  ShieldCheck,
-  Trash2,
-} from "lucide-react";
+import { Clock, Loader2, Lock, Plus, Power, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { useSystemState } from "@/hooks/useSystemState";
-import { isWithinSchedule, type StoredScheduleItem } from "@/features/system/ScheduleEngine";
+import { isWithinSchedule } from "@/features/system/ScheduleEngine";
 import { ScheduleService, type FirebaseScheduleItem } from "@/services/ScheduleService";
+import { mqttService } from "@/services/MQTTService"; 
 
-type FormState = {
-  name: string;
-  timeOpen: string;
-  timeClose: string;
-};
-
-const initialForm: FormState = {
-  name: "",
-  timeOpen: "08:00",
-  timeClose: "10:00",
-};
-
-function parseHour(value: string): number {
-  const [hour] = value.split(":");
-  return Number(hour);
-}
-
-function isValidTimeRange(start: string, end: string): boolean {
-  return start < end;
-}
-
-function toStoredSchedules(schedules: FirebaseScheduleItem[]): StoredScheduleItem[] {
-  return schedules.map((item) => ({
-    id: item.id,
-    startHour: item.startHour,
-    endHour: item.endHour,
-    enabled: item.enabled,
-  }));
-}
+type FormState = { name: string; timeOpen: string; timeClose: string; };
+const initialForm: FormState = { name: "", timeOpen: "08:00", timeClose: "10:00" };
 
 function formatWindow(startHour: number, endHour: number): string {
-  return `${String(startHour).padStart(2, "0")}:00-${String(endHour).padStart(2, "0")}:00`;
+  const pad = (n: number) => String(Math.floor(n)).padStart(2, "0");
+  const hStart = Math.floor(startHour);
+  const mStart = Math.round((startHour - hStart) * 60);
+  const hEnd = Math.floor(endHour);
+  const mEnd = Math.round((endHour - hEnd) * 60);
+  return `${pad(hStart)}:${pad(mStart)} - ${pad(hEnd)}:${pad(mEnd)}`;
 }
 
 export default function SchedulePage() {
-  const { mode, isOnline, decision } = useSystemState();
+  const { isOnline } = useSystemState(); 
   const [loading, setLoading] = useState(true);
-  const [fromCache, setFromCache] = useState(false);
   const [schedules, setSchedules] = useState<FirebaseScheduleItem[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [form, setForm] = useState<FormState>(initialForm);
@@ -61,261 +29,188 @@ export default function SchedulePage() {
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const [userAllowedAuto, setUserAllowedAuto] = useState(false);
   const [isSettingOverride, setIsSettingOverride] = useState(false);
-  const wasActiveRef = useRef<boolean>(false);
+  
+  const wasActiveRef = useRef<boolean | null>(null);
 
   const loadScheduleData = async () => {
-    setLoading(true);
-    const [scheduleResult, override] = await Promise.all([
-      ScheduleService.loadDetailedSchedules(),
-      ScheduleService.getSystemOverride(),
-    ]);
-    setSchedules(scheduleResult.schedules);
-    setFromCache(scheduleResult.fromCache);
-    setUserAllowedAuto(override);
-    setLoading(false);
+    try {
+      const [scheduleResult, override] = await Promise.all([
+        ScheduleService.loadSchedules(),
+        ScheduleService.getSystemOverride(),
+      ]);
+      setSchedules(scheduleResult.schedules);
+      setUserAllowedAuto(override);
+    } catch (err) {
+      console.error("Load error:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    void ScheduleService.migrateLegacyLocalSchedulesOnce().then(() => {
-      void loadScheduleData();
-    });
+    mqttService.onConnectionStatus((status) => console.log("[MQTT]:", status.state));
+    void ScheduleService.migrateLegacyLocalSchedulesOnce().then(() => { void loadScheduleData(); });
   }, []);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
+    const timer = window.setInterval(() => { setCurrentTime(new Date()); }, 1000);
     return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    const onScheduleUpdated = () => {
-      void loadScheduleData();
-    };
-    window.addEventListener("schedule-updated", onScheduleUpdated);
-    return () => window.removeEventListener("schedule-updated", onScheduleUpdated);
+    const onUpdate = () => { void loadScheduleData(); };
+    window.addEventListener("schedule-updated", onUpdate);
+    return () => window.removeEventListener("schedule-updated", onUpdate);
   }, []);
 
-  const storedSchedules = useMemo(() => toStoredSchedules(schedules), [schedules]);
-
-  const isCurrentlyActive = useMemo(() => {
-    const currentHour = currentTime.getHours();
-    return storedSchedules.some((item) => isWithinSchedule(item, currentHour));
-  }, [currentTime, storedSchedules]);
+  const currentDecimalHour = useMemo(() => {
+    return currentTime.getHours() + currentTime.getMinutes() / 60 + currentTime.getSeconds() / 3600;
+  }, [currentTime]);
+  
+  const isCurrentlyActiveGlobal = useMemo(() => {
+    return schedules.some((s) => 
+      isWithinSchedule({ id: s.id, startHour: s.startHour, endHour: s.endHour, enabled: s.enabled }, currentDecimalHour)
+    );
+  }, [currentDecimalHour, schedules]);
 
   useEffect(() => {
-    if (wasActiveRef.current === true && isCurrentlyActive === false) {
-      setUserAllowedAuto(false);
+    if (loading) return;
+
+    if (wasActiveRef.current === null) {
+      wasActiveRef.current = isCurrentlyActiveGlobal;
+      return;
+    }
+
+    if (!wasActiveRef.current && isCurrentlyActiveGlobal) {
+      void ScheduleService.setSystemOverride(true);
+      setUserAllowedAuto(true);
+    }
+
+    if (wasActiveRef.current && !isCurrentlyActiveGlobal) {
       void ScheduleService.setSystemOverride(false);
+      setUserAllowedAuto(false);
     }
-    wasActiveRef.current = isCurrentlyActive;
-  }, [isCurrentlyActive]);
-
-  const onSubmitSchedule = async () => {
-    const trimmedName = form.name.trim();
-    if (!trimmedName) {
-      setErrorMessage("Schedule name is required.");
-      return;
-    }
-    if (!isValidTimeRange(form.timeOpen, form.timeClose)) {
-      setErrorMessage("Start time must be earlier than end time.");
-      return;
-    }
-
-    try {
-      await ScheduleService.addSchedule({
-        name: trimmedName,
-        startHour: parseHour(form.timeOpen),
-        endHour: parseHour(form.timeClose),
-        enabled: true,
-      });
-      setForm(initialForm);
-      setIsFormOpen(false);
-      setErrorMessage("");
-      void loadScheduleData();
-    } catch {
-      setErrorMessage("Failed to save schedule to Firestore.");
-    }
-  };
+    
+    wasActiveRef.current = isCurrentlyActiveGlobal;
+  }, [isCurrentlyActiveGlobal, loading, schedules.length]);
 
   const onResetToAuto = async () => {
     setIsSettingOverride(true);
-    try {
-      await ScheduleService.setSystemOverride(true);
-      setUserAllowedAuto(true);
-    } finally {
-      setIsSettingOverride(false);
+    try { 
+      await ScheduleService.setSystemOverride(true); 
+      setUserAllowedAuto(true); 
+    } finally { 
+      setIsSettingOverride(false); 
     }
+  };
+
+  const onSubmitSchedule = async () => {
+    if (!form.name.trim()) { setErrorMessage("Name required"); return; }
+    if (form.timeOpen >= form.timeClose) { setErrorMessage("Invalid time range"); return; }
+    try {
+      await ScheduleService.addSchedule({
+        name: form.name.trim(),
+        startHour: ScheduleService.parseTimeToFloat(form.timeOpen),
+        endHour: ScheduleService.parseTimeToFloat(form.timeClose),
+        enabled: true,
+      });
+      setForm(initialForm); setIsFormOpen(false); void loadScheduleData();
+    } catch { setErrorMessage("Save failed"); }
   };
 
   return (
     <div className="flex min-h-screen flex-col gap-6 bg-slate-50 p-6 dark:bg-slate-950">
+      {/* Header Section */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold dark:text-slate-100">Schedule Manager</h1>
           <div className="mt-1 flex items-center gap-2">
-            <p className="text-sm text-slate-500">Connection: {isOnline ? "Online" : "Offline"}</p>
-            <div
-              className={`flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-mono ${
-                mode === "AUTO"
-                  ? "border-green-100 bg-green-50 text-green-700"
-                  : "border-amber-100 bg-amber-50 text-amber-700"
-              }`}
-            >
-              {mode === "AUTO" ? <ShieldCheck size={10} /> : <Lock size={10} />}
-              MODE: {mode ?? "SYNCING..."}
+            <p className="text-sm text-slate-500">Status: {isOnline ? "Online" : "Offline"}</p>
+            <div className={`flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-mono ${userAllowedAuto ? "border-green-100 bg-green-50 text-green-700" : "border-amber-100 bg-amber-50 text-amber-700"}`}>
+              {userAllowedAuto ? <ShieldCheck size={10} /> : <Lock size={10} />} MODE: {userAllowedAuto ? "AUTO" : "MANUAL"}
             </div>
-            <div
-              className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${
-                decision.scheduleActive
-                  ? "border-emerald-100 bg-emerald-50 text-emerald-700"
-                  : "border-slate-200 bg-slate-100 text-slate-600"
-              }`}
-            >
-              Schedule {decision.scheduleActive ? "ACTIVE" : "INACTIVE"}
+            <div className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${isCurrentlyActiveGlobal ? "border-emerald-100 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-600"}`}>
+              Schedule {isCurrentlyActiveGlobal ? "ACTIVE" : "INACTIVE"}
             </div>
-            {fromCache && (
-              <div className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                CACHE FALLBACK
-              </div>
-            )}
           </div>
         </div>
-
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onResetToAuto}
-            disabled={isSettingOverride}
-            className="flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium disabled:opacity-60 dark:bg-slate-800"
-          >
-            <RefreshCw size={18} className={isSettingOverride ? "animate-spin" : ""} />
-            Reset to Auto
+          <button type="button" onClick={onResetToAuto} disabled={isSettingOverride} className="flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium dark:bg-slate-800 shadow-sm transition-all hover:bg-slate-50">
+            <RefreshCw size={18} className={isSettingOverride ? "animate-spin" : ""} /> Reset to Auto
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setIsFormOpen((prev) => !prev);
-              setErrorMessage("");
-            }}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-md"
-          >
+          <button type="button" onClick={() => setIsFormOpen(!isFormOpen)} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-md hover:bg-blue-700">
             <Plus size={18} /> {isFormOpen ? "Close" : "Add"}
           </button>
         </div>
       </div>
 
+      {/* Form Section */}
       {isFormOpen && (
-        <div className="animate-in zoom-in fade-in duration-300 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
-            New Schedule
-          </h2>
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-            <input
-              type="text"
-              value={form.name}
-              onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-              placeholder="Schedule name"
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-green-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-            />
-            <input
-              type="time"
-              value={form.timeOpen}
-              onChange={(event) => setForm((prev) => ({ ...prev, timeOpen: event.target.value }))}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-green-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-              aria-label="Schedule open time"
-              title="Schedule open time"
-            />
-            <input
-              type="time"
-              value={form.timeClose}
-              onChange={(event) => setForm((prev) => ({ ...prev, timeClose: event.target.value }))}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-green-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-              aria-label="Schedule close time"
-              title="Schedule close time"
-            />
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <input type="text" value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} placeholder="Schedule Name" className="rounded-lg border p-2 text-sm dark:bg-slate-950 dark:text-white" />
+            <input type="time" value={form.timeOpen} onChange={(e) => setForm({...form, timeOpen: e.target.value})} className="rounded-lg border p-2 text-sm dark:bg-slate-950 dark:text-white" />
+            <input type="time" value={form.timeClose} onChange={(e) => setForm({...form, timeClose: e.target.value})} className="rounded-lg border p-2 text-sm dark:bg-slate-950 dark:text-white" />
           </div>
-
-          {errorMessage && <p className="mt-3 text-xs font-semibold text-red-600 dark:text-red-400">{errorMessage}</p>}
-
-          <div className="mt-4 flex justify-end">
-            <button
-              type="button"
-              onClick={onSubmitSchedule}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white dark:bg-slate-100 dark:text-slate-900"
-            >
-              Save Schedule
-            </button>
-          </div>
+          {errorMessage && <p className="mt-2 text-xs text-red-500">{errorMessage}</p>}
+          <div className="mt-4 flex justify-end"><button onClick={onSubmitSchedule} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm hover:opacity-90">Save Schedule</button></div>
         </div>
       )}
 
-      <div className="w-full space-y-4">
+      {/* List Section */}
+      <div className="space-y-4">
         {loading ? (
-          <Loader2 className="mx-auto mt-10 animate-spin text-blue-500" size={32} />
-        ) : schedules.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-white p-5 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-            No schedules found. Add one to start automation.
-          </div>
+          <Loader2 className="mx-auto animate-spin text-blue-500" />
         ) : (
           schedules.map((schedule) => {
-            const stored = storedSchedules.find((item) => item.id === schedule.id);
-            const isActiveNow = stored ? isWithinSchedule(stored, currentTime.getHours()) : false;
+            const isTimeMatch = isWithinSchedule(
+              { id: schedule.id, startHour: schedule.startHour, endHour: schedule.endHour, enabled: true }, 
+              currentDecimalHour
+            );
+
+            const isCurrentlyRunning = schedule.enabled && isTimeMatch;
 
             return (
-              <div
-                key={schedule.id}
-                className={`group flex items-center justify-between rounded-2xl border bg-white p-5 shadow-sm transition-all dark:bg-slate-900 ${
-                  isActiveNow ? "border-green-300 shadow-green-100 dark:border-emerald-700" : "border-slate-100 dark:border-slate-800"
-                }`}
-              >
+              <div key={schedule.id} className={`flex items-center justify-between rounded-2xl border bg-white p-5 transition-all dark:bg-slate-900 ${isCurrentlyRunning ? "border-green-400 ring-1 ring-green-400/10 shadow-sm" : "border-slate-100 dark:border-slate-800"}`}>
                 <div className="flex items-center gap-4">
-                  <div
-                    className={`rounded-xl p-3 ${
-                      schedule.enabled
-                        ? "bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-300"
-                        : "bg-slate-50 text-slate-400 dark:bg-slate-800"
+                  <div 
+                    className={`rounded-xl p-3 transition-colors ${
+                      isCurrentlyRunning 
+                        ? "bg-green-500 text-white" 
+                        : schedule.enabled 
+                          ? "bg-amber-100 text-amber-600" 
+                          : "bg-slate-100 text-slate-400 dark:bg-slate-800"
                     }`}
                   >
                     <Clock size={24} />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-slate-800 dark:text-slate-100">{schedule.name}</h3>
-                      {isActiveNow && (
-                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">
-                          ACTIVE NOW
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-1 flex items-center gap-3 text-sm text-slate-500">
-                      <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs dark:bg-slate-800">
-                        {formatWindow(schedule.startHour, schedule.endHour)}
-                      </span>
-                    </div>
+                    <h3 className="font-bold dark:text-white">{schedule.name}</h3>
+                    <p className="text-xs text-slate-500 font-mono">{formatWindow(schedule.startHour, schedule.endHour)}</p>
+                    {isCurrentlyRunning ? (
+                      <span className="text-[10px] font-bold text-green-600 uppercase tracking-tight animate-pulse">Running Now</span>
+                    ) : schedule.enabled ? (
+                      <span className="text-[10px] font-bold text-amber-600 uppercase tracking-tight">Standby / Waiting Time</span>
+                    ) : null}
                   </div>
                 </div>
+                
                 <div className="flex items-center gap-2">
-                  <button
+                  <button 
                     type="button"
-                    onClick={() => void ScheduleService.toggleSchedule(schedule.id, schedule.enabled)}
-                    className={`rounded-lg border p-2 ${
-                      schedule.enabled
-                        ? "border-green-100 bg-green-50 text-green-600"
-                        : "border-slate-100 text-slate-400 dark:border-slate-700 dark:text-slate-500"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void ScheduleService.toggleSchedule(schedule.id, schedule.enabled);
+                    }} 
+                    className={`p-2 rounded-lg border transition-all hover:scale-105 active:scale-95 ${
+                      schedule.enabled 
+                        ? "bg-green-50 border-green-200 text-green-600 dark:bg-green-900/20" 
+                        : "bg-slate-50 border-slate-100 text-slate-400 dark:bg-slate-800 dark:border-slate-700"
                     }`}
-                    aria-label={schedule.enabled ? "Disable schedule" : "Enable schedule"}
-                    title={schedule.enabled ? "Disable schedule" : "Enable schedule"}
                   >
                     <Power size={18} />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void ScheduleService.deleteSchedule(schedule.id)}
-                    className="rounded-lg p-2 text-slate-400 hover:text-red-500"
-                    aria-label="Delete schedule"
-                    title="Delete schedule"
-                  >
+                  <button onClick={() => void ScheduleService.deleteSchedule(schedule.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
                     <Trash2 size={18} />
                   </button>
                 </div>
@@ -323,20 +218,6 @@ export default function SchedulePage() {
             );
           })
         )}
-      </div>
-
-      <div className="mt-auto flex items-center justify-between rounded-xl border bg-white p-4 dark:bg-slate-900">
-        <div className="flex items-center gap-2 text-amber-600">
-          <AlertTriangle size={16} />
-          <p className="text-[10px] text-slate-500">
-            {userAllowedAuto
-              ? "Cloud override enabled."
-              : "Manual lock is automatically applied when schedule window ends."}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 text-sm font-mono dark:text-slate-300">
-          <Clock size={14} /> {currentTime.toLocaleTimeString("en-US")}
-        </div>
       </div>
     </div>
   );
