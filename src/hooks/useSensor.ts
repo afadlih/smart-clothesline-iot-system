@@ -1001,7 +1001,7 @@ export function useSensor() {
     const decision = getFinalState({
         sensor: snapshot.sensorData,
         schedules,
-        pendingManual: snapshot.pendingCommand,
+        pendingManual: snapshot.pendingCommand === "CLOSE" ? "CLOSED" : snapshot.pendingCommand,
         currentHour: new Date(now).getHours(),
     });
 
