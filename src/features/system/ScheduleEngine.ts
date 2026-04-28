@@ -27,88 +27,54 @@ type LegacyScheduleItem = {
   isActive?: boolean;
 };
 
-function parseHour(value: unknown): number | null {
+function parseTimeToFloat(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
-    const normalized = Math.trunc(value);
-    if (normalized >= 0 && normalized <= 23) {
-      return normalized;
-    }
+    return (value >= 0 && value <= 24) ? value : null;
   }
-
   if (typeof value === "string") {
-    const match = value.match(/^(\d{1,2})(?::\d{2})?$/);
-    if (!match) {
-      return null;
-    }
-
-    const parsed = Number(match[1]);
-    if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 23) {
-      return parsed;
+    const match = value.match(/^(\d{1,2})(?::(\d{2}))?$/);
+    if (!match) return null;
+    const hour = Number(match[1]);
+    const minute = match[2] ? Number(match[2]) : 0;
+    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+      return hour + minute / 60;
     }
   }
-
   return null;
 }
 
 export function isWithinSchedule(schedule: StoredScheduleItem, currentHour: number): boolean {
-  if (!schedule.enabled) {
-    return false;
-  }
-
-  if (schedule.startHour === schedule.endHour) {
-    return true;
-  }
-
+  if (!schedule.enabled) return false;
+  if (schedule.startHour === schedule.endHour) return true;
   if (schedule.startHour < schedule.endHour) {
     return currentHour >= schedule.startHour && currentHour < schedule.endHour;
   }
-
   return currentHour >= schedule.startHour || currentHour < schedule.endHour;
 }
 
 export function normalizeSchedules(input: unknown): StoredScheduleItem[] {
-  if (!Array.isArray(input)) {
-    return [];
-  }
-
-  return input
-    .map((item, index) => {
-      if (!item || typeof item !== "object") {
-        return null;
-      }
-
-      const candidate = item as Partial<StoredScheduleItem & LegacyScheduleItem>;
-      const startHour = parseHour(candidate.startHour ?? candidate.timeOpen);
-      const endHour = parseHour(candidate.endHour ?? candidate.timeClose);
-      if (startHour === null || endHour === null) {
-        return null;
-      }
-
-      const rawId = candidate.id ?? `schedule-${index}`;
-      return {
-        id: String(rawId),
-        startHour,
-        endHour,
-        enabled: candidate.enabled ?? candidate.isActive ?? true,
-      } satisfies StoredScheduleItem;
-    })
-    .filter((item): item is StoredScheduleItem => item !== null);
+  if (!Array.isArray(input)) return [];
+  return input.map((item, index) => {
+    if (!item || typeof item !== "object") return null;
+    const candidate = item as Partial<StoredScheduleItem & LegacyScheduleItem>;
+    const startHour = parseTimeToFloat(candidate.startHour ?? candidate.timeOpen);
+    const endHour = parseTimeToFloat(candidate.endHour ?? candidate.timeClose);
+    if (startHour === null || endHour === null) return null;
+    return {
+      id: String(candidate.id ?? `schedule-${index}`),
+      startHour,
+      endHour,
+      enabled: candidate.enabled ?? candidate.isActive ?? true,
+    } satisfies StoredScheduleItem;
+  }).filter((item): item is StoredScheduleItem => item !== null);
 }
 
 export function loadSchedulesFromStorage(storage?: Storage): StoredScheduleItem[] {
-  if (!storage) {
-    return [];
-  }
-
+  if (!storage) return [];
   try {
     const raw = storage.getItem(SCHEDULE_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    return normalizeSchedules(JSON.parse(raw));
-  } catch {
-    return [];
-  }
+    return raw ? normalizeSchedules(JSON.parse(raw)) : [];
+  } catch { return []; }
 }
 
 export function getFinalState({
@@ -119,36 +85,38 @@ export function getFinalState({
 }: {
   sensor: SensorData | null;
   schedules: StoredScheduleItem[];
-  pendingManual: "OPEN" | "CLOSE" | "AUTO" | null;
+  pendingManual: "OPEN" | "CLOSED" | "AUTO" | null;
   currentHour: number;
 }): ScheduleDecision {
-  const activeSchedule =
-    schedules.find((schedule) => isWithinSchedule(schedule, currentHour)) ?? null;
+  const activeSchedule = schedules.find((s) => isWithinSchedule(s, currentHour)) ?? null;
   const scheduleActive = activeSchedule !== null;
   const safetyTriggered = sensor ? sensor.isRaining() || sensor.isDark() : false;
 
-  if (pendingManual === "OPEN" || pendingManual === "CLOSE") {
+  const formatH = (val: number) => {
+    const h = Math.floor(val);
+    const m = Math.round((val - h) * 60);
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  };
+
+  if (pendingManual === "OPEN" || pendingManual === "CLOSED") {
     return {
       activeSchedule,
       scheduleActive,
       overriddenBySafety: false,
       decisionSource: "MANUAL",
       recommendedStatus: pendingManual === "OPEN" ? "OPEN" : "CLOSED",
-      reason: `Manual command ${pendingManual} is waiting for device ACK.`,
+      reason: `Manual command ${pendingManual} active.`,
     };
   }
 
   if (safetyTriggered) {
-    const reason = sensor?.isRaining()
-      ? "Rain detected"
-      : "Low light detected";
     return {
       activeSchedule,
       scheduleActive,
       overriddenBySafety: scheduleActive,
       decisionSource: "SAFETY",
       recommendedStatus: "CLOSED",
-      reason,
+      reason: sensor?.isRaining() ? "Rain detected" : "Low light detected",
     };
   }
 
@@ -159,17 +127,16 @@ export function getFinalState({
       overriddenBySafety: false,
       decisionSource: "SCHEDULE",
       recommendedStatus: "OPEN",
-      reason: `Schedule active ${String(activeSchedule.startHour).padStart(2, "0")}:00-${String(activeSchedule.endHour).padStart(2, "0")}:00`,
+      reason: `Schedule active ${formatH(activeSchedule.startHour)}-${formatH(activeSchedule.endHour)}`,
     };
   }
 
-  const autoOpen = sensor ? !sensor.isRaining() && !sensor.isDark() : false;
   return {
     activeSchedule,
     scheduleActive: false,
     overriddenBySafety: false,
     decisionSource: "AUTO",
-    recommendedStatus: autoOpen ? "OPEN" : "CLOSED",
-    reason: sensor ? (autoOpen ? "Auto fallback: weather clear" : "Auto fallback: safety condition") : "Auto fallback: waiting sensor data",
+    recommendedStatus: (sensor && !sensor.isRaining() && !sensor.isDark()) ? "OPEN" : "CLOSED",
+    reason: "Auto fallback logic.",
   };
 }
