@@ -9,6 +9,7 @@ type DeviceSettingsProps = {
   lightThreshold: number;
   autoCloseOnRain: boolean;
   autoCloseOnDark: boolean;
+  autoOpenWhenSafe: boolean;
   configSyncState: 'IDLE' | 'PENDING' | 'SYNCED' | 'FAILED';
   configSyncMessage: string;
   configLastSyncAt: number | null;
@@ -18,6 +19,7 @@ type DeviceSettingsProps = {
   onLightThresholdChange: (value: number) => void;
   onAutoCloseOnRainChange: (value: boolean) => void;
   onAutoCloseOnDarkChange: (value: boolean) => void;
+  onAutoOpenWhenSafeChange: (value: boolean) => void;
   onUpdateIntervalChange: (value: number) => void;
   onRestart: () => void;
 };
@@ -30,6 +32,7 @@ export default function DeviceSettings({
   lightThreshold,
   autoCloseOnRain,
   autoCloseOnDark,
+  autoOpenWhenSafe,
   configSyncState,
   configSyncMessage,
   configLastSyncAt,
@@ -39,6 +42,7 @@ export default function DeviceSettings({
   onLightThresholdChange,
   onAutoCloseOnRainChange,
   onAutoCloseOnDarkChange,
+  onAutoOpenWhenSafeChange,
   onUpdateIntervalChange,
   onRestart,
 }: DeviceSettingsProps) {
@@ -135,6 +139,7 @@ export default function DeviceSettings({
                 <input
                   type="checkbox"
                   checked={autoCloseOnRain}
+                  className='cursor-pointer'
                   onChange={(event) => onAutoCloseOnRainChange(event.target.checked)}
                 />
               </label>
@@ -143,7 +148,17 @@ export default function DeviceSettings({
                 <input
                   type="checkbox"
                   checked={autoCloseOnDark}
+                  className='cursor-pointer'
                   onChange={(event) => onAutoCloseOnDarkChange(event.target.checked)}
+                />
+              </label>
+              <label className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
+                <span className="text-slate-700 dark:text-slate-200">Auto open when safe</span>
+                <input
+                  type="checkbox"
+                  checked={autoOpenWhenSafe}
+                  className='cursor-pointer'
+                  onChange={(event) => onAutoOpenWhenSafeChange(event.target.checked)}
                 />
               </label>
             </div>
@@ -158,11 +173,11 @@ export default function DeviceSettings({
                 onChange={(event) => onUpdateIntervalChange(Number(event.target.value))}
                 aria-label="Interval update data"
                 title="Interval update data"
-                className="bg-transparent text-sm font-bold text-slate-700 outline-none dark:text-slate-200"
+                className="bg-transparent text-sm font-bold text-slate-700 outline-none dark:text-slate-200 cursor-pointer"
               >
-                <option value={3}>3 Seconds</option>
-                <option value={5}>5 Seconds</option>
-                <option value={10}>10 Seconds</option>
+                <option value={3} className='cursor-pointer'>3 Seconds</option>
+                <option value={5} className='cursor-pointer'>5 Seconds</option>
+                <option value={10} className='cursor-pointer'>10 Seconds</option>
               </select>
             </div>
           </div>

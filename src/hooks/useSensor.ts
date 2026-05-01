@@ -41,6 +41,7 @@ type MqttSensorPayload = {
 };
 
 type MqttDeviceStatusPayload = {
+    deviceId?: string;
     status: DeviceStatus;
     mode: DeviceMode;
     lastCommand?: DeviceCommand;
@@ -50,10 +51,12 @@ type MqttDeviceStatusPayload = {
 
 type MqttConfigAckPayload = {
     type: "CONFIG_ACK";
+    deviceId?: string;
     rainThreshold: number;
     lightThreshold: number;
     autoCloseOnRain?: boolean;
     autoCloseOnDark?: boolean;
+    autoOpenWhenSafe?: boolean;
     timestamp?: number;
 };
 
@@ -73,6 +76,7 @@ export type DeviceConfig = {
     lightThreshold: number;
     autoCloseOnRain: boolean;
     autoCloseOnDark: boolean;
+    autoOpenWhenSafe: boolean;
     syncState: ConfigSyncState;
     lastSyncAt: number | null;
     syncMessage: string;
@@ -152,6 +156,8 @@ const CONFIG_ACK_TIMEOUT_MS = 5_000;
 const FRESHNESS_MS = 10_000;
 const STATUS_DEBOUNCE_MS = 1_000;
 const OFFLINE_ALERT_INTERVAL_MS = 10_000;
+const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
+const WOKWI_DEVICE_ID = "wokwi-default";
 
 const sharedState: SensorSnapshot = {
     sensorData: null,
@@ -166,6 +172,7 @@ const sharedState: SensorSnapshot = {
         lightThreshold: 3000,
         autoCloseOnRain: true,
         autoCloseOnDark: true,
+        autoOpenWhenSafe: false,
         syncState: "IDLE",
         lastSyncAt: null,
         syncMessage: "Not synced yet",
@@ -294,7 +301,7 @@ function parseSensorPayload(raw: string): MqttSensorPayload | null {
         if (
             typeof data.temperature !== "number" ||
             typeof data.humidity !== "number" ||
-            typeof data.light !== "number" ||
+            typeof data.light !== "number" || 
             typeof data.rain !== "boolean" ||
             (data.timestamp !== undefined && typeof data.timestamp !== "number")
         ) {
@@ -316,6 +323,100 @@ function parseSensorPayload(raw: string): MqttSensorPayload | null {
     }
 }
 
+export function getActiveDeviceId(): string | null {
+    if (typeof window === "undefined") {
+        return null;
+    }
+
+    return localStorage.getItem(ACTIVE_DEVICE_STORAGE_KEY);
+}
+
+function shouldAcceptSensorPayload(payload: MqttSensorPayload): boolean {
+    const activeDeviceId = getActiveDeviceId();
+
+    if (!activeDeviceId) {
+        return true;
+    }
+
+    if (activeDeviceId === WOKWI_DEVICE_ID) {
+        return !payload.deviceId || payload.deviceId === WOKWI_DEVICE_ID;
+    }
+
+    return payload.deviceId === activeDeviceId;
+}
+
+function shouldAcceptStatusPayload(payload: MqttDeviceStatusPayload): boolean {
+    const activeDeviceId = getActiveDeviceId();
+
+    if (!activeDeviceId) {
+        return true;
+    }
+
+    if (activeDeviceId === WOKWI_DEVICE_ID) {
+        return !payload.deviceId || payload.deviceId === WOKWI_DEVICE_ID;
+    }
+
+    return payload.deviceId === activeDeviceId;
+}
+
+function shouldAcceptConfigAckPayload(payload: MqttConfigAckPayload): boolean {
+    const activeDeviceId = getActiveDeviceId();
+
+    if (!activeDeviceId) {
+        return true;
+    }
+
+    if (activeDeviceId === WOKWI_DEVICE_ID) {
+        return !payload.deviceId || payload.deviceId === WOKWI_DEVICE_ID;
+    }
+
+    return payload.deviceId === activeDeviceId;
+}
+
+function applyConfigAckPayload(payload: MqttConfigAckPayload, receivedAt: number): void {
+    if (!shouldAcceptConfigAckPayload(payload)) {
+        console.info("[MQTT][FILTERED CONFIG ACK]", {
+            activeDeviceId: getActiveDeviceId(),
+            payloadDeviceId: payload.deviceId ?? null,
+        });
+        return;
+    }
+
+    const ackTimestamp = payload.timestamp ?? receivedAt;
+
+    sharedState.deviceConfig = {
+        rainThreshold: payload.rainThreshold,
+        lightThreshold: payload.lightThreshold,
+        autoCloseOnRain: payload.autoCloseOnRain ?? sharedState.deviceConfig.autoCloseOnRain,
+        autoCloseOnDark: payload.autoCloseOnDark ?? sharedState.deviceConfig.autoCloseOnDark,
+        autoOpenWhenSafe: payload.autoOpenWhenSafe ?? sharedState.deviceConfig.autoOpenWhenSafe,
+        syncState: "SYNCED",
+        lastSyncAt: ackTimestamp,
+        syncMessage: "Config synced with device",
+    };
+    sharedState.configSentAt = null;
+
+    appendSerialLog(
+        "CONFIG",
+        `ACK rainThreshold=${payload.rainThreshold} lightThreshold=${payload.lightThreshold}`,
+        ackTimestamp,
+    );
+    pushSystemEvent({
+        type: "CONFIG",
+        title: "Config synced",
+        description: `rainThreshold=${payload.rainThreshold}, lightThreshold=${payload.lightThreshold}`,
+        timestamp: ackTimestamp,
+    });
+    appendLegacyEvent({
+        type: "SYSTEM",
+        action: "CONFIG_ACK",
+        timestamp: ackTimestamp,
+    });
+
+    notifyListeners();
+}
+
+
 function parseStatusPacket(raw: string): StatusPacket | null {
     try {
         const data = JSON.parse(raw) as Partial<MqttDeviceStatusPayload & MqttConfigAckPayload>;
@@ -334,10 +435,12 @@ function parseStatusPacket(raw: string): StatusPacket | null {
                 kind: "configAck",
                 payload: {
                     type: "CONFIG_ACK",
+                    deviceId: typeof data.deviceId === "string" ? data.deviceId : undefined,
                     rainThreshold: data.rainThreshold,
                     lightThreshold: data.lightThreshold,
                     autoCloseOnRain: data.autoCloseOnRain,
                     autoCloseOnDark: data.autoCloseOnDark,
+                    autoOpenWhenSafe: data.autoOpenWhenSafe,
                     timestamp: typeof data.timestamp === "number" ? data.timestamp : undefined,
                 },
             };
@@ -354,6 +457,7 @@ function parseStatusPacket(raw: string): StatusPacket | null {
         return {
             kind: "device",
             payload: {
+                deviceId: typeof data.deviceId === "string" ? data.deviceId : undefined,
                 status: data.status,
                 mode: data.mode,
                 lastCommand:
@@ -553,6 +657,15 @@ function startStreamIfNeeded(): void {
             if (!payload) {
                 return;
             }
+
+            if (!shouldAcceptSensorPayload(payload)) {
+                console.info("[MQTT][FILTERED SENSOR]", {
+                    activeDeviceId: getActiveDeviceId(),
+                    payloadDeviceId: payload.deviceId ?? null,
+                });
+                return;
+            }
+
             const sensorTimestamp = payload.timestamp ?? receivedAt;
 
             const data = mapToSensorData(payload);
@@ -619,6 +732,14 @@ function startStreamIfNeeded(): void {
         }
 
         if (topic !== STATUS_TOPIC) {
+            if (topic === CONFIG_TOPIC) {
+                const packet = parseStatusPacket(rawPayload);
+                if (packet?.kind === "configAck") {
+                    applyConfigAckPayload(packet.payload, receivedAt);
+                    return;
+                }
+            }
+
             notifyListeners();
             return;
         }
@@ -629,43 +750,19 @@ function startStreamIfNeeded(): void {
         }
 
         if (packet.kind === "configAck") {
-            const { payload } = packet;
-            const ackTimestamp = payload.timestamp ?? receivedAt;
-
-            sharedState.deviceConfig = {
-                rainThreshold: payload.rainThreshold,
-                lightThreshold: payload.lightThreshold,
-                autoCloseOnRain: payload.autoCloseOnRain ?? sharedState.deviceConfig.autoCloseOnRain,
-                autoCloseOnDark: payload.autoCloseOnDark ?? sharedState.deviceConfig.autoCloseOnDark,
-                syncState: "SYNCED",
-                lastSyncAt: ackTimestamp,
-                syncMessage: "Config synced with device",
-            };
-            sharedState.configSentAt = null;
-
-            appendSerialLog(
-                "CONFIG",
-                `ACK rainThreshold=${payload.rainThreshold} lightThreshold=${payload.lightThreshold}`,
-                ackTimestamp,
-            );
-            pushSystemEvent({
-                type: "CONFIG",
-                title: "Config synced",
-                description: `rainThreshold=${payload.rainThreshold}, lightThreshold=${payload.lightThreshold}`,
-                timestamp: ackTimestamp,
-            });
-            appendLegacyEvent({
-                type: "SYSTEM",
-                action: "CONFIG_ACK",
-                timestamp: ackTimestamp,
-            });
-
-            notifyListeners();
+            applyConfigAckPayload(packet.payload, receivedAt);
             return;
         }
 
         const payload = packet.payload;
         const statusTimestamp = payload.timestamp ?? receivedAt;
+        if (!shouldAcceptStatusPayload(payload)) {
+            console.info("[MQTT][FILTERED STATUS]", {
+                activeDeviceId: getActiveDeviceId(),
+                payloadDeviceId: payload.deviceId ?? null,
+            });
+            return;
+        }
         const ackMatched = matchesAcknowledgement(payload);
         if (ackMatched) {
             clearPendingCommandAsSuccess();
@@ -798,7 +895,12 @@ export function sendCommand(command: DeviceCommand) {
     sharedState.commandSentAt = now;
     notifyListeners();
 
-    appendSerialLog("COMMAND", `${command} -> publish ${COMMAND_TOPIC}`, now);
+    const activeDeviceId = getActiveDeviceId();
+    const targetDeviceId = activeDeviceId && activeDeviceId !== WOKWI_DEVICE_ID ? activeDeviceId : null;
+    const commandPayload = targetDeviceId ? { deviceId: targetDeviceId, command } : { command };
+    const targetLabel = targetDeviceId ?? "legacy";
+
+    appendSerialLog("COMMAND", `${command} -> publish ${COMMAND_TOPIC} target=${targetLabel}`, now);
     appendLegacyEvent({
         type: "USER",
         action: command,
@@ -807,11 +909,11 @@ export function sendCommand(command: DeviceCommand) {
     pushSystemEvent({
         type: "COMMAND",
         title: "Command sent",
-        description: `USER -> ${command}`,
+        description: `USER -> ${command} (${targetLabel})`,
         timestamp: now,
     });
 
-    mqttService.publish(COMMAND_TOPIC, { command });
+    mqttService.publish(COMMAND_TOPIC, commandPayload);
 }
 
 export function publishConfig(config: Omit<DeviceConfig, "syncState" | "lastSyncAt" | "syncMessage">) {
@@ -834,6 +936,9 @@ export function publishConfig(config: Omit<DeviceConfig, "syncState" | "lastSync
     sharedState.configSentAt = now;
     notifyListeners();
 
+    const activeDeviceId = getActiveDeviceId();
+    const targetDeviceId = activeDeviceId && activeDeviceId !== WOKWI_DEVICE_ID ? activeDeviceId : null;
+
     appendSerialLog(
         "CONFIG",
         `publish rainThreshold=${config.rainThreshold} lightThreshold=${config.lightThreshold} autoCloseOnRain=${config.autoCloseOnRain} autoCloseOnDark=${config.autoCloseOnDark}`,
@@ -846,10 +951,12 @@ export function publishConfig(config: Omit<DeviceConfig, "syncState" | "lastSync
         timestamp: now,
     });
     mqttService.publish(CONFIG_TOPIC, {
+        ...(targetDeviceId ? { deviceId: targetDeviceId } : {}),
         rainThreshold: config.rainThreshold,
         lightThreshold: config.lightThreshold,
         autoCloseOnRain: config.autoCloseOnRain,
         autoCloseOnDark: config.autoCloseOnDark,
+        autoOpenWhenSafe: config.autoOpenWhenSafe
     });
 }
 

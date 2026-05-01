@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import EventTimeline from "@/components/events/EventTimeline";
 import StatusPanel from "@/components/status/StatusPanel";
 import OperationalHealthPanel from "@/components/status/OperationalHealth";
@@ -47,6 +48,11 @@ export default function DashboardScreen() {
     smartAlerts,
   } = useSystemState();
   const { events: timelineEvents, latestAlert, toasts, dismissToast } = useNotificationEngine();
+  const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActiveDeviceId(localStorage.getItem(ACTIVE_DEVICE_STORAGE_KEY));
+  }, [])
 
   const connectionLabel = isOnline ? "ONLINE" : "OFFLINE";
   const connectionBadgeClass = isOnline
@@ -65,6 +71,9 @@ export default function DashboardScreen() {
   const statusPanelLabel =
     displayedStatus === "OPEN" ? "OPEN" : displayedStatus === "CLOSED" ? "CLOSED" : "--";
   const lastUpdated = formatClock(lastUpdate);
+
+  const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
+
   const isCommandPending = uiState.deviceSync === "WAITING_ACK";
   const canSendCommand = isStreaming && !isCommandPending;
   const commandStatusLabel =
@@ -370,6 +379,12 @@ export default function DashboardScreen() {
                 <div>
                   <p className="text-[11px] text-gray-500 dark:text-slate-400">MQTT Connected</p>
                   <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{mqttConnected ? "Yes" : "No"}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Active Device</p>
+                  <p className="break-all text-sm font-semibold text-gray-900 dark:text-slate-100">
+                    {activeDeviceId ?? "Not selected"}
+                  </p>
                 </div>
                 <div>
                   <p className="text-[11px] text-gray-500 dark:text-slate-400">Last Sensor</p>

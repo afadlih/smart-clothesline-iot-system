@@ -2,10 +2,9 @@ import React from 'react';
 import {
   Bluetooth,
   CheckCircle2,
-  KeyRound,
   Radio,
   Router,
-  ShieldCheck,
+  CheckCheck,
   Smartphone,
   Wifi,
 } from 'lucide-react';
@@ -15,15 +14,16 @@ export type PairableDevice = {
   name: string;
   signal: string;
   status: string;
+  source?: "wokwi" | "esp32";
+  pairingCode?: string;
+  ipAddress?: string;
+  lastSeenAt?: number;
 };
 
 type PairingDeviceSettingsProps = {
-  pairingCode: string;
-  expiresInSeconds: number;
   discoveredDevices: PairableDevice[];
   selectedDeviceId: string | null;
   isScanning: boolean;
-  onGenerateCode: () => void;
   onScan: () => void;
   onSelectDevice: (deviceId: string) => void;
 };
@@ -31,43 +31,33 @@ type PairingDeviceSettingsProps = {
 const pairingSteps = [
   {
     id: 'step-1',
-    title: 'Enable pairing mode',
-    description: 'Hold the pairing button on the IoT device for 3 seconds until the LED blinks.',
+    title: 'Connect your device to your Wi-Fi',
+    description: 'After pluging in the power cable, connect your laptop to the device hotspot, and open http://192.168.4.1 in your web browser',
     icon: <Radio size={18} className="text-green-600" />,
   },
   {
     id: 'step-2',
-    title: 'Connect to network',
-    description: 'Ensure your laptop is on the same Wi-Fi network as the device.',
+    title: 'Pair clothesline device',
+    description: 'After your device connected to the internet it will show up to the pairable device, then click "Pair Device"',
     icon: <Wifi size={18} className="text-sky-600" />,
   },
   {
     id: 'step-3',
-    title: 'Verify security code',
-    description: 'Enter the pairing code so the device can only be claimed by the correct account.',
-    icon: <ShieldCheck size={18} className="text-amber-600" />,
+    title: 'Device is ready to use',
+    description: 'Now you have automated clothesline installed in your home',
+    icon: <CheckCheck size={18} className="text-amber-600" />,
   },
 ];
 
-function formatCountdown(totalSeconds: number): string {
-  const minutes = Math.floor(totalSeconds / 60)
-    .toString()
-    .padStart(2, '0');
-  const seconds = (totalSeconds % 60).toString().padStart(2, '0');
-  return `${minutes}:${seconds}`;
-}
-
 export default function PairingDeviceSettings({
-  pairingCode,
-  expiresInSeconds,
   discoveredDevices,
   selectedDeviceId,
   isScanning,
-  onGenerateCode,
   onScan,
   onSelectDevice,
 }: PairingDeviceSettingsProps) {
   const selectedDevice = discoveredDevices.find((item) => item.id === selectedDeviceId);
+  const isOffline = typeof selectedDevice?.lastSeenAt === "number" && Date.now() - selectedDevice?.lastSeenAt > 15000
 
   return (
     <div className="space-y-8 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -94,21 +84,47 @@ export default function PairingDeviceSettings({
         <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-950">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Pairing Code</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Temporary verification code for a new device</p>
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Connected Device</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Current active device for this dashboard</p>
             </div>
-            <KeyRound className="text-green-600" size={20} />
+            <Smartphone className="text-green-600" size={20} />
           </div>
-          <div className="mt-4 rounded-xl border border-dashed border-green-200 bg-white px-4 py-5 text-center dark:border-green-900/40 dark:bg-slate-900">
-            <p className="text-3xl font-black tracking-[0.4em] text-slate-800 dark:text-slate-100">{pairingCode}</p>
-            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Valid for {formatCountdown(expiresInSeconds)} minutes</p>
+
+          <div className="mt-4 rounded-xl border border-dashed border-green-200 bg-white px-4 py-5 dark:border-green-900/40 dark:bg-slate-900">
+            {selectedDevice ? (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-lg font-bold text-slate-800 dark:text-slate-100">{selectedDevice.name}</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{selectedDevice.id}</p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {selectedDevice.source && (
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      {selectedDevice.source}
+                    </span>
+                  )}
+                  <span className={ isOffline ? `rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300` : `rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300`}>
+                    { isOffline ? "Offline" : "Online"}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center">
+                <p className="text-lg font-bold text-slate-800 dark:text-slate-100">No device selected</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Select a device from the detected list below.
+                </p>
+              </div>
+            )}
           </div>
+
           <button
             type="button"
-            onClick={onGenerateCode}
+            onClick={onScan}
             className="mt-4 w-full rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-green-700"
           >
-            Generate New Code
+            {isScanning ? 'Scanning...' : 'Refresh Discovery'}
           </button>
         </div>
 
@@ -151,21 +167,23 @@ export default function PairingDeviceSettings({
               onClick={onScan}
               className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
             >
-              {isScanning ? 'Scanning...' : 'Scan Again'}
+              {isScanning ? 'Scanning...' : 'Refresh'}
             </button>
           </div>
 
           <div className="mt-4 space-y-3">
             {discoveredDevices.map((device) => {
               const selected = selectedDeviceId === device.id;
+              const isEsp32 = device.source === "esp32";
+              const isRecentlySeen = typeof device.lastSeenAt === "number" && Date.now() - device.lastSeenAt < 15000;
+              const deviceStatus = isEsp32 && !isRecentlySeen ? "Offline" : device.status;
               return (
                 <div
                   key={device.id}
-                  className={`rounded-xl border p-4 transition-colors ${
-                    selected
+                  className={`rounded-xl border p-4 transition-colors ${selected
                       ? 'border-green-200 bg-green-50 dark:border-green-900/40 dark:bg-green-900/20'
                       : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60'
-                  }`}
+                    }`}
                 >
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-start gap-3">
@@ -173,20 +191,33 @@ export default function PairingDeviceSettings({
                         <Smartphone size={18} className="text-slate-700 dark:text-slate-200" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{device.name}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{device.name}</p>
+                          {device.source && (
+                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                              {device.source}
+                            </span>
+                          )}
+                        </div>
+
                         <p className="text-xs text-slate-500 dark:text-slate-400">{device.signal}</p>
+
+                        {device.pairingCode && (
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            Password: {device.pairingCode}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                        {device.status}
+                        {deviceStatus}
                       </span>
                       <button
                         type="button"
                         onClick={() => onSelectDevice(device.id)}
-                        className={`rounded-lg px-4 py-2 text-xs font-semibold text-white transition-colors ${
-                          selected ? 'bg-green-700 hover:bg-green-800' : 'bg-slate-900 hover:bg-slate-700'
-                        }`}
+                        className={`rounded-lg px-4 py-2 text-xs font-semibold text-white transition-colors ${selected ? 'bg-green-700 hover:bg-green-800' : 'bg-slate-900 hover:bg-slate-700'
+                          }`}
                       >
                         {selected ? 'Paired' : 'Pair Device'}
                       </button>
@@ -212,11 +243,11 @@ export default function PairingDeviceSettings({
             ))}
           </div>
 
-          <div className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+          {/* <div className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Default network</p>
             <p className="mt-2 text-sm font-semibold text-slate-800 dark:text-slate-100">Smart-Clothesline-Lab</p>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Mock Wi-Fi for initial integration demos</p>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>
