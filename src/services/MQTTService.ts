@@ -1,11 +1,14 @@
 import mqtt, { type MqttClient } from "mqtt";
 import { SensorValidator, ValidationError } from "./ValidationService";
 
-export const MQTT_BROKER_URL = "wss://broker.hivemq.com:8884/mqtt";
+export const MQTT_BROKER_URL = "wss://ba30f548c6ba4db2a6eae072d0a0ab18.s1.eu.hivemq.cloud:8884/mqtt";
+const MQTT_USER = "fabiqnn";
+const MQTT_PASS = "WmGgym2vPTa7dR.";
 export const SENSOR_TOPIC = "smart-clothesline/sensor";
 export const STATUS_TOPIC = "smart-clothesline/status";
 export const COMMAND_TOPIC = "smart-clothesline/command";
 export const CONFIG_TOPIC = "smart-clothesline/config";
+export const PAIRING_DISCOVERY_TOPIC = "smart-clothesline/pairing/discovery";
 
 type SubscribeCallback = (topic: string, payload: string) => void;
 type TopicCallback = (payload: string) => void;
@@ -29,6 +32,15 @@ export type SensorMessage = {
   mode?: "AUTO" | "MANUAL";
   timestamp?: number;
 };
+
+export type PairingDiscoveryMessage = {
+  deviceId: string;
+  deviceName: string;
+  pairingCode: string;
+  status: "pairable" | string;
+  ipAddress?: string;
+  timestamp?: number;
+}
 
 type SensorMessageCallback = (message: SensorMessage) => void;
 type ConnectionCallback = (snapshot: MqttConnectionSnapshot) => void;
@@ -174,6 +186,8 @@ class MqttService {
     }
 
     this.client = mqtt.connect(MQTT_BROKER_URL, {
+      username: MQTT_USER,
+      password: MQTT_PASS,
       reconnectPeriod: 0, // Disable auto-reconnect, we handle it manually
       connectTimeout: 10000,
       clean: true,
@@ -182,7 +196,7 @@ class MqttService {
 
     this.client.on("connect", () => {
       this.retryStrategy.reset();
-      this.client?.subscribe([SENSOR_TOPIC, STATUS_TOPIC, CONFIG_TOPIC], (error) => {
+      this.client?.subscribe([SENSOR_TOPIC, STATUS_TOPIC, CONFIG_TOPIC, PAIRING_DISCOVERY_TOPIC], (error) => {
         if (error) {
           console.error("[MQTT] Failed to subscribe:", error.message);
         }
