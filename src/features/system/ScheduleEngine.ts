@@ -82,15 +82,26 @@ export function getFinalState({
   schedules,
   pendingManual,
   currentHour,
+  safetyConfig,
 }: {
   sensor: SensorData | null;
   schedules: StoredScheduleItem[];
-  pendingManual: "OPEN" | "CLOSED" | "AUTO" | null;
+  pendingManual: "OPEN" | "CLOSED" | "AUTO" | "RESTART" | null;
   currentHour: number;
+  safetyConfig?: {
+    lightThreshold: number;
+    autoCloseOnRain: boolean;
+    autoCloseOnDark: boolean;
+  };
 }): ScheduleDecision {
   const activeSchedule = schedules.find((s) => isWithinSchedule(s, currentHour)) ?? null;
   const scheduleActive = activeSchedule !== null;
-  const safetyTriggered = sensor ? sensor.isRaining() || sensor.isDark() : false;
+  const lightThreshold = safetyConfig?.lightThreshold ?? 200;
+  const autoCloseOnRain = safetyConfig?.autoCloseOnRain ?? true;
+  const autoCloseOnDark = safetyConfig?.autoCloseOnDark ?? true;
+  const rainTriggered = sensor ? autoCloseOnRain && sensor.isRaining() : false;
+  const darkTriggered = sensor ? autoCloseOnDark && sensor.isDark(lightThreshold) : false;
+  const safetyTriggered = rainTriggered || darkTriggered;
 
   const formatH = (val: number) => {
     const h = Math.floor(val);
@@ -110,13 +121,17 @@ export function getFinalState({
   }
 
   if (safetyTriggered) {
+    const safetyReason = rainTriggered
+      ? "Rain detected (auto close on rain enabled)"
+      : `Low light detected (light < ${lightThreshold})`;
+
     return {
       activeSchedule,
       scheduleActive,
       overriddenBySafety: scheduleActive,
       decisionSource: "SAFETY",
       recommendedStatus: "CLOSED",
-      reason: sensor?.isRaining() ? "Rain detected" : "Low light detected",
+      reason: safetyReason,
     };
   }
 
@@ -136,7 +151,7 @@ export function getFinalState({
     scheduleActive: false,
     overriddenBySafety: false,
     decisionSource: "AUTO",
-    recommendedStatus: (sensor && !sensor.isRaining() && !sensor.isDark()) ? "OPEN" : "CLOSED",
-    reason: "Auto fallback logic.",
+    recommendedStatus: (sensor && !rainTriggered && !darkTriggered) ? "OPEN" : "CLOSED",
+    reason: `Auto fallback (rainClose=${autoCloseOnRain ? "on" : "off"}, darkClose=${autoCloseOnDark ? "on" : "off"}, lightThreshold=${lightThreshold})`,
   };
 }

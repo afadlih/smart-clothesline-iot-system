@@ -8,6 +8,7 @@ export const SENSOR_TOPIC = "smart-clothesline/sensor";
 export const STATUS_TOPIC = "smart-clothesline/status";
 export const COMMAND_TOPIC = "smart-clothesline/command";
 export const CONFIG_TOPIC = "smart-clothesline/config";
+export const CONFIG_ACK_TOPIC = "smart-clothesline/config/ack";
 export const PAIRING_DISCOVERY_TOPIC = "smart-clothesline/pairing/discovery";
 
 type SubscribeCallback = (topic: string, payload: string) => void;
@@ -196,7 +197,7 @@ class MqttService {
 
     this.client.on("connect", () => {
       this.retryStrategy.reset();
-      this.client?.subscribe([SENSOR_TOPIC, STATUS_TOPIC, CONFIG_TOPIC, PAIRING_DISCOVERY_TOPIC], (error) => {
+      this.client?.subscribe([SENSOR_TOPIC, STATUS_TOPIC, CONFIG_TOPIC, CONFIG_ACK_TOPIC, PAIRING_DISCOVERY_TOPIC], (error) => {
         if (error) {
           console.error("[MQTT] Failed to subscribe:", error.message);
         }

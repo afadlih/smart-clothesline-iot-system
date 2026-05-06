@@ -12,6 +12,7 @@ import { FirestoreService, sensorDataQueue } from "@/services/FirestoreService";
 import {
     COMMAND_TOPIC,
     CONFIG_TOPIC,
+    CONFIG_ACK_TOPIC,
     SENSOR_TOPIC,
     STATUS_TOPIC,
     mqttService,
@@ -23,9 +24,9 @@ import { SmartAlertsService } from "@/services/SmartAlertsService";
 import { ScheduleService } from "@/services/ScheduleService";
 
 type ConnectionState = "connecting" | "online" | "reconnecting" | "offline" | "error";
-type DeviceStatus = "OPEN" | "CLOSED";
+type DeviceStatus = "OPEN" | "CLOSED" | "RESTARTING";
 type DeviceMode = "AUTO" | "MANUAL";
-type DeviceCommand = "OPEN" | "CLOSE" | "AUTO";
+type DeviceCommand = "OPEN" | "CLOSE" | "AUTO" | "RESTART";
 type UiConnectionState = "DISCONNECTED" | "CONNECTED";
 type UiStreamState = "NO_DATA" | "STREAMING" | "STALE";
 type UiDeviceSyncState = "IDLE" | "WAITING_ACK" | "SYNCED";
@@ -54,6 +55,7 @@ type MqttConfigAckPayload = {
     deviceId?: string;
     rainThreshold: number;
     lightThreshold: number;
+    updateIntervalSec?: number;
     autoCloseOnRain?: boolean;
     autoCloseOnDark?: boolean;
     autoOpenWhenSafe?: boolean;
@@ -74,6 +76,7 @@ type DeviceState = {
 export type DeviceConfig = {
     rainThreshold: number;
     lightThreshold: number;
+    updateIntervalSec: number;
     autoCloseOnRain: boolean;
     autoCloseOnDark: boolean;
     autoOpenWhenSafe: boolean;
@@ -153,6 +156,7 @@ const MAX_SERIAL_LOGS = 40;
 const MAX_EVENT_ITEMS = 10;
 const ACK_TIMEOUT_MS = 5_000;
 const CONFIG_ACK_TIMEOUT_MS = 5_000;
+const CONFIG_PUBLISH_INTERVAL_MS = 5_000;
 const FRESHNESS_MS = 10_000;
 const STATUS_DEBOUNCE_MS = 1_000;
 const OFFLINE_ALERT_INTERVAL_MS = 10_000;
@@ -168,8 +172,9 @@ const sharedState: SensorSnapshot = {
         updatedAt: null,
     },
     deviceConfig: {
-        rainThreshold: 2000,
+        rainThreshold: 3000,
         lightThreshold: 3000,
+        updateIntervalSec: 5,
         autoCloseOnRain: true,
         autoCloseOnDark: true,
         autoOpenWhenSafe: false,
@@ -221,9 +226,22 @@ let eventHydrated = false;
 let lastOfflineAlertAt = 0;
 let previousDeviceStatus: DeviceStatus | null = null;
 let offlineAlertRaised = false;
+let lastConfigPublishAt = 0;
+let lastConfigPublishKey: string | null = null;
 
 function toInternalStatus(status: DeviceStatus | null): "TERBUKA" | "TERTUTUP" {
     return status === "OPEN" ? "TERBUKA" : "TERTUTUP";
+}
+
+function getConfigPublishKey(config: Omit<DeviceConfig, "syncState" | "lastSyncAt" | "syncMessage">): string {
+    return JSON.stringify({
+        rainThreshold: config.rainThreshold,
+        lightThreshold: config.lightThreshold,
+        updateIntervalSec: config.updateIntervalSec,
+        autoCloseOnRain: config.autoCloseOnRain,
+        autoCloseOnDark: config.autoCloseOnDark,
+        autoOpenWhenSafe: config.autoOpenWhenSafe,
+    });
 }
 
 function updateUiState(now: number = Date.now()): void {
@@ -301,7 +319,7 @@ function parseSensorPayload(raw: string): MqttSensorPayload | null {
         if (
             typeof data.temperature !== "number" ||
             typeof data.humidity !== "number" ||
-            typeof data.light !== "number" || 
+            typeof data.light !== "number" ||
             typeof data.rain !== "boolean" ||
             (data.timestamp !== undefined && typeof data.timestamp !== "number")
         ) {
@@ -387,6 +405,7 @@ function applyConfigAckPayload(payload: MqttConfigAckPayload, receivedAt: number
     sharedState.deviceConfig = {
         rainThreshold: payload.rainThreshold,
         lightThreshold: payload.lightThreshold,
+        updateIntervalSec: payload.updateIntervalSec ?? sharedState.deviceConfig.updateIntervalSec,
         autoCloseOnRain: payload.autoCloseOnRain ?? sharedState.deviceConfig.autoCloseOnRain,
         autoCloseOnDark: payload.autoCloseOnDark ?? sharedState.deviceConfig.autoCloseOnDark,
         autoOpenWhenSafe: payload.autoOpenWhenSafe ?? sharedState.deviceConfig.autoOpenWhenSafe,
@@ -398,13 +417,13 @@ function applyConfigAckPayload(payload: MqttConfigAckPayload, receivedAt: number
 
     appendSerialLog(
         "CONFIG",
-        `ACK rainThreshold=${payload.rainThreshold} lightThreshold=${payload.lightThreshold}`,
+        `ACK rainThreshold=${payload.rainThreshold} lightThreshold=${payload.lightThreshold} updateIntervalSec=${payload.updateIntervalSec ?? sharedState.deviceConfig.updateIntervalSec}`,
         ackTimestamp,
     );
     pushSystemEvent({
         type: "CONFIG",
         title: "Config synced",
-        description: `rainThreshold=${payload.rainThreshold}, lightThreshold=${payload.lightThreshold}`,
+        description: `rainThreshold=${payload.rainThreshold}, lightThreshold=${payload.lightThreshold}, updateIntervalSec=${payload.updateIntervalSec ?? sharedState.deviceConfig.updateIntervalSec}`,
         timestamp: ackTimestamp,
     });
     appendLegacyEvent({
@@ -424,8 +443,10 @@ function parseStatusPacket(raw: string): StatusPacket | null {
             if (
                 typeof data.rainThreshold !== "number" ||
                 typeof data.lightThreshold !== "number" ||
+                (data.updateIntervalSec !== undefined && typeof data.updateIntervalSec !== "number") ||
                 (data.autoCloseOnRain !== undefined && typeof data.autoCloseOnRain !== "boolean") ||
-                (data.autoCloseOnDark !== undefined && typeof data.autoCloseOnDark !== "boolean")
+                (data.autoCloseOnDark !== undefined && typeof data.autoCloseOnDark !== "boolean") ||
+                (data.autoOpenWhenSafe !== undefined && typeof data.autoOpenWhenSafe !== "boolean")
             ) {
                 console.warn("[MQTT] Invalid config ack payload:", raw);
                 return null;
@@ -438,9 +459,23 @@ function parseStatusPacket(raw: string): StatusPacket | null {
                     deviceId: typeof data.deviceId === "string" ? data.deviceId : undefined,
                     rainThreshold: data.rainThreshold,
                     lightThreshold: data.lightThreshold,
+                    updateIntervalSec: data.updateIntervalSec,
                     autoCloseOnRain: data.autoCloseOnRain,
                     autoCloseOnDark: data.autoCloseOnDark,
                     autoOpenWhenSafe: data.autoOpenWhenSafe,
+                    timestamp: typeof data.timestamp === "number" ? data.timestamp : undefined,
+                },
+            };
+        }
+
+        if (data.status === "RESTARTING" && data.lastCommand === "RESTART") {
+            return {
+                kind: "device",
+                payload: {
+                    deviceId: typeof data.deviceId === "string" ? data.deviceId : undefined,
+                    status: "RESTARTING",
+                    mode: sharedState.deviceState.mode ?? "MANUAL",
+                    lastCommand: "RESTART",
                     timestamp: typeof data.timestamp === "number" ? data.timestamp : undefined,
                 },
             };
@@ -532,6 +567,10 @@ function matchesAcknowledgement(payload: MqttDeviceStatusPayload): boolean {
     const pending = sharedState.pendingCommand;
     if (!pending) {
         return false;
+    }
+
+    if (pending === "RESTART") {
+        return payload.lastCommand === "RESTART" && payload.status === "RESTARTING";
     }
 
     if (pending === "AUTO") {
@@ -698,7 +737,11 @@ function startStreamIfNeeded(): void {
                     id,
                     data,
                     status: historyStatus,
-                    reason: DecisionEngine.getReason(data),
+                    reason: DecisionEngine.getReason(data, {
+                        lightThreshold: sharedState.deviceConfig.lightThreshold,
+                        autoCloseOnRain: sharedState.deviceConfig.autoCloseOnRain,
+                        autoCloseOnDark: sharedState.deviceConfig.autoCloseOnDark,
+                    }),
                 },
                 ...sharedState.history,
             ].slice(0, MAX_HISTORY_ITEMS);
@@ -707,7 +750,10 @@ function startStreamIfNeeded(): void {
                 "SENSOR",
                 `temp=${payload.temperature.toFixed(1)}C hum=${payload.humidity.toFixed(1)}% light=${payload.light.toFixed(0)} rain=${payload.rain ? "yes" : "no"}`,
                 sensorTimestamp,
-                payload.rain || data.isDark() ? "WARN" : "INFO",
+                (sharedState.deviceConfig.autoCloseOnRain && payload.rain) ||
+                    (sharedState.deviceConfig.autoCloseOnDark && data.isDark(sharedState.deviceConfig.lightThreshold))
+                    ? "WARN"
+                    : "INFO",
             );
             pushSystemEvent({
                 type: "SENSOR",
@@ -731,15 +777,15 @@ function startStreamIfNeeded(): void {
             return;
         }
 
-        if (topic !== STATUS_TOPIC) {
-            if (topic === CONFIG_TOPIC) {
-                const packet = parseStatusPacket(rawPayload);
-                if (packet?.kind === "configAck") {
-                    applyConfigAckPayload(packet.payload, receivedAt);
-                    return;
-                }
+        if (topic === CONFIG_ACK_TOPIC) {
+            const packet = parseStatusPacket(rawPayload);
+            if (packet?.kind === "configAck") {
+                applyConfigAckPayload(packet.payload, receivedAt);
             }
+            return;
+        }
 
+        if (topic !== STATUS_TOPIC) {
             notifyListeners();
             return;
         }
@@ -888,6 +934,35 @@ export function sendCommand(command: DeviceCommand) {
         return;
     }
 
+    if (command === "RESTART") {
+        commandRateLimiter.recordSend(command);
+        sharedState.pendingCommand = command;
+        sharedState.commandStatus = "pending";
+        sharedState.commandSentAt = now;
+        notifyListeners();
+
+        const activeDeviceId = getActiveDeviceId();
+        const targetDeviceId = activeDeviceId && activeDeviceId !== WOKWI_DEVICE_ID ? activeDeviceId : null;
+        const commandPayload = targetDeviceId ? { deviceId: targetDeviceId, command } : { command };
+        const targetLabel = targetDeviceId ?? "legacy";
+
+        appendSerialLog("COMMAND", `${command} -> publish ${COMMAND_TOPIC} target=${targetLabel}`, now);
+
+        appendLegacyEvent({
+            type: "USER",
+            action: command,
+            timestamp: now,
+        });
+        pushSystemEvent({
+            type: "COMMAND",
+            title: "Command sent",
+            description: `USER -> ${command} (${targetLabel})`,
+            timestamp: now,
+        });
+
+        mqttService.publish(COMMAND_TOPIC, commandPayload);
+    }
+
     commandRateLimiter.recordSend(command);
 
     sharedState.pendingCommand = command;
@@ -916,16 +991,49 @@ export function sendCommand(command: DeviceCommand) {
     mqttService.publish(COMMAND_TOPIC, commandPayload);
 }
 
-export function publishConfig(config: Omit<DeviceConfig, "syncState" | "lastSyncAt" | "syncMessage">) {
+export function publishConfig(config: Omit<DeviceConfig, "syncState" | "lastSyncAt" | "syncMessage">): boolean {
     const now = Date.now();
+    const configKey = getConfigPublishKey(config);
+
+    if (configKey === lastConfigPublishKey) {
+        sharedState.deviceConfig = {
+            ...sharedState.deviceConfig,
+            syncMessage: "Config unchanged; publish skipped",
+        };
+        notifyListeners();
+        return false;
+    }
+
+    if (now - lastConfigPublishAt < CONFIG_PUBLISH_INTERVAL_MS) {
+        const waitSeconds = Math.ceil((CONFIG_PUBLISH_INTERVAL_MS - (now - lastConfigPublishAt)) / 1000);
+        sharedState.deviceConfig = {
+            ...sharedState.deviceConfig,
+            syncMessage: `Config publish skipped; wait ${waitSeconds}s before saving again`,
+        };
+        notifyListeners();
+        return false;
+    }
+
     if (!mqttService.isConnected()) {
         sharedState.deviceConfig = {
             ...sharedState.deviceConfig,
             syncState: "FAILED",
             syncMessage: "Sync failed: MQTT disconnected",
         };
+        appendSerialLog("CONFIG", "FAILED mqtt disconnected", now, "WARN");
+        pushSystemEvent({
+            type: "CONFIG",
+            title: "Config sync failed",
+            description: "MQTT disconnected",
+            timestamp: now,
+        });
+        appendLegacyEvent({
+            type: "SYSTEM",
+            action: "CONFIG_FAILED",
+            timestamp: now,
+        });
         notifyListeners();
-        return;
+        return false;
     }
 
     sharedState.deviceConfig = {
@@ -935,29 +1043,38 @@ export function publishConfig(config: Omit<DeviceConfig, "syncState" | "lastSync
     };
     sharedState.configSentAt = now;
     notifyListeners();
+    lastConfigPublishAt = now;
+    lastConfigPublishKey = configKey;
 
     const activeDeviceId = getActiveDeviceId();
     const targetDeviceId = activeDeviceId && activeDeviceId !== WOKWI_DEVICE_ID ? activeDeviceId : null;
 
     appendSerialLog(
         "CONFIG",
-        `publish rainThreshold=${config.rainThreshold} lightThreshold=${config.lightThreshold} autoCloseOnRain=${config.autoCloseOnRain} autoCloseOnDark=${config.autoCloseOnDark}`,
+        `PUBLISH rainThreshold=${config.rainThreshold} lightThreshold=${config.lightThreshold} updateIntervalSec=${config.updateIntervalSec} autoCloseOnRain=${config.autoCloseOnRain} autoCloseOnDark=${config.autoCloseOnDark} autoOpenWhenSafe=${config.autoOpenWhenSafe}`,
         now,
     );
     pushSystemEvent({
         type: "CONFIG",
         title: "Config publish",
-        description: `rain=${config.rainThreshold}, light=${config.lightThreshold}, rainClose=${config.autoCloseOnRain}, darkClose=${config.autoCloseOnDark}`,
+        description: `rain=${config.rainThreshold}, light=${config.lightThreshold}, interval=${config.updateIntervalSec}s`,
+        timestamp: now,
+    });
+    appendLegacyEvent({
+        type: "SYSTEM",
+        action: "CONFIG_PUBLISH",
         timestamp: now,
     });
     mqttService.publish(CONFIG_TOPIC, {
         ...(targetDeviceId ? { deviceId: targetDeviceId } : {}),
         rainThreshold: config.rainThreshold,
         lightThreshold: config.lightThreshold,
+        updateIntervalSec: config.updateIntervalSec,
         autoCloseOnRain: config.autoCloseOnRain,
         autoCloseOnDark: config.autoCloseOnDark,
-        autoOpenWhenSafe: config.autoOpenWhenSafe
+        autoOpenWhenSafe: config.autoOpenWhenSafe,
     });
+    return true;
 }
 
 export function useSensor() {
@@ -1069,6 +1186,18 @@ export function useSensor() {
                 syncState: "FAILED",
                 syncMessage: "Sync failed (timeout)",
             };
+            appendSerialLog("CONFIG", "FAILED ack timeout > 5s", now, "WARN");
+            pushSystemEvent({
+                type: "CONFIG",
+                title: "Config sync failed",
+                description: "ACK timeout > 5s",
+                timestamp: now,
+            });
+            appendLegacyEvent({
+                type: "SYSTEM",
+                action: "CONFIG_FAILED",
+                timestamp: now,
+            });
             sharedState.configSentAt = null;
             notifyListeners();
         }
@@ -1110,6 +1239,11 @@ export function useSensor() {
         schedules,
         pendingManual: snapshot.pendingCommand === "CLOSE" ? "CLOSED" : snapshot.pendingCommand,
         currentHour: new Date(now).getHours(),
+        safetyConfig: {
+            lightThreshold: snapshot.deviceConfig.lightThreshold,
+            autoCloseOnRain: snapshot.deviceConfig.autoCloseOnRain,
+            autoCloseOnDark: snapshot.deviceConfig.autoCloseOnDark,
+        },
     });
 
     // Calculate device health and smart alerts
