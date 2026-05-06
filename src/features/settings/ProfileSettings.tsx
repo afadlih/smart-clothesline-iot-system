@@ -61,6 +61,32 @@ const defaultSettings: AppSettings = {
   autoOpenWhenSafe: false,
 };
 
+function getDeviceConfigDraft(settings: AppSettings) {
+  return {
+    rainThreshold: settings.rainThreshold,
+    lightThreshold: settings.lightThreshold,
+    updateIntervalSec: settings.updateIntervalSec,
+    autoCloseOnRain: settings.autoCloseOnRain,
+    autoCloseOnDark: settings.autoCloseOnDark,
+    autoOpenWhenSafe: settings.autoOpenWhenSafe,
+  };
+}
+
+function isSameDeviceConfig(a: AppSettings, b: AppSettings): boolean {
+  return (
+    a.rainThreshold === b.rainThreshold &&
+    a.lightThreshold === b.lightThreshold &&
+    a.updateIntervalSec === b.updateIntervalSec &&
+    a.autoCloseOnRain === b.autoCloseOnRain &&
+    a.autoCloseOnDark === b.autoCloseOnDark &&
+    a.autoOpenWhenSafe === b.autoOpenWhenSafe
+  );
+}
+
+function isSameSettings(a: AppSettings, b: AppSettings): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 const initialDevices: PairableDevice[] = [
   {
     id: "wokwi-default",
@@ -80,7 +106,7 @@ const defaultScheduleSummary: ScheduleSummary = {
 
 export default function SettingsScreen() {
   const searchParams = useSearchParams();
-  const { isOnline, publishConfig, deviceConfig, history } = useSensor();
+  const { isOnline, publishConfig, deviceConfig, history, sendCommand } = useSensor();
   const [activeTab, setActiveTab] = useState<TabId>("profile");
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [saveLabel, setSaveLabel] = useState("Save Changes");
@@ -91,6 +117,7 @@ export default function SettingsScreen() {
   const [scheduleSummary, setScheduleSummary] = useState<ScheduleSummary>(defaultScheduleSummary);
   const [scheduleFallback, setScheduleFallback] = useState(false);
   const [didHydrateSettings, setDidHydrateSettings] = useState(false);
+  const [lastSavedSettings, setLastSavedSettings] = useState<AppSettings | null>(null);
   const [didHydrateDeviceRef, setDidHydrateDeviceRef] = useState(false);
   const [cacheStats, setCacheStats] = useState({ history: 0, queue: 0, events: 0, total: 0, totalKB: 0 });
   const [lastCleared, setLastCleared] = useState<string | null>(null);
@@ -105,13 +132,14 @@ export default function SettingsScreen() {
   useEffect(() => {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (!raw) {
+      setLastSavedSettings(defaultSettings);
       setDidHydrateSettings(true);
       return;
     }
 
     try {
       const parsed = JSON.parse(raw) as Partial<AppSettings>;
-      setSettings({
+      const hydratedSettings = {
         profileName: parsed.profileName ?? defaultSettings.profileName,
         notification: {
           rain: parsed.notification?.rain ?? defaultSettings.notification.rain,
@@ -126,49 +154,16 @@ export default function SettingsScreen() {
         autoCloseOnDark: parsed.autoCloseOnDark ?? defaultSettings.autoCloseOnDark,
         updateIntervalSec: parsed.updateIntervalSec ?? defaultSettings.updateIntervalSec,
         autoOpenWhenSafe: parsed.autoOpenWhenSafe ?? defaultSettings.autoOpenWhenSafe
-      });
+      };
+      setSettings(hydratedSettings);
+      setLastSavedSettings(hydratedSettings);
     } catch {
       localStorage.removeItem(SETTINGS_STORAGE_KEY);
+      setLastSavedSettings(defaultSettings);
     }
 
     setDidHydrateSettings(true);
   }, []);
-
-  useEffect(() => {
-    if (!didHydrateSettings) {
-      return;
-    }
-
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-  }, [didHydrateSettings, settings]);
-
-  useEffect(() => {
-    if (!didHydrateSettings) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      publishConfig({
-        rainThreshold: settings.rainThreshold,
-        lightThreshold: settings.lightThreshold,
-        autoCloseOnRain: settings.autoCloseOnRain,
-        autoCloseOnDark: settings.autoCloseOnDark,
-        autoOpenWhenSafe: settings.autoOpenWhenSafe,
-      });
-    }, 400);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [
-    didHydrateSettings,
-    publishConfig,
-    settings.autoCloseOnDark,
-    settings.autoCloseOnRain,
-    settings.autoOpenWhenSafe,
-    settings.lightThreshold,
-    settings.rainThreshold,
-  ]);
 
   useEffect(() => {
     const loadScheduleSummary = async () => {
@@ -204,7 +199,7 @@ export default function SettingsScreen() {
           devices?: PairableDevice[];
           selectedDeviceId?: string | null;
         };
-  
+
         if (Array.isArray(parsed.devices)) {
           setDevices(
             parsed.devices.filter(
@@ -216,7 +211,7 @@ export default function SettingsScreen() {
             ),
           );
         }
-  
+
         if (typeof parsed.selectedDeviceId === "string" || parsed.selectedDeviceId === null) {
           setSelectedDeviceId(parsed.selectedDeviceId ?? null);
         }
@@ -305,15 +300,41 @@ export default function SettingsScreen() {
   }, []);
 
   const onSaveSettings = () => {
+    if (!didHydrateSettings || lastSavedSettings === null) {
+      return;
+    }
+
+    const hasSettingsChanges = !isSameSettings(settings, lastSavedSettings);
+    const hasConfigDraftChanges = !isSameDeviceConfig(settings, lastSavedSettings);
+
+    if (!hasSettingsChanges) {
+      setSaveLabel("No Changes");
+      window.setTimeout(() => {
+        setSaveLabel("Save Changes");
+      }, 1400);
+      return;
+    }
+
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-    setSaveLabel("Saved");
+    setLastSavedSettings(settings);
+
+    const configPublished = hasConfigDraftChanges ? publishConfig(getDeviceConfigDraft(settings)) : false;
+
+    setSaveLabel(hasConfigDraftChanges ? (configPublished ? "Saved & Sent" : "Saved Locally") : "Saved");
     window.setTimeout(() => {
       setSaveLabel("Save Changes");
     }, 1400);
   };
 
   const onRestartDevice = () => {
+    const confirmed = window.confirm("Restart active ESP32 device?");
+    if (!confirmed) {
+      return;
+    }
+
     setIsRestarting(true);
+    sendCommand("RESTART");
+
     window.setTimeout(() => {
       setIsRestarting(false);
     }, 1800);
@@ -352,8 +373,8 @@ export default function SettingsScreen() {
                 type="button"
                 onClick={() => setActiveTab(item.id)}
                 className={`flex items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium transition-all ${activeTab === item.id
-                    ? "bg-green-600 text-white shadow-md"
-                    : "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                  ? "bg-green-600 text-white shadow-md"
+                  : "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                   }`}
               >
                 {item.icon}
@@ -505,7 +526,7 @@ export default function SettingsScreen() {
                     updateIntervalSec: value,
                   }))
                 }
-                onAutoOpenWhenSafeChange={(value) => 
+                onAutoOpenWhenSafeChange={(value) =>
                   setSettings((prev) => ({
                     ...prev,
                     autoOpenWhenSafe: value

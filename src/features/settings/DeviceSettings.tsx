@@ -1,5 +1,6 @@
 import React from 'react';
 import { Cpu, Wifi, RefreshCw } from 'lucide-react';
+import { useSystemState } from "@/hooks/useSystemState";
 
 type DeviceSettingsProps = {
   connectionStatus: 'ONLINE' | 'OFFLINE';
