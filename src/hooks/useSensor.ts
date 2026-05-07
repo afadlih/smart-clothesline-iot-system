@@ -419,45 +419,34 @@ export function getActiveDeviceId(): string | null {
 }
 
 function shouldAcceptSensorPayload(payload: MqttSensorPayload): boolean {
-    const activeDeviceId = getActiveDeviceId();
-
-    if (!activeDeviceId) {
-        return true;
-    }
-
-    if (activeDeviceId === WOKWI_DEVICE_ID) {
-        return !payload.deviceId || payload.deviceId === WOKWI_DEVICE_ID;
-    }
-
-    return payload.deviceId === activeDeviceId;
+    return shouldAcceptDevicePayload(payload.deviceId);
 }
 
 function shouldAcceptStatusPayload(payload: MqttDeviceStatusPayload): boolean {
-    const activeDeviceId = getActiveDeviceId();
-
-    if (!activeDeviceId) {
-        return true;
-    }
-
-    if (activeDeviceId === WOKWI_DEVICE_ID) {
-        return !payload.deviceId || payload.deviceId === WOKWI_DEVICE_ID;
-    }
-
-    return payload.deviceId === activeDeviceId;
+    return shouldAcceptDevicePayload(payload.deviceId);
 }
 
 function shouldAcceptConfigAckPayload(payload: MqttConfigAckPayload): boolean {
+    return shouldAcceptDevicePayload(payload.deviceId);
+}
+
+function shouldAcceptDevicePayload(payloadDeviceId?: string): boolean {
     const activeDeviceId = getActiveDeviceId();
 
     if (!activeDeviceId) {
         return true;
     }
 
-    if (activeDeviceId === WOKWI_DEVICE_ID) {
-        return !payload.deviceId || payload.deviceId === WOKWI_DEVICE_ID;
+    // Allow legacy payloads without deviceId so production streams are not blocked.
+    if (!payloadDeviceId) {
+        return true;
     }
 
-    return payload.deviceId === activeDeviceId;
+    if (activeDeviceId === WOKWI_DEVICE_ID) {
+        return payloadDeviceId === WOKWI_DEVICE_ID;
+    }
+
+    return payloadDeviceId === activeDeviceId;
 }
 
 function applyConfigAckPayload(payload: MqttConfigAckPayload, receivedAt: number): void {
