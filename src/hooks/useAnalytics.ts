@@ -1,9 +1,10 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { SensorAnalytics, DailyStats, HourlyBreakdown, Trend } from "@/services/SensorAnalytics";
 import { DeviceHealthService, type DeviceHealth, type DeviceHealthOptions } from "@/services/DeviceHealthService";
 import { SmartAlertsService, type SmartAlert } from "@/services/SmartAlertsService";
 import type { SensorHistoryItem } from "@/hooks/useSensor";
 import type { ConnectionSnapshot } from "@/hooks/useSensor";
+import { useAnalyticsStore } from "@/stores/analyticsStore";
 
 export type AnalyticsSnapshot = {
   dailyStats: DailyStats;
@@ -13,6 +14,11 @@ export type AnalyticsSnapshot = {
   clothesDryEstimate: boolean;
   deviceHealth: DeviceHealth;
   smartAlerts: SmartAlert[];
+  dataSufficiency: {
+    hasMinimumTelemetry: boolean;
+    hasOperationalPattern: boolean;
+    canEstimateDryingEfficiency: boolean;
+  };
   loading: boolean;
 };
 
@@ -21,6 +27,10 @@ export function useAnalytics(
   connection: ConnectionSnapshot,
   healthOptions?: DeviceHealthOptions,
 ) {
+  const setLoading = useAnalyticsStore((state) => state.setLoading);
+  const setSufficiency = useAnalyticsStore((state) => state.setSufficiency);
+  const setComputedAt = useAnalyticsStore((state) => state.setComputedAt);
+
   const snapshot = useMemo<AnalyticsSnapshot>(() => {
     if (!historyData || historyData.length === 0) {
       return {
@@ -58,6 +68,11 @@ export function useAnalytics(
           status: "critical",
         },
         smartAlerts: [],
+        dataSufficiency: {
+          hasMinimumTelemetry: false,
+          hasOperationalPattern: false,
+          canEstimateDryingEfficiency: false,
+        },
         loading: true,
       };
     }
@@ -66,11 +81,28 @@ export function useAnalytics(
     const sensorData = historyData.map((item) => item.data);
 
     // Calculate analytics
-    const dailyStats = SensorAnalytics.calculateDailyStats(sensorData);
-    const hourlyBreakdown = SensorAnalytics.getHourlyBreakdown(sensorData);
-    const temperatureTrend = SensorAnalytics.getTrendAnalysis(sensorData, "temperature");
-    const humidityTrend = SensorAnalytics.getTrendAnalysis(sensorData, "humidity");
-    const clothesDryEstimate = SensorAnalytics.detectClothesDryState(sensorData);
+    const validSensorData = sensorData.filter(
+      (item) =>
+        Number.isFinite(item.temperature) &&
+        Number.isFinite(item.humidity) &&
+        Number.isFinite(item.light) &&
+        Number.isFinite(new Date(item.timestamp).getTime()),
+    );
+    const hasMinimumTelemetry = validSensorData.length >= 2;
+    const hasOperationalPattern = validSensorData.length >= 24;
+    const canEstimateDryingEfficiency = validSensorData.length >= 48;
+
+    const dailyStats = SensorAnalytics.calculateDailyStats(validSensorData);
+    const hourlyBreakdown = SensorAnalytics.getHourlyBreakdown(validSensorData);
+    const temperatureTrend = hasMinimumTelemetry
+      ? SensorAnalytics.getTrendAnalysis(validSensorData, "temperature")
+      : "stable";
+    const humidityTrend = hasMinimumTelemetry
+      ? SensorAnalytics.getTrendAnalysis(validSensorData, "humidity")
+      : "stable";
+    const clothesDryEstimate = canEstimateDryingEfficiency
+      ? SensorAnalytics.detectClothesDryState(validSensorData)
+      : false;
 
     // Calculate device health
     const deviceHealth = DeviceHealthService.calculateHealth(
@@ -80,7 +112,7 @@ export function useAnalytics(
     );
 
     // Generate smart alerts
-    const smartAlerts = SmartAlertsService.generateAllAlerts(sensorData, deviceHealth);
+    const smartAlerts = SmartAlertsService.generateAllAlerts(validSensorData, deviceHealth);
 
     return {
       dailyStats,
@@ -90,9 +122,22 @@ export function useAnalytics(
       clothesDryEstimate,
       deviceHealth,
       smartAlerts,
+      dataSufficiency: {
+        hasMinimumTelemetry,
+        hasOperationalPattern,
+        canEstimateDryingEfficiency,
+      },
       loading: false,
     };
   }, [historyData, connection, healthOptions]);
+
+  useEffect(() => {
+    setLoading(snapshot.loading);
+    setSufficiency(snapshot.dataSufficiency.hasMinimumTelemetry);
+    if (!snapshot.loading) {
+      setComputedAt(Date.now());
+    }
+  }, [setComputedAt, setLoading, setSufficiency, snapshot.dataSufficiency.hasMinimumTelemetry, snapshot.loading]);
 
   return snapshot;
 }

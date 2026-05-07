@@ -42,7 +42,7 @@ export default function AnalyticsPage() {
     );
   }
 
-  const { dailyStats, hourlyBreakdown, deviceHealth, smartAlerts } = analytics;
+  const { dailyStats, hourlyBreakdown, deviceHealth, smartAlerts, dataSufficiency } = analytics;
 
   // Download sensor data as CSV
   const handleExportCSV = () => {
@@ -89,6 +89,13 @@ export default function AnalyticsPage() {
   };
 
   const filteredData = getFilteredData();
+  const rainRatio = dailyStats.dataPoints > 0 ? (dailyStats.rainEvents / dailyStats.dataPoints) * 100 : 0;
+  const dryingEfficiency = dataSufficiency.canEstimateDryingEfficiency
+    ? Math.max(0, Math.min(100, 100 - rainRatio))
+    : null;
+  const dominantWeather = dataSufficiency.hasOperationalPattern
+    ? rainRatio > 45 ? "Rain-dominant" : rainRatio > 20 ? "Mixed weather" : "Dry-dominant"
+    : "Collecting operational patterns";
 
   return (
     <main className="bg-gray-100 min-h-screen p-6">
@@ -96,21 +103,21 @@ export default function AnalyticsPage() {
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900">Analytics Dashboard</h1>
-            <p className="text-gray-600 mt-2">Detailed sensor insights and device health</p>
+            <h1 className="text-4xl font-bold text-gray-900">Operational Insights</h1>
+            <p className="text-gray-600 mt-2">Readable trends for drying performance and device activity</p>
           </div>
           <div className="flex gap-2 flex-wrap">
             <button
               onClick={handleExportCSV}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
             >
-              📥 Export CSV
+              Export CSV
             </button>
             <button
               onClick={handleExportJSON}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
             >
-              📥 Export JSON
+              Export JSON
             </button>
           </div>
         </div>
@@ -168,11 +175,11 @@ export default function AnalyticsPage() {
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="text-sm font-semibold text-gray-500 uppercase">Temperature</h3>
             <p className="text-3xl font-bold text-red-600 mt-2">
-              {dailyStats.temperature.avg.toFixed(1)}°C
+              {dailyStats.temperature.avg.toFixed(1)} C
             </p>
             <p className="text-sm text-gray-600 mt-2">
-              Min: {dailyStats.temperature.min.toFixed(1)}° / Max:{" "}
-              {dailyStats.temperature.max.toFixed(1)}°
+              Min: {dailyStats.temperature.min.toFixed(1)} C / Max:{" "}
+              {dailyStats.temperature.max.toFixed(1)} C
             </p>
           </div>
 
@@ -212,6 +219,33 @@ export default function AnalyticsPage() {
               {deviceHealth.healthScore}%
             </p>
             <p className="text-sm text-gray-600 mt-2 capitalize">{deviceHealth.status}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Best Drying Period</p>
+            <p className="mt-2 text-sm font-bold text-slate-900">
+              {dailyStats.temperature.avg > 27 && dailyStats.humidity.avg < 75 ? "Favorable" : "Moderate"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rain Frequency</p>
+            <p className="mt-2 text-sm font-bold text-slate-900">{dataSufficiency.hasOperationalPattern ? `${rainRatio.toFixed(1)}%` : "Insufficient telemetry history"}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Dominant Weather</p>
+            <p className="mt-2 text-sm font-bold text-slate-900">{dominantWeather}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Device Activity Trend</p>
+            <p className="mt-2 text-sm font-bold text-slate-900">
+              {dailyStats.dataPoints > 150 ? "High activity" : dailyStats.dataPoints > 60 ? "Stable" : "Low activity"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Drying Efficiency</p>
+            <p className="mt-2 text-sm font-bold text-slate-900">{dryingEfficiency === null ? "Waiting for telemetry stream" : `${dryingEfficiency.toFixed(0)}%`}</p>
           </div>
         </div>
 

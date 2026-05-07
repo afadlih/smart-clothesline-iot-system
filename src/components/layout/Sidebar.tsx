@@ -6,8 +6,10 @@ import { usePathname } from 'next/navigation';
 import {
   Home,
   Activity,
+  Bot,
   Clock,
-  Calendar,
+  Bell,
+  Cpu,
   Settings,
   BarChart3,
   ChevronRight,
@@ -63,24 +65,34 @@ export default function Sidebar({
       href: '/sensor',
     },
     {
+      label: 'Automation',
+      icon: <Bot className="w-5 h-5" />,
+      href: '/automation',
+    },
+    {
       label: 'History',
       icon: <Clock className="w-5 h-5" />,
       href: '/history',
     },
     {
-      label: 'Schedule',
-      icon: <Calendar className="w-5 h-5" />,
-      href: '/schedule',
+      label: 'Analytics',
+      icon: <BarChart3 className="w-5 h-5" />,
+      href: '/analytics',
+    },
+    {
+      label: 'Notifications',
+      icon: <Bell className="w-5 h-5" />,
+      href: '/notifications',
+    },
+    {
+      label: 'IoT Hub',
+      icon: <Cpu className="w-5 h-5" />,
+      href: '/iot-hub',
     },
     {
       label: 'Settings',
       icon: <Settings className="w-5 h-5" />,
       href: '/settings',
-    },
-    {
-      label: 'Analytics',
-      icon: <BarChart3 className="w-5 h-5" />,
-      href: '/analytics',
     },
   ];
 
@@ -98,7 +110,7 @@ export default function Sidebar({
       <aside
         className={`
           hidden md:flex md:flex-col
-          bg-slate-900 text-white
+          border-r border-slate-800/80 bg-slate-950 text-white
           sticky top-0 h-screen
           transition-all duration-300 ease-in-out
           z-40
@@ -107,10 +119,10 @@ export default function Sidebar({
         `}
       >
         {/* Sidebar Header with Logo */}
-        <div className="flex items-center justify-between px-4 py-4 border-b border-slate-700">
+        <div className="flex items-center justify-between border-b border-slate-800 px-4 py-4">
           {!isCollapsed && (
             <div className="flex items-center gap-2 min-w-0">
-              <div className="flex-shrink-0 w-8 h-8 rounded bg-green-600 flex items-center justify-center">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-500/90 shadow-[0_0_18px_rgba(16,185,129,0.35)]">
                 <span className="text-white font-bold text-sm">SC</span>
               </div>
               <span className="text-sm font-semibold truncate">Smart Clothesline</span>
@@ -118,7 +130,7 @@ export default function Sidebar({
           )}
           {isCollapsed && (
             <div className="w-full flex justify-center">
-              <div className="flex-shrink-0 w-8 h-8 rounded bg-green-600 flex items-center justify-center">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-500/90 shadow-[0_0_18px_rgba(16,185,129,0.35)]">
                 <span className="text-white font-bold text-xs">SC</span>
               </div>
             </div>
@@ -126,7 +138,7 @@ export default function Sidebar({
         </div>
 
         {/* Menu Items */}
-        <nav className="flex-1 px-2 py-6 space-y-2 overflow-y-auto">
+        <nav className="flex-1 space-y-1.5 overflow-y-auto px-2 py-5">
           {menuItems.map((item) => {
             const active = isActive(item.href);
             return (
@@ -139,8 +151,8 @@ export default function Sidebar({
                     transition-all duration-300 ease-in-out
                     ${
                       active
-                        ? 'bg-green-600 text-white shadow-lg'
-                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                        ? 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/30 shadow-sm'
+                        : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
                     }
                     ${isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5'}
                   `}
@@ -177,12 +189,12 @@ export default function Sidebar({
         </nav>
 
         {/* Collapse Toggle Button - Desktop only */}
-        <div className="border-t border-slate-700 px-2 py-4">
+        <div className="border-t border-slate-800 px-2 py-4">
           <button
             onClick={onToggleCollapse}
             className={`
               w-full flex items-center justify-center p-2 rounded-lg
-              text-slate-300 hover:bg-slate-800 hover:text-white
+              text-slate-300 hover:bg-slate-800/80 hover:text-white
               transition-all duration-300 ease-in-out
             `}
             title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -201,7 +213,7 @@ export default function Sidebar({
         className={`
           md:hidden fixed top-16 bottom-0 left-0
           flex flex-col
-          bg-slate-900 text-white
+          border-r border-slate-800 bg-slate-950 text-white
           w-[min(15rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)]
           z-40
           transform transition-transform duration-300 ease-in-out
@@ -210,9 +222,9 @@ export default function Sidebar({
         `}
       >
         {/* Mobile menu header */}
-        <div className="flex items-center justify-between px-4 py-4 border-b border-slate-700">
+        <div className="flex items-center justify-between border-b border-slate-800 px-4 py-4">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="flex-shrink-0 w-8 h-8 rounded bg-green-600 flex items-center justify-center">
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-500/90 shadow-[0_0_18px_rgba(16,185,129,0.35)]">
               <span className="text-white font-bold text-sm">SC</span>
             </div>
             <span className="truncate text-sm font-semibold">Smart Clothesline</span>
@@ -241,8 +253,8 @@ export default function Sidebar({
                     transition-all duration-300 ease-in-out
                     ${
                       active
-                        ? 'bg-green-600 text-white shadow-lg'
-                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                        ? 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/30 shadow-sm'
+                        : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
                     }
                   `}
                 >
