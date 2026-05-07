@@ -166,6 +166,7 @@ const CONFIG_PUBLISH_INTERVAL_MS = 5_000;
 const FRESHNESS_MS = 10_000;
 const STATUS_DEBOUNCE_MS = 1_000;
 const OFFLINE_ALERT_INTERVAL_MS = 10_000;
+const TELEGRAM_ALERT_COOLDOWN_MS = 30_000;
 const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
 const WOKWI_DEVICE_ID = "wokwi-default";
 
@@ -235,6 +236,7 @@ let previousDeviceStatus: DeviceStatus | null = null;
 let offlineAlertRaised = false;
 let lastConfigPublishAt = 0;
 let lastConfigPublishKey: string | null = null;
+const lastTelegramAlertAtByKey: Record<string, number> = {};
 
 function toInternalStatus(status: DeviceStatus | null): "OPEN" | "CLOSED" {
     return status === "OPEN" ? "OPEN" : "CLOSED";
@@ -658,6 +660,34 @@ function pushAlertIfNeeded(title: string, description: string, key: string, time
         { alertKey: key },
     );
     appendSerialLog("ALERT", `${title} - ${description}`, timestamp, "WARN");
+    void sendTelegramAlert(title, description, key, timestamp);
+}
+
+async function sendTelegramAlert(title: string, description: string, alertKey: string, timestamp: number): Promise<void> {
+    const now = Date.now();
+    const lastSentAt = lastTelegramAlertAtByKey[alertKey] ?? 0;
+    if (now - lastSentAt < TELEGRAM_ALERT_COOLDOWN_MS) {
+        return;
+    }
+
+    lastTelegramAlertAtByKey[alertKey] = now;
+    try {
+        await fetch("/api/telegram/notify", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                title,
+                description,
+                severity: "warning",
+                alertKey,
+                timestamp,
+            }),
+        });
+    } catch (error) {
+        console.warn("[Telegram] Failed to send alert notification:", error);
+    }
 }
 
 function detectRealtimeAlerts(sensor: SensorData | null, status: DeviceStatus | null, timestamp: number): void {
