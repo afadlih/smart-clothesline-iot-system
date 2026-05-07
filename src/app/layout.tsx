@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import MainLayout from "@/components/layout/MainLayout";
+import ThemeInitializer from "@/components/layout/ThemeInitializer";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -28,7 +29,8 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="m-0 h-full w-full bg-gray-50 text-gray-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
+      <body className="m-0 h-full w-full bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors duration-300">
+        <ThemeInitializer />
         <MainLayout>{children}</MainLayout>
       </body>
     </html>
