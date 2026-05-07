@@ -63,6 +63,7 @@ Run these before committing:
 
 ```bash
 npm run lint
+npm run typecheck
 npm run build
 ```
 
@@ -70,3 +71,5 @@ npm run build
 
 - Restart the dev server after changing environment values.
 - If Firestore index errors appear, update `firestore.indexes.json` and sync it to Firebase.
+- Follow branch and release flow in `DEVELOPMENT_WORKFLOW.md`.
+- Use `DEPLOYMENT.md` as the production release checklist.

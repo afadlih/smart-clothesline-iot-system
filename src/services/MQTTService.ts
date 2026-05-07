@@ -1,12 +1,13 @@
 import mqtt, { type MqttClient } from "mqtt";
 import { SensorValidator, ValidationError } from "./ValidationService";
+import { logger } from "@/lib/logger";
 
-export const MQTT_BROKER_URL = "wss://ba30f548c6ba4db2a6eae072d0a0ab18.s1.eu.hivemq.cloud:8884/mqtt";
-const MQTT_USER = "fabiqnn";
-const MQTT_PASS = "WmGgym2vPTa7dR.";
-export const SENSOR_TOPIC = "smart-clothesline/sensor";
-export const STATUS_TOPIC = "smart-clothesline/status";
-export const COMMAND_TOPIC = "smart-clothesline/command";
+export const MQTT_BROKER_URL = process.env.NEXT_PUBLIC_MQTT_BROKER_URL ?? "wss://broker.hivemq.com:8884/mqtt";
+const MQTT_USER = process.env.NEXT_PUBLIC_MQTT_USERNAME;
+const MQTT_PASS = process.env.NEXT_PUBLIC_MQTT_PASSWORD;
+export const SENSOR_TOPIC = process.env.NEXT_PUBLIC_MQTT_TOPIC_SENSOR ?? "smart-clothesline/sensor";
+export const STATUS_TOPIC = process.env.NEXT_PUBLIC_MQTT_TOPIC_STATUS ?? "smart-clothesline/status";
+export const COMMAND_TOPIC = process.env.NEXT_PUBLIC_MQTT_TOPIC_COMMAND ?? "smart-clothesline/command";
 export const CONFIG_TOPIC = "smart-clothesline/config";
 export const CONFIG_ACK_TOPIC = "smart-clothesline/config/ack";
 export const PAIRING_DISCOVERY_TOPIC = "smart-clothesline/pairing/discovery";
@@ -82,7 +83,7 @@ class RetryStrategy {
     const timeoutId = setTimeout(callback, delay);
     this.retryTimeoutId = timeoutId;
 
-    console.info("[MQTT][RETRY]", {
+    logger.warn("mqtt", "Reconnect retry scheduled", {
       attempt: this.retryCount + 1,
       maxRetries: this.maxRetries,
       delayMs: delay,
@@ -142,12 +143,12 @@ class MqttService {
         if (validationError instanceof ValidationError) {
           SensorValidator.logValidationError(validationError);
         } else {
-          console.warn("[MQTT] Validation error:", validationError);
+          logger.warn("mqtt", "Validation error", validationError);
         }
         return null;
       }
     } catch (error) {
-      console.warn("[MQTT] Failed to parse sensor message:", error);
+      logger.warn("mqtt", "Failed to parse sensor message", error);
       return null;
     }
   }
@@ -177,7 +178,7 @@ class MqttService {
     }
 
     if (this.retryStrategy.isMaxRetriesExceeded()) {
-      console.error("[MQTT] Max retries exceeded, giving up");
+      logger.error("mqtt", "Max retries exceeded, giving up");
       this.setConnection({
         state: "error",
         isOnline: false,
@@ -187,8 +188,8 @@ class MqttService {
     }
 
     this.client = mqtt.connect(MQTT_BROKER_URL, {
-      username: MQTT_USER,
-      password: MQTT_PASS,
+      ...(MQTT_USER ? { username: MQTT_USER } : {}),
+      ...(MQTT_PASS ? { password: MQTT_PASS } : {}),
       reconnectPeriod: 0, // Disable auto-reconnect, we handle it manually
       connectTimeout: 10000,
       clean: true,
@@ -199,33 +200,33 @@ class MqttService {
       this.retryStrategy.reset();
       this.client?.subscribe([SENSOR_TOPIC, STATUS_TOPIC, CONFIG_TOPIC, CONFIG_ACK_TOPIC, PAIRING_DISCOVERY_TOPIC], (error) => {
         if (error) {
-          console.error("[MQTT] Failed to subscribe:", error.message);
+          logger.error("mqtt", "Failed to subscribe", error.message);
         }
       });
       this.setConnection({ state: "online", isOnline: true, lastError: null });
-      console.info("[MQTT] Connected successfully");
+      logger.info("mqtt", "Connected successfully");
     });
 
     this.client.on("reconnect", () => {
-      console.info("[MQTT] Reconnecting...");
+      logger.warn("mqtt", "Reconnecting...");
       this.setConnection({ state: "reconnecting", isOnline: false });
     });
 
     this.client.on("offline", () => {
-      console.warn("[MQTT] Connection offline");
+      logger.warn("mqtt", "Connection offline");
       this.setConnection({ state: "offline", isOnline: false });
       this.scheduleReconnect();
     });
 
     this.client.on("close", () => {
-      console.warn("[MQTT] Connection closed");
+      logger.warn("mqtt", "Connection closed");
       this.setConnection({ state: "offline", isOnline: false });
       this.scheduleReconnect();
     });
 
     this.client.on("message", (topic, payload) => {
       const raw = payload.toString();
-      console.info(`[MQTT][RECV][${topic}]: ${raw}`);
+      logger.debug("mqtt", `Message received on ${topic}`, raw);
 
       for (const callback of this.subscribers) {
         callback(topic, raw);
@@ -250,7 +251,7 @@ class MqttService {
     });
 
     this.client.on("error", (error) => {
-      console.error("[MQTT] Connection error:", error.message);
+      logger.error("mqtt", "Connection error", error.message);
       this.setConnection({ state: "error", isOnline: false, lastError: error.message });
       this.scheduleReconnect();
     });

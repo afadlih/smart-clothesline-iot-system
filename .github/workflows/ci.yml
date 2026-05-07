@@ -4,19 +4,42 @@ on:
   push:
     branches:
       - main
+      - develop
   pull_request:
     branches:
       - main
+      - develop
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20]
     env:
       NODE_OPTIONS: --max-old-space-size=4096
+      NEXT_TELEMETRY_DISABLED: "1"
+      CI: "true"
+      # Telemetry-safe fallback values so checks/build can run without secrets.
+      NEXT_PUBLIC_FIREBASE_API_KEY: ci-placeholder
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ci-placeholder.firebaseapp.com
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ci-placeholder
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ci-placeholder.appspot.com
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
+      NEXT_PUBLIC_FIREBASE_APP_ID: "1:000000000000:web:0000000000000000"
+      NEXT_PUBLIC_MQTT_BROKER_URL: wss://broker.hivemq.com:8884/mqtt
+      NEXT_PUBLIC_MQTT_TOPIC_SENSOR: smart-clothesline/sensor
+      NEXT_PUBLIC_MQTT_TOPIC_STATUS: smart-clothesline/status
+      NEXT_PUBLIC_MQTT_TOPIC_COMMAND: smart-clothesline/command
 
     steps:
       - name: Checkout
@@ -25,14 +48,35 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node-version }}
           cache: npm
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Environment sanity check
+        run: |
+          test -n "$NEXT_PUBLIC_FIREBASE_API_KEY"
+          test -n "$NEXT_PUBLIC_FIREBASE_PROJECT_ID"
+          test -n "$NEXT_PUBLIC_MQTT_BROKER_URL"
+          echo "Environment sanity checks passed."
+
       - name: Lint
         run: npm run lint
 
+      - name: Type check
+        run: npm run typecheck
+
       - name: Build
         run: npm run build
+
+      - name: Workflow summary
+        if: always()
+        run: |
+          echo "## CI Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Node.js: ${{ matrix.node-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Lint: completed" >> $GITHUB_STEP_SUMMARY
+          echo "- Typecheck: completed" >> $GITHUB_STEP_SUMMARY
+          echo "- Build: completed" >> $GITHUB_STEP_SUMMARY

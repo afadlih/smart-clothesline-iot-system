@@ -35,6 +35,20 @@ Smart Clothesline IoT System is a Next.js App Router dashboard for realtime clot
 - Zod
 - Zustand
 
+## Architecture
+
+Core application flow:
+
+`Model -> Service -> Hook -> API -> UI`
+
+Realtime data flow:
+
+`ESP32 -> MQTT -> Firestore -> Dashboard -> Telegram`
+
+Future data path (prepared):
+
+`MQTT -> Stream Layer -> Data Lake -> Hadoop/Spark`
+
 ## Setup
 
 1. Install dependencies:
@@ -78,11 +92,20 @@ NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
 NEXT_PUBLIC_FIREBASE_APP_ID=
 NEXT_PUBLIC_MQTT_BROKER_URL=wss://broker.hivemq.com:8884/mqtt
+NEXT_PUBLIC_MQTT_USERNAME=
+NEXT_PUBLIC_MQTT_PASSWORD=
 NEXT_PUBLIC_MQTT_TOPIC_SENSOR=smart-clothesline/sensor
+NEXT_PUBLIC_MQTT_TOPIC_STATUS=smart-clothesline/status
 NEXT_PUBLIC_MQTT_TOPIC_COMMAND=smart-clothesline/command
 ```
 
 Restart the dev server after changing environment variables.
+
+## Branching and Delivery
+
+- See `DEVELOPMENT_WORKFLOW.md` for branch strategy (`main`, `develop`, `feature/*`, `fix/*`, `hotfix/*`).
+- See `BRANCHING_STRATEGY.md` for merge rules and release branch flow (`release/*`).
+- See `DEPLOYMENT.md` for production deployment checklist and Vercel setup.
 
 ## Telegram Integration
 
@@ -93,7 +116,7 @@ Restart the dev server after changing environment variables.
   - `POST /api/telegram/setup`
   - `POST /api/telegram/webhook`
 - Supported commands:
-  - `/start`, `/status`, `/open`, `/close`, `/mode_auto`, `/mode_manual`, `/latest`, `/health`, `/alerts`
+  - `/start`, `/status`, `/open`, `/close`, `/mode_auto`, `/mode_manual`, `/latest`, `/health`, `/alerts`, `/help`, `/restart`, `/override`, `/debug`
 
 ## Firestore Notes
 
@@ -110,4 +133,11 @@ npm run build
 
 ## CI
 
-The repository includes `.github/workflows/ci.yml` with lint and build checks on `main` and pull requests.
+The repository includes `.github/workflows/ci.yml` with:
+
+- lint validation
+- TypeScript typecheck
+- production build validation
+- dependency cache
+- concurrency protection
+- workflow summary output

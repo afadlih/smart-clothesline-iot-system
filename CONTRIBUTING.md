@@ -48,6 +48,7 @@ Run these checks before submitting changes:
 
 ```bash
 npm run lint
+npm run typecheck
 npm run build
 ```
 
@@ -56,6 +57,10 @@ npm run build
 - Describe what changed and why.
 - Mention any Firestore index or environment changes.
 - Include screenshots only when UI changes are involved.
+- Target branch:
+  - `develop` for normal work
+  - `main` only for release/hotfix flows
+ - Follow `BRANCHING_STRATEGY.md` for release and hotfix path.
 
 ## Notes
 
