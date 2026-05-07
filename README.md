@@ -1,67 +1,74 @@
 # Smart Clothesline IoT System
 
-A Next.js IoT dashboard for monitoring and controlling a smart clothesline system in real time.
+Smart Clothesline IoT System is a Next.js App Router dashboard for realtime clothesline monitoring, automation, history, analytics, and Telegram-based operations.
 
-## Overview
+## What It Includes
 
-Key capabilities:
+- Realtime dashboard for clothesline state, alerts, and operational summary
+- Sensor monitoring with MQTT telemetry and heartbeat tracking
+- Automation center for schedules, thresholds, and safety behavior
+- History and analytics views for historical review and trends
+- Notifications center with Telegram command and audit logs
+- IoT Hub for pairing, device health, sync, and diagnostics
 
-- Realtime sensor monitoring (temperature, humidity, light, rain)
-- Device control (`OPEN`, `CLOSE`, `AUTO`) over MQTT
-- Firestore persistence for telemetry and schedule state
-- Dashboard decision flow with schedule + safety + manual priority
-- Analytics and history views for operational review
+## Key Routes
 
-## Main Features
-
-- `/dashboard`: live status, decision source, schedule active indicator, alerts
-- `/sensor`: realtime telemetry cards, serial stream, health/debug context
-- `/history`: daily summaries, filters, charts, detailed reading timeline
-- `/analytics`: trends, health score, alerts, export
-- `/schedule`: Firestore-backed schedule CRUD (single source of truth)
-- `/settings`: profile/device/notification/pairing/data management + schedule summary
-
-## Schedule Architecture
-
-- Firestore is the authoritative source for schedules (`schedules` collection).
-- `system_settings/global` is used for schedule-related override flags.
-- Local storage is only used as a read-only fallback cache if Firestore is unavailable.
-- One-time legacy local-schedule migration is handled automatically in the client.
+- `/dashboard` - operational summary and live state
+- `/sensor` - realtime telemetry and stream health
+- `/automation` - schedules, thresholds, and automation rules
+- `/history` - historical readings and dominant status view
+- `/analytics` - operational insights and trend charts
+- `/notifications` - Telegram integration and notifications
+- `/iot-hub` - device management and connectivity
+- `/schedule` - schedule management
+- `/settings` - profile and workspace preferences
 
 ## Tech Stack
 
-- Next.js 14 (App Router), React 18, TypeScript
+- Next.js 14 App Router
+- TypeScript
 - Tailwind CSS
-- MQTT (`mqtt`)
 - Firebase Firestore
+- MQTT
+- Telegram Bot API
 - Recharts
 - Zod
+- Zustand
 
-## Local Development
+## Setup
 
-Requirements:
-
-- Node.js 20+
-- npm
-
-Install and run:
+1. Install dependencies:
 
 ```bash
 npm install
-npm run dev
 ```
 
-Production checks:
+2. Create your local environment file:
 
 ```bash
-npm run lint
-npm run build
-npm run start
+cp .env.local.example .env.local
+```
+
+3. Fill the required values in `.env.local`.
+
+4. Start the app:
+
+```bash
+npm run dev
 ```
 
 ## Environment Variables
 
-Configure Firebase via `NEXT_PUBLIC_*` values:
+Secret server-side values:
+
+```env
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+TELEGRAM_ALLOWED_USER_IDS=6393706909
+TELEGRAM_WEBHOOK_SECRET=
+```
+
+Public client-safe values:
 
 ```env
 NEXT_PUBLIC_FIREBASE_API_KEY=
@@ -70,28 +77,37 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
 NEXT_PUBLIC_FIREBASE_APP_ID=
+NEXT_PUBLIC_MQTT_BROKER_URL=wss://broker.hivemq.com:8884/mqtt
+NEXT_PUBLIC_MQTT_TOPIC_SENSOR=smart-clothesline/sensor
+NEXT_PUBLIC_MQTT_TOPIC_COMMAND=smart-clothesline/command
 ```
 
-## MQTT Defaults
+Restart the dev server after changing environment variables.
 
-- Broker: `wss://broker.hivemq.com:8884/mqtt`
-- Sensor topic: `smart-clothesline/sensor`
-- Status topic: `smart-clothesline/status`
-- Command topic: `smart-clothesline/command`
-- Config topic: `smart-clothesline/config`
+## Telegram Integration
+
+- Polling runs through a server-side singleton to avoid duplicate instances during Next.js hot reload.
+- API routes:
+  - `GET /api/telegram/polling`
+  - `GET /api/telegram/setup`
+  - `POST /api/telegram/setup`
+  - `POST /api/telegram/webhook`
+- Supported commands:
+  - `/start`, `/status`, `/open`, `/close`, `/mode_auto`, `/mode_manual`, `/latest`, `/health`, `/alerts`
+
+## Firestore Notes
+
+- Schedules are stored in Firestore as the source of truth.
+- Telegram command and audit data use Firestore-backed collections.
+- Composite indexes are defined in `firestore.indexes.json`.
+
+## Production Checks
+
+```bash
+npm run lint
+npm run build
+```
 
 ## CI
 
-Workflow file: `.github/workflows/ci.yml`
-
-Pipeline steps:
-
-1. `npm ci --no-audit --no-fund`
-2. `npm run lint`
-3. `npm run build`
-
-Triggers:
-
-- `push` to `main`
-- `pull_request` to `main`
-- `workflow_dispatch`
+The repository includes `.github/workflows/ci.yml` with lint and build checks on `main` and pull requests.
