@@ -38,7 +38,6 @@ jobs:
       NEXT_PUBLIC_FIREBASE_APP_ID: "1:000000000000:web:0000000000000000"
       NEXT_PUBLIC_MQTT_BROKER_URL: wss://broker.hivemq.com:8884/mqtt
       NEXT_PUBLIC_MQTT_TOPIC_SENSOR: smart-clothesline/sensor
-      NEXT_PUBLIC_MQTT_TOPIC_STATUS: smart-clothesline/status
       NEXT_PUBLIC_MQTT_TOPIC_COMMAND: smart-clothesline/command
 
     steps:
