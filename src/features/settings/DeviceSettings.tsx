@@ -1,4 +1,6 @@
+import React from 'react';
 import { Cpu, Wifi, RefreshCw } from 'lucide-react';
+import { useSystemState } from "@/hooks/useSystemState";
 
 type DeviceSettingsProps = {
   connectionStatus: 'ONLINE' | 'OFFLINE';
@@ -46,8 +48,6 @@ export default function DeviceSettings({
   onRestart,
 }: DeviceSettingsProps) {
   const isOnline = connectionStatus === 'ONLINE';
-  const rainSensitivity = rainThreshold < 1400 ? "High" : rainThreshold < 2600 ? "Medium" : "Low";
-  const lightSensitivity = lightThreshold < 1600 ? "High" : lightThreshold < 2800 ? "Medium" : "Low";
   const syncClass =
     configSyncState === 'SYNCED'
       ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
@@ -98,12 +98,11 @@ export default function DeviceSettings({
               </p>
             </div>
 
-            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+            <div>
               <div className="mb-1 flex justify-between">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Rain Sensitivity</label>
-                <span className="text-sm font-bold text-green-600 dark:text-green-300">{rainSensitivity}</span>
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Rain Threshold</label>
+                <span className="text-sm font-bold text-green-600 dark:text-green-300">{rainThreshold}</span>
               </div>
-              <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">Higher sensitivity closes faster when rain starts.</p>
               <input
                 type="range"
                 min={200}
@@ -117,12 +116,11 @@ export default function DeviceSettings({
               />
             </div>
 
-            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+            <div>
               <div className="mb-1 flex justify-between">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Light Sensitivity</label>
-                <span className="text-sm font-bold text-green-600 dark:text-green-300">{lightSensitivity}</span>
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Light Threshold</label>
+                <span className="text-sm font-bold text-green-600 dark:text-green-300">{lightThreshold}</span>
               </div>
-              <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">Higher sensitivity reacts earlier to low light.</p>
               <input
                 type="range"
                 min={500}
@@ -135,14 +133,6 @@ export default function DeviceSettings({
                 className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-slate-200 accent-green-600 dark:bg-slate-700"
               />
             </div>
-            <details className="rounded-lg border border-dashed border-slate-200 p-3 dark:border-slate-700">
-              <summary className="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">
-                Advanced Threshold Values
-              </summary>
-              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                Rain threshold: {rainThreshold} | Light threshold: {lightThreshold}
-              </p>
-            </details>
 
             <div className="grid grid-cols-1 gap-2">
               <label className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">

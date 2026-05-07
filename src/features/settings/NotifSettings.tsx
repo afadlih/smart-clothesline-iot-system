@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import React from 'react';
 import { Bell, Mail, Smartphone } from 'lucide-react';
 
 export type NotificationPreference = {
@@ -21,7 +21,6 @@ export default function NotificationSettings({
   whatsappNumber,
   onWhatsAppNumberChange,
 }: NotificationSettingsProps) {
-  const [lastTestAt, setLastTestAt] = useState<number | null>(null);
   const settings = [
     {
       id: 'rain' as const,
@@ -48,7 +47,6 @@ export default function NotificationSettings({
       icon: <Smartphone size={18} />,
     },
   ];
-  const enabledCount = useMemo(() => Object.values(value).filter(Boolean).length, [value]);
 
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -57,25 +55,6 @@ export default function NotificationSettings({
           <Bell className="text-green-600" size={20} />
           Notification Settings
         </h3>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
-            <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Notification Status</p>
-            <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{enabledCount} channels enabled</p>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
-            <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Latest Notification Test</p>
-            <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {lastTestAt ? new Date(lastTestAt).toLocaleTimeString("en-US") : "Not tested yet"}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setLastTestAt(Date.now())}
-            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300"
-          >
-            Send Test Notification
-          </button>
-        </div>
 
         {settings.map((item) => (
           <div key={item.id} className="flex items-center justify-between gap-4">

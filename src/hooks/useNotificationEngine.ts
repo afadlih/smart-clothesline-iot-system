@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import type { EventToast, SystemEvent } from "@/models/SystemEvent";
-import { useNotificationStore } from "@/stores/notificationStore";
 
 const STORAGE_KEY = "smart-clothesline-events-v1";
 const MAX_EVENTS = 100;
-const MAX_EVENT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const ALERT_DEBOUNCE_MS = 10_000;
 const TOAST_DURATION_MS = 5_000;
 
@@ -45,13 +43,6 @@ function persist(): void {
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sharedState.events));
-}
-
-function pruneOldEvents(): void {
-  const threshold = Date.now() - MAX_EVENT_AGE_MS;
-  sharedState.events = sharedState.events
-    .filter((event) => event.timestamp >= threshold)
-    .slice(0, MAX_EVENTS);
 }
 
 function hydrate(): void {
@@ -108,7 +99,6 @@ export function pushSystemEvent(
     id: `${event.type}-${event.timestamp}-${Math.random().toString(36).slice(2, 8)}`,
   };
   sharedState.events = [nextEvent, ...sharedState.events].slice(0, MAX_EVENTS);
-  pruneOldEvents();
 
   if (nextEvent.type === "ALERT") {
     sharedState.toasts = [
@@ -128,10 +118,6 @@ export function pushSystemEvent(
 }
 
 export function useNotificationEngine() {
-  const unreadCount = useNotificationStore((state) => state.unreadCount);
-  const lastSeenAt = useNotificationStore((state) => state.lastSeenAt);
-  const setUnreadCount = useNotificationStore((state) => state.setUnreadCount);
-  const markRead = useNotificationStore((state) => state.markRead);
   const [state, setState] = useState<EngineState>(() => {
     hydrate();
     return cloneState();
@@ -150,21 +136,11 @@ export function useNotificationEngine() {
   }, []);
 
   useEffect(() => {
-    const nextUnread = state.events.filter((event) => event.timestamp > lastSeenAt).length;
-    setUnreadCount(nextUnread);
-  }, [lastSeenAt, setUnreadCount, state.events]);
-
-  useEffect(() => {
     const timer = window.setInterval(() => {
       const now = Date.now();
       const nextToasts = sharedState.toasts.filter((toast) => toast.expiresAt > now);
-      const beforeLen = sharedState.events.length;
-      pruneOldEvents();
       if (nextToasts.length !== sharedState.toasts.length) {
         sharedState.toasts = nextToasts;
-        notify();
-      } else if (beforeLen !== sharedState.events.length) {
-        persist();
         notify();
       }
     }, 500);
@@ -184,8 +160,6 @@ export function useNotificationEngine() {
     alerts: state.events.filter((event) => event.type === "ALERT"),
     latestAlert: state.events.find((event) => event.type === "ALERT") ?? null,
     toasts: state.toasts,
-    unreadCount,
-    markAllRead: markRead,
     dismissToast,
   };
 }

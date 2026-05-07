@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import EventTimeline from "@/components/events/EventTimeline";
+import StatusPanel from "@/components/status/StatusPanel";
 import OperationalHealthPanel from "@/components/status/OperationalHealth";
 import PageContainer from "@/components/layout/PageContainer";
 import { useNotificationEngine } from "@/hooks/useNotificationEngine";
@@ -17,19 +19,6 @@ function formatClock(value: number | null): string {
     minute: "2-digit",
     second: "2-digit",
   });
-}
-
-function formatHourFloat(value: number): string {
-  const h = Math.floor(value);
-  const m = Math.round((value - h) * 60);
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-
-function badgeClassByState(state: "good" | "warn" | "danger" | "info"): string {
-  if (state === "good") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300";
-  if (state === "warn") return "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300";
-  if (state === "danger") return "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300";
-  return "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300";
 }
 
 export default function DashboardScreen() {
@@ -49,6 +38,7 @@ export default function DashboardScreen() {
     pendingCommand,
     commandStatus,
     events,
+    history,
     serialLogs,
     uiState,
     drift,
@@ -64,40 +54,22 @@ export default function DashboardScreen() {
     setActiveDeviceId(localStorage.getItem(ACTIVE_DEVICE_STORAGE_KEY));
   }, [])
 
-  const heartbeatAgeSec = lastUpdate === null ? null : Math.max(0, Math.floor((Date.now() - lastUpdate) / 1000));
-  const deviceStatusLabel =
-    heartbeatAgeSec === null
-      ? "OFFLINE"
-      : heartbeatAgeSec > 30
-        ? "OFFLINE"
-        : heartbeatAgeSec > 15
-          ? "DATA DELAYED"
-          : "ONLINE";
-  const deviceStatusClass =
-    deviceStatusLabel === "OFFLINE"
-      ? badgeClassByState("danger")
-      : deviceStatusLabel === "DATA DELAYED"
-        ? badgeClassByState("warn")
-        : badgeClassByState("good");
-  const realtimeLabel = uiState.stream === "STREAMING" ? "REALTIME ACTIVE" : "REALTIME IDLE";
-
-  const systemModeLabel =
-    decision.decisionSource === "MANUAL"
-      ? "MANUAL"
-      : decision.decisionSource === "SCHEDULE"
-        ? "SCHEDULE"
-        : "AUTO";
-  const safetyLabel =
-    decision.decisionSource === "SAFETY"
-      ? decision.reason.toLowerCase().includes("rain")
-        ? "RAIN DETECTED"
-        : decision.reason.toLowerCase().includes("light")
-          ? "LOW LIGHT"
-          : "OVERRIDE"
-      : "SAFE";
-  const safetyClass = decision.decisionSource === "SAFETY" ? badgeClassByState("danger") : badgeClassByState("good");
-
+  const connectionLabel = isOnline ? "ONLINE" : "OFFLINE";
+  const connectionBadgeClass = isOnline
+    ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+    : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300";
+  const connectionDotClass = isOnline ? "bg-green-500" : "bg-red-500";
+  const streamLabel =
+    uiState.connection === "DISCONNECTED"
+      ? "Disconnected"
+      : uiState.stream === "NO_DATA"
+        ? "Waiting device..."
+        : uiState.stream === "STALE"
+          ? "Stale"
+          : "Streaming";
   const displayedStatus = status ?? "--";
+  const statusPanelLabel =
+    displayedStatus === "OPEN" ? "OPEN" : displayedStatus === "CLOSED" ? "CLOSED" : "--";
   const lastUpdated = formatClock(lastUpdate);
 
   const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
@@ -120,9 +92,10 @@ export default function DashboardScreen() {
         : commandStatus === "timeout"
           ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
           : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
-  const criticalAlerts = smartAlerts.filter((alert) => alert.severity === "critical");
-  const warningAlerts = smartAlerts.filter((alert) => alert.severity === "warning");
-  const infoAlerts = smartAlerts.filter((alert) => alert.severity === "info");
+  const avgTemperature =
+    history.length > 0 ? history.reduce((sum, item) => sum + item.data.temperature, 0) / history.length : null;
+  const avgHumidity =
+    history.length > 0 ? history.reduce((sum, item) => sum + item.data.humidity, 0) / history.length : null;
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 transition-colors duration-300 dark:from-slate-900 dark:to-slate-950">
@@ -143,100 +116,146 @@ export default function DashboardScreen() {
           </div>
         )}
 
-        <header className="space-y-4">
+        <header className="space-y-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-              Smart Clothesline Operations
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-slate-100">
+              Smart Clothesline Dashboard
             </h1>
-            <p className="mt-1 text-slate-500 dark:text-slate-400">Live operational view for daily drying decisions</p>
+            <p className="mt-1 text-gray-500 dark:text-slate-400">Real-time IoT monitoring dashboard</p>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <span className={`inline-flex items-center justify-center rounded-full px-3 py-2 text-xs font-semibold ${deviceStatusClass}`}>
-              DEVICE: {deviceStatusLabel}
+          <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500 dark:text-slate-400">
+            <span>Last updated: {lastUpdated}</span>
+            <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${connectionBadgeClass}`}>
+              <span className={`h-2 w-2 rounded-full ${connectionDotClass}`} aria-hidden="true" />
+              {connectionLabel}
             </span>
-            <span className={`inline-flex items-center justify-center rounded-full px-3 py-2 text-xs font-semibold ${badgeClassByState("info")}`}>
-              MODE: {systemModeLabel}
+            <span
+              className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                decision.scheduleActive
+                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                  : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+              }`}
+            >
+              Schedule: {decision.scheduleActive ? "Active" : "Inactive"}
             </span>
-            <span className={`inline-flex items-center justify-center rounded-full px-3 py-2 text-xs font-semibold ${safetyClass}`}>
-              {safetyLabel}
-            </span>
-            <span className={`inline-flex items-center justify-center rounded-full px-3 py-2 text-xs font-semibold ${decision.scheduleActive ? badgeClassByState("good") : badgeClassByState("warn")}`}>
-              SCHEDULE {decision.scheduleActive ? "ACTIVE" : "INACTIVE"}
-            </span>
+            <span className="text-xs text-gray-400 dark:text-slate-500">{streamLabel}</span>
+            <Link
+              href="/analytics"
+              className="ml-auto px-3 py-1 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+            >
+              Analytics
+            </Link>
           </div>
+          <div className="h-px bg-gray-200 dark:bg-slate-800" />
         </header>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Clothesline Status</p>
-          <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
-            <h2 className="text-4xl font-bold text-slate-900 dark:text-slate-100">{displayedStatus}</h2>
-            <span className="text-sm text-slate-500 dark:text-slate-400">{realtimeLabel}</span>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Avg Temperature (24h)</p>
+            <p className="mt-2 text-2xl font-bold text-red-600">{avgTemperature !== null ? `${avgTemperature.toFixed(1)} C` : "--"}</p>
           </div>
-          <p className="mt-3 text-sm text-slate-700 dark:text-slate-300">{decision.reason}</p>
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Mode</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{systemModeLabel}</p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Safety</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{safetyLabel}</p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Latest Update</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{lastUpdated}</p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">{heartbeatAgeSec === null ? "-" : `${heartbeatAgeSec}s ago`}</p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Schedule Window</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {decision.activeSchedule
-                  ? `${formatHourFloat(decision.activeSchedule.startHour)}-${formatHourFloat(decision.activeSchedule.endHour)}`
-                  : "-"}
-              </p>
-            </div>
+          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Avg Humidity (24h)</p>
+            <p className="mt-2 text-2xl font-bold text-blue-600">{avgHumidity !== null ? `${avgHumidity.toFixed(0)}%` : "--"}</p>
           </div>
-        </section>
+          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Data Points</p>
+            <p className="mt-2 text-2xl font-bold text-amber-600">{history.length}</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Recommended State</p>
+            <p className="mt-2 text-2xl font-bold text-green-600">{decision.recommendedStatus}</p>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
           <div className="space-y-6 xl:col-span-8">
-            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Alerts</h2>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <span className={`rounded-full px-2 py-1 font-semibold ${badgeClassByState("danger")}`}>Critical {criticalAlerts.length}</span>
-                  <span className={`rounded-full px-2 py-1 font-semibold ${badgeClassByState("warn")}`}>Warning {warningAlerts.length}</span>
-                  <span className={`rounded-full px-2 py-1 font-semibold ${badgeClassByState("info")}`}>Info {infoAlerts.length}</span>
+            {smartAlerts.length > 0 && (
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Active Alerts ({smartAlerts.length})</h3>
+                <div className="space-y-2">
+                  {smartAlerts.slice(0, 3).map((alert) => (
+                    <div
+                      key={alert.id}
+                      className={`rounded-lg p-4 ${
+                        alert.severity === "critical"
+                          ? "border border-red-300 bg-red-50 dark:border-red-900/40 dark:bg-red-900/20"
+                          : alert.severity === "warning"
+                            ? "border border-yellow-300 bg-yellow-50 dark:border-yellow-900/40 dark:bg-yellow-900/20"
+                            : "border border-blue-300 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-900/20"
+                      }`}
+                    >
+                      <p className={`text-xs font-semibold uppercase ${
+                        alert.severity === "critical"
+                          ? "text-red-700 dark:text-red-300"
+                          : alert.severity === "warning"
+                            ? "text-yellow-700 dark:text-yellow-300"
+                            : "text-blue-700 dark:text-blue-300"
+                      }`}>
+                        {alert.title}
+                      </p>
+                      <p className={`mt-1 text-sm ${
+                        alert.severity === "critical"
+                          ? "text-red-800 dark:text-red-200"
+                          : alert.severity === "warning"
+                            ? "text-yellow-800 dark:text-yellow-200"
+                            : "text-blue-800 dark:text-blue-200"
+                      }`}>
+                        {alert.description}
+                      </p>
+                      {alert.suggestedAction && (
+                        <p className={`mt-2 text-xs font-semibold ${
+                          alert.severity === "critical"
+                            ? "text-red-700 dark:text-red-300"
+                            : alert.severity === "warning"
+                              ? "text-yellow-700 dark:text-yellow-300"
+                              : "text-blue-700 dark:text-blue-300"
+                        }`}>
+                          Action: {alert.suggestedAction}
+                        </p>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              </div>
-              {latestAlert ? (
-                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Latest Alert</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{latestAlert.title}</p>
-                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{latestAlert.description}</p>
-                </div>
-              ) : (
-                <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">No active alerts.</p>
-              )}
-            </section>
+              </section>
+            )}
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                Why Did The System Change?
-              </h2>
-              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Decision Source</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{decision.decisionSource}</p>
+            {latestAlert && (
+              <section className="rounded-xl border border-red-300 bg-red-50 p-4 dark:border-red-900/40 dark:bg-red-900/20">
+                <p className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">Latest Alert</p>
+                <p className="mt-1 text-sm font-semibold text-red-800 dark:text-red-200">{latestAlert.title}</p>
+                <p className="mt-1 text-xs text-red-700 dark:text-red-300">{latestAlert.description}</p>
+              </section>
+            )}
+
+            <StatusPanel status={statusPanelLabel} reason={`Decision Source: ${decision.decisionSource} (${decision.reason})`} />
+
+            <section className="space-y-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">System Decision</h2>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Final State</p>
+                  <p className="mt-2 text-lg font-bold text-gray-900 dark:text-slate-100">{decision.recommendedStatus}</p>
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Final State</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{decision.recommendedStatus}</p>
+                <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Source</p>
+                  <p className="mt-2 text-lg font-bold text-gray-900 dark:text-slate-100">{decision.decisionSource}</p>
+                </div>
+                <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Reason</p>
+                  <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-slate-100">{decision.reason}</p>
+                </div>
+                <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Schedule Window</p>
+                  <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-slate-100">
+                    {decision.activeSchedule
+                      ? `${String(decision.activeSchedule.startHour).padStart(2, "0")}:00-${String(
+                          decision.activeSchedule.endHour,
+                        ).padStart(2, "0")}:00`
+                      : "-"}
+                  </p>
                 </div>
               </div>
-              <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
-                {decision.reason}
-              </p>
             </section>
 
             <section className="space-y-4">

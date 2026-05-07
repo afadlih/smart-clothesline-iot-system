@@ -241,7 +241,7 @@ export default function SettingsScreen() {
         selectedDeviceId,
       }),
     );
-  }, [devices, selectedDeviceId, didHydrateDeviceRef]);
+  }, [devices, selectedDeviceId]);
 
   useEffect(() => {
     if (!didHydrateDeviceRef) {
@@ -254,7 +254,7 @@ export default function SettingsScreen() {
     }
 
     localStorage.removeItem(ACTIVE_DEVICE_STORAGE_KEY);
-  }, [selectedDeviceId, didHydrateDeviceRef])
+  }, [selectedDeviceId])
 
   useEffect(() => {
     const unsubscribe = mqttService.subscribeTopic(PAIRING_DISCOVERY_TOPIC, (rawPayLoad) => {
@@ -360,9 +360,7 @@ export default function SettingsScreen() {
         </header>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-          <div className="xl:col-span-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2 xl:col-span-3">
             {[
               { id: "profile" as const, label: "Profile", icon: <User size={18} /> },
               { id: "notification" as const, label: "Notifications", icon: <Bell size={18} /> },
@@ -375,16 +373,14 @@ export default function SettingsScreen() {
                 type="button"
                 onClick={() => setActiveTab(item.id)}
                 className={`flex items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium transition-all ${activeTab === item.id
-                  ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/70 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-700/60"
-                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                  ? "bg-green-600 text-white shadow-md"
+                  : "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                   }`}
               >
                 {item.icon}
                 {item.label}
               </button>
             ))}
-              </div>
-            </div>
           </div>
 
           <div className="space-y-8 xl:col-span-9">

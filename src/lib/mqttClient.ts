@@ -5,7 +5,7 @@ export interface SensorData {
   humidity: number;
   light: number;
   rain: boolean;
-  status: "OPEN" | "CLOSED";
+  status: "TERBUKA" | "TERTUTUP";
 }
 
 const MQTT_BROKER_URL = "wss://broker.hivemq.com:8884/mqtt";

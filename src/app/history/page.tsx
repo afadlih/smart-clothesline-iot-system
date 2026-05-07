@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useSensorHistory } from "@/hooks/useSensorHistory";
-import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react";
+import { MdOutlineMoreHoriz } from "react-icons/md";
+import { FaAngleLeft, FaAngleRight } from "react-icons/fa6";
 
 type SortKey = "date" | "temperature" | "humidity" | "light" | "status";
 type SortDirection = "asc" | "desc";
-type StatusFilter = "all" | "OPEN" | "CLOSED";
+type StatusFilter = "all" | "TERBUKA" | "TERTUTUP";
 type WeatherFilter = "all" | "dry" | "rainy";
 
 type DailySummary = {
@@ -18,10 +19,7 @@ type DailySummary = {
   rainyReadings: number;
   openCount: number;
   closedCount: number;
-  status: "OPEN" | "CLOSED";
-  dominantRatio: number;
-  humidityTrend: "up" | "down" | "flat";
-  lightTrend: "up" | "down" | "flat";
+  status: "TERBUKA" | "TERTUTUP";
   firstReadingAt: string;
   lastReadingAt: string;
 };
@@ -57,8 +55,8 @@ function formatTime(timestamp: string): string {
   });
 }
 
-function toStatusLabel(status: "OPEN" | "CLOSED"): "OPEN" | "CLOSED" {
-  return status;
+function toStatusLabel(status: "TERBUKA" | "TERTUTUP"): "OPEN" | "CLOSED" {
+  return status === "TERBUKA" ? "OPEN" : "CLOSED";
 }
 
 export default function HistoryPage() {
@@ -89,10 +87,7 @@ export default function HistoryPage() {
           rainyReadings: 0,
           openCount: 0,
           closedCount: 0,
-          status: "CLOSED",
-          dominantRatio: 0,
-          humidityTrend: "flat",
-          lightTrend: "flat",
+          status: "TERTUTUP",
           firstReadingAt: item.timestamp,
           lastReadingAt: item.timestamp,
         };
@@ -108,7 +103,7 @@ export default function HistoryPage() {
         dailySummary.rainyReadings += 1;
       }
 
-      if (item.status === "OPEN") {
+      if (item.status === "TERBUKA") {
         dailySummary.openCount += 1;
       } else {
         dailySummary.closedCount += 1;
@@ -129,30 +124,7 @@ export default function HistoryPage() {
       const averageHumidity = item.averageHumidity / item.totalReadings;
       const averageLight = item.averageLight / item.totalReadings;
       const status: DailySummary["status"] =
-        item.openCount >= item.closedCount ? "OPEN" : "CLOSED";
-      const dominantCount = Math.max(item.openCount, item.closedCount);
-      const dominantRatio = item.totalReadings > 0 ? (dominantCount / item.totalReadings) * 100 : 0;
-      const dayReadings = sortedHistory
-        .filter((entry) => formatDateValue(entry.timestamp) === item.dateKey)
-        .sort((a, b) => getTimestampMs(a.timestamp) - getTimestampMs(b.timestamp));
-      const firstReading = dayReadings[0];
-      const lastReading = dayReadings[dayReadings.length - 1];
-      const humidityTrend =
-        !firstReading || !lastReading
-          ? "flat"
-          : lastReading.humidity > firstReading.humidity
-            ? "up"
-            : lastReading.humidity < firstReading.humidity
-              ? "down"
-              : "flat";
-      const lightTrend =
-        !firstReading || !lastReading
-          ? "flat"
-          : lastReading.light > firstReading.light
-            ? "up"
-            : lastReading.light < firstReading.light
-              ? "down"
-              : "flat";
+        item.openCount >= item.closedCount ? "TERBUKA" : "TERTUTUP";
 
       return {
         ...item,
@@ -160,9 +132,6 @@ export default function HistoryPage() {
         averageHumidity,
         averageLight,
         status,
-        dominantRatio,
-        humidityTrend,
-        lightTrend,
       };
     });
   }, [sortedHistory]);
@@ -189,7 +158,7 @@ export default function HistoryPage() {
       }
 
       if (sortKey === "status") {
-        const statusValue = (value: DailySummary["status"]) => (value === "OPEN" ? 1 : 0);
+        const statusValue = (value: DailySummary["status"]) => (value === "TERBUKA" ? 1 : 0);
         return sortDirection === "desc"
           ? statusValue(b.status) - statusValue(a.status)
           : statusValue(a.status) - statusValue(b.status);
@@ -234,7 +203,7 @@ export default function HistoryPage() {
   const selectedSummary = filteredDailyHistory.find((item) => item.dateKey === selectedDateKey) ?? null;
 
   const totalRainyDays = dailyHistory.filter((item) => item.rainyReadings > 0).length;
-  const totalOpenDominantDays = dailyHistory.filter((item) => item.status === "OPEN").length;
+  const totalOpenDominantDays = dailyHistory.filter((item) => item.status === "TERBUKA").length;
   const averageTemperature =
     dailyHistory.length > 0
       ? dailyHistory.reduce((sum, item) => sum + item.averageTemperature, 0) / dailyHistory.length
@@ -329,57 +298,6 @@ export default function HistoryPage() {
     );
   };
 
-  const renderDominantStatusCard = (summary: DailySummary | null) => {
-    if (!summary) {
-      return (
-        <article className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="text-sm font-semibold text-gray-800 dark:text-slate-100">Dominant Status Distribution</h3>
-          <p className="mt-3 text-sm text-gray-500 dark:text-slate-400">Select a day to view status distribution.</p>
-        </article>
-      );
-    }
-
-    const openPercent = summary.totalReadings > 0 ? (summary.openCount / summary.totalReadings) * 100 : 0;
-    const closedPercent = summary.totalReadings > 0 ? (summary.closedCount / summary.totalReadings) * 100 : 0;
-
-    return (
-      <article className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-800 dark:text-slate-100">Dominant Status Distribution</h3>
-          <span
-            className={`rounded-full px-2 py-1 text-xs font-semibold ${
-              summary.status === "OPEN"
-                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
-                : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
-            }`}
-          >
-            Dominant: {summary.status}
-          </span>
-        </div>
-        <div className="space-y-3">
-          <div>
-            <div className="mb-1 flex items-center justify-between text-xs">
-              <span className="font-semibold text-emerald-700 dark:text-emerald-300">OPEN</span>
-              <span className="text-gray-500 dark:text-slate-400">{summary.openCount} readings ({openPercent.toFixed(1)}%)</span>
-            </div>
-            <div className="h-2 rounded-full bg-gray-100 dark:bg-slate-800">
-              <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${openPercent}%` }} />
-            </div>
-          </div>
-          <div>
-            <div className="mb-1 flex items-center justify-between text-xs">
-              <span className="font-semibold text-red-700 dark:text-red-300">CLOSED</span>
-              <span className="text-gray-500 dark:text-slate-400">{summary.closedCount} readings ({closedPercent.toFixed(1)}%)</span>
-            </div>
-            <div className="h-2 rounded-full bg-gray-100 dark:bg-slate-800">
-              <div className="h-2 rounded-full bg-red-500" style={{ width: `${closedPercent}%` }} />
-            </div>
-          </div>
-        </div>
-      </article>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 p-6 dark:from-slate-900 dark:to-slate-950">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -446,8 +364,8 @@ export default function HistoryPage() {
                   className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 >
                   <option value="all">All statuses</option>
-                  <option value="OPEN">Open</option>
-                  <option value="CLOSED">Closed</option>
+                  <option value="TERBUKA">Open</option>
+                  <option value="TERTUTUP">Closed</option>
                 </select>
               </label>
               <label className="text-xs text-gray-500 dark:text-slate-400">
@@ -500,7 +418,7 @@ export default function HistoryPage() {
 
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-slate-800">
-                <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-slate-800/90">
+                <thead className="bg-gray-50 dark:bg-slate-800/60">
                   <tr>
                     <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">
                       <button type="button" onClick={() => toggleSort("date")}>Date</button>
@@ -517,7 +435,7 @@ export default function HistoryPage() {
                     <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Readings</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Rain</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">
-                      <button type="button" onClick={() => toggleSort("status")}>Dominant Status</button>
+                      <button type="button" onClick={() => toggleSort("status")}>Status</button>
                     </th>
                     <th className="px-4 py-3 text-center font-semibold text-gray-600 dark:text-slate-300">Details</th>
                   </tr>
@@ -544,48 +462,39 @@ export default function HistoryPage() {
                   ) : (
                     paginatedHistory.map((item) => (
                       <tr key={item.dateKey} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/50">
-                        <td className="px-4 py-2.5 text-gray-700 dark:text-slate-100">
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">
                           <p className="font-medium">{formatDateLabel(item.dateKey)}</p>
                           <p className="text-xs text-gray-500 dark:text-slate-400">
                             {formatTime(item.firstReadingAt)} - {formatTime(item.lastReadingAt)}
                           </p>
                         </td>
-                        <td className="px-4 py-2.5 text-gray-700 dark:text-slate-100">
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">
                           {item.averageTemperature.toFixed(1)} C
                         </td>
-                        <td className="px-4 py-2.5 text-gray-700 dark:text-slate-100">
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">
                           {item.averageHumidity.toFixed(1)} %
-                          <p className="text-[11px] text-gray-500 dark:text-slate-400">
-                            {item.humidityTrend === "up" ? "Humidity up" : item.humidityTrend === "down" ? "Humidity down" : "Humidity stable"}
-                          </p>
                         </td>
-                        <td className="px-4 py-2.5 text-gray-700 dark:text-slate-100">
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">
                           {item.averageLight.toFixed(0)} lux
-                          <p className="text-[11px] text-gray-500 dark:text-slate-400">
-                            {item.lightTrend === "up" ? "Light up" : item.lightTrend === "down" ? "Light down" : "Light stable"}
-                          </p>
                         </td>
-                        <td className="px-4 py-2.5 text-gray-700 dark:text-slate-100">
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">
                           {item.totalReadings}
                         </td>
-                        <td className="px-4 py-2.5 text-gray-700 dark:text-slate-100">
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">
                           {item.rainyReadings > 0 ? `${item.rainyReadings} times` : "No"}
                         </td>
-                        <td className="px-4 py-2.5">
+                        <td className="px-4 py-3">
                           <span
                             className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                              item.status === "OPEN"
+                              item.status === "TERBUKA"
                                 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
                                 : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
                             }`}
                           >
                             {toStatusLabel(item.status)}
                           </span>
-                          <p className="mt-1 text-[11px] text-gray-500 dark:text-slate-400">
-                            Dominance: {item.dominantRatio.toFixed(0)}%
-                          </p>
                         </td>
-                        <td className="px-4 py-2.5 text-center">
+                        <td className="px-4 py-3 text-center">
                           <button
                             type="button"
                             className={`inline-flex items-center justify-center ${
@@ -593,7 +502,7 @@ export default function HistoryPage() {
                             }`}
                             onClick={() => setSelectedDataKey(item.dateKey)}
                           >
-                            <MoreHorizontal size={16} />
+                            <MdOutlineMoreHoriz />
                           </button>
                         </td>
                       </tr>
@@ -614,7 +523,7 @@ export default function HistoryPage() {
                   disabled={safeCurrentPage === 1}
                   className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200"
                 >
-                  <ChevronLeft size={16} />
+                  <FaAngleLeft />
                 </button>
                 <button
                   type="button"
@@ -622,7 +531,7 @@ export default function HistoryPage() {
                   disabled={safeCurrentPage === totalPages}
                   className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200"
                 >
-                  <ChevronRight size={16} />
+                  <FaAngleRight />
                 </button>
               </div>
             </div>
@@ -658,9 +567,6 @@ export default function HistoryPage() {
                         <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-slate-100">
                           {toStatusLabel(selectedSummary.status)}
                         </p>
-                        <p className="text-xs text-gray-500 dark:text-slate-400">
-                          Dominance {selectedSummary.dominantRatio.toFixed(1)}%
-                        </p>
                       </div>
                       <div className="rounded-xl bg-gray-50 p-3 dark:bg-slate-800/60">
                         <p className="text-xs text-gray-500 dark:text-slate-400">Rain Events</p>
@@ -671,7 +577,6 @@ export default function HistoryPage() {
                     </div>
 
                     <div className="grid grid-cols-1 gap-4">
-                      {renderDominantStatusCard(selectedSummary)}
                       {renderChartCard("Temperature", temperatureValues, "#ef4444", "C")}
                       {renderChartCard("Humidity", humidityValues, "#3b82f6", "%")}
                       {renderChartCard("Light", lightValues, "#f59e0b", "lux")}
@@ -717,7 +622,7 @@ export default function HistoryPage() {
                           <p>Temperature: {item.temperature.toFixed(1)} C</p>
                           <p>Humidity: {item.humidity.toFixed(1)} %</p>
                           <p>Light: {item.light.toFixed(0)} lux</p>
-                          <p>Status: {toStatusLabel(item.status)}</p>
+                          <p>Status: {toStatusLabel(item.status as "TERBUKA" | "TERTUTUP")}</p>
                         </div>
                       </div>
                     ))}

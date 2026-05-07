@@ -85,23 +85,16 @@ export class FirestoreService {
         humidity?: number;
         light?: number;
         rain?: boolean;
-        status?: "OPEN" | "CLOSED" | "TERBUKA" | "TERTUTUP";
+        status?: "TERBUKA" | "TERTUTUP";
         createdAt?: Timestamp;
       };
-
-      const normalizedStatus =
-        value.status === "TERBUKA"
-          ? "OPEN"
-          : value.status === "TERTUTUP"
-            ? "CLOSED"
-            : value.status;
 
       return new SensorData({
         temp: value.temperature ?? 0,
         humidity: value.humidity ?? 0,
         light: value.light ?? 0,
         rain: value.rain ? 1 : 0,
-        status: normalizedStatus ?? "CLOSED",
+        status: value.status ?? "TERTUTUP",
         timestamp: value.createdAt?.toDate().toISOString() ?? new Date().toISOString(),
       });
     });

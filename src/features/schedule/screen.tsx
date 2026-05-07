@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { Clock, Loader2, Lock, Plus, Power, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { useSystemState } from "@/hooks/useSystemState";
 import { isWithinSchedule } from "@/features/system/ScheduleEngine";
@@ -106,27 +105,13 @@ export default function SchedulePage() {
   };
 
   const onSubmitSchedule = async () => {
-    if (!form.name.trim()) {
-      setErrorMessage("Name is required.");
-      return;
-    }
-
-    const startHour = ScheduleService.parseTimeToFloat(form.timeOpen);
-    const endHour = ScheduleService.parseTimeToFloat(form.timeClose);
-
-    if (!Number.isFinite(startHour) || !Number.isFinite(endHour)) {
-      setErrorMessage("Invalid time format.");
-      return;
-    }
-
-    if (startHour === endHour) {
-      // Allow 24h schedule (always active).
-    }
+    if (!form.name.trim()) { setErrorMessage("Name required"); return; }
+    if (form.timeOpen >= form.timeClose) { setErrorMessage("Invalid time range"); return; }
     try {
       await ScheduleService.addSchedule({
         name: form.name.trim(),
-        startHour,
-        endHour,
+        startHour: ScheduleService.parseTimeToFloat(form.timeOpen),
+        endHour: ScheduleService.parseTimeToFloat(form.timeClose),
         enabled: true,
       });
       setForm(initialForm); setIsFormOpen(false); void loadScheduleData();
@@ -134,15 +119,7 @@ export default function SchedulePage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col gap-5 bg-slate-50 p-6 dark:bg-slate-950">
-      <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-200">
-        <p className="font-semibold">Automation-first workflow</p>
-        <p className="mt-1">
-          Use <Link href="/automation" className="font-semibold underline">Automation Control Center</Link> for policy and mode controls.
-          This page is dedicated to detailed schedule operations.
-        </p>
-      </div>
-
+    <div className="flex min-h-screen flex-col gap-6 bg-slate-50 p-6 dark:bg-slate-950">
       {/* Header Section */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -158,7 +135,7 @@ export default function SchedulePage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={onResetToAuto} disabled={isSettingOverride} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-all hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+          <button type="button" onClick={onResetToAuto} disabled={isSettingOverride} className="flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium dark:bg-slate-800 shadow-sm transition-all hover:bg-slate-50">
             <RefreshCw size={18} className={isSettingOverride ? "animate-spin" : ""} /> Reset to Auto
           </button>
           <button type="button" onClick={() => setIsFormOpen(!isFormOpen)} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-md hover:bg-blue-700">
@@ -209,7 +186,7 @@ export default function SchedulePage() {
                   </div>
                   <div>
                     <h3 className="font-bold dark:text-white">{schedule.name}</h3>
-                    <p className="text-xs text-slate-500">{formatWindow(schedule.startHour, schedule.endHour)}</p>
+                    <p className="text-xs text-slate-500 font-mono">{formatWindow(schedule.startHour, schedule.endHour)}</p>
                     {isCurrentlyRunning ? (
                       <span className="text-[10px] font-bold text-green-600 uppercase tracking-tight animate-pulse">Running Now</span>
                     ) : schedule.enabled ? (
@@ -225,16 +202,16 @@ export default function SchedulePage() {
                       e.preventDefault();
                       void ScheduleService.toggleSchedule(schedule.id, schedule.enabled);
                     }} 
-                    className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-all hover:scale-105 active:scale-95 ${
+                    className={`p-2 rounded-lg border transition-all hover:scale-105 active:scale-95 ${
                       schedule.enabled 
                         ? "bg-green-50 border-green-200 text-green-600 dark:bg-green-900/20" 
                         : "bg-slate-50 border-slate-100 text-slate-400 dark:bg-slate-800 dark:border-slate-700"
                     }`}
                   >
-                    <span className="inline-flex items-center gap-1"><Power size={14} />{schedule.enabled ? "Disable" : "Enable"}</span>
+                    <Power size={18} />
                   </button>
-                  <button onClick={() => void ScheduleService.deleteSchedule(schedule.id)} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50 dark:border-red-900/40 dark:text-red-300 dark:hover:bg-red-900/20">
-                    <span className="inline-flex items-center gap-1"><Trash2 size={14} />Delete</span>
+                  <button onClick={() => void ScheduleService.deleteSchedule(schedule.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+                    <Trash2 size={18} />
                   </button>
                 </div>
               </div>
