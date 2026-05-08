@@ -3,16 +3,39 @@ import { getFirestore } from "firebase/firestore";
 
 /**
  * Require a Firebase environment variable.
- * Throws a clear dev error if the variable is missing so misconfigured
- * deployments fail loudly instead of silently using stale hardcoded values.
+ *
+ * Throws a clear, actionable error when a variable is missing so that
+ * misconfigured Vercel Preview / Production deployments fail loudly at
+ * startup instead of silently connecting to the wrong project.
+ *
+ * How to fix on Vercel:
+ *   1. Project Settings → Environment Variables
+ *   2. Add the missing variable to the affected environment
+ *      (Preview, Production, or both)
+ *   3. Redeploy WITHOUT build cache:
+ *      Deployments → ⋯ → Redeploy → uncheck "Use existing build cache"
  */
 function requireEnv(name: string): string {
   const val = process.env[name];
   if (!val) {
+    // Detect Vercel environment so the error message is immediately actionable
+    const vercelEnv = process.env.VERCEL_ENV; // "production" | "preview" | "development" | undefined
+    const envLabel = vercelEnv === "production"
+      ? "Vercel Production"
+      : vercelEnv === "preview"
+        ? "Vercel Preview"
+        : vercelEnv === "development"
+          ? "Vercel Development"
+          : "local (.env.local)";
+
+    const fix = vercelEnv
+      ? `Go to Vercel → Project Settings → Environment Variables, add "${name}" to the "${vercelEnv}" environment, then redeploy WITHOUT build cache.`
+      : `Add "${name}" to your .env.local file (copy from .env.example).`;
+
     throw new Error(
-      `[firebase] Missing required environment variable: "${name}". ` +
-      `Add it to .env.local (development) or Vercel environment variables (production). ` +
-      `See .env.example for the full list of required variables.`,
+      `[firebase] Missing required environment variable: "${name}" in ${envLabel}.\n` +
+      `Fix: ${fix}\n` +
+      `See .env.example for the full list of required NEXT_PUBLIC_FIREBASE_* variables.`,
     );
   }
   return val;

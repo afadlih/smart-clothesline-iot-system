@@ -48,6 +48,34 @@
 3. Add all environment variables in Vercel project settings.
 4. Redeploy after env updates.
 
+### ⚠ Firebase Environment Variables — Preview & Production Checklist
+
+All `NEXT_PUBLIC_FIREBASE_*` variables are **required** and must be added to
+**both** environments in Vercel → Project Settings → Environment Variables.
+
+| Variable | Preview | Production |
+|---|---|---|
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | ✅ required | ✅ required |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | ✅ required | ✅ required |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | ✅ required | ✅ required |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | ✅ required | ✅ required |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | ✅ required | ✅ required |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | ✅ required | ✅ required |
+
+> **After adding or changing env variables on Vercel you MUST redeploy without
+> build cache** — otherwise the old build artifact (which baked in the old env
+> at build time) will continue to be served.
+>
+> How to force a clean redeploy:
+> 1. Vercel Dashboard → your project → **Deployments** tab
+> 2. Find the latest deployment → click **⋯** → **Redeploy**
+> 3. Uncheck **"Use existing build cache"**
+> 4. Click **Redeploy**
+
+Missing any of the above variables causes a startup crash with an error message
+that names the exact Vercel environment (`Preview` / `Production`) and links to
+this checklist.
+
 ## Firebase Setup
 
 Apply rules and indexes:
