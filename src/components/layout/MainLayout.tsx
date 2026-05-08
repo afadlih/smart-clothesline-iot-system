@@ -50,7 +50,7 @@ export default function MainLayout({
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 text-gray-900 dark:bg-slate-950 dark:text-slate-100 overflow-hidden transition-colors duration-300">
+    <div className="flex h-screen text-gray-900 dark:bg-slate-950 dark:text-slate-100 overflow-hidden transition-colors duration-300">
       {/* Mobile backdrop overlay */}
       {isMobileMenuOpen && (
         <div
@@ -73,6 +73,7 @@ export default function MainLayout({
         {/* Top bar - sticky header */}
         <TopBar
           onHamburgerClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          isMobileMenuOpen={isMobileMenuOpen}
         />
 
         {/* Main scrollable content area */}

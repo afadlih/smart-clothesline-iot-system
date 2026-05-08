@@ -211,11 +211,11 @@ export default function Sidebar({
       {/* Mobile Sidebar - Drawer overlay */}
       <aside
         className={`
-          md:hidden fixed top-16 bottom-0 left-0
+          md:hidden fixed top-0 bottom-0 left-0
           flex flex-col
           border-r border-slate-800 bg-slate-950 text-white
           w-[min(15rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)]
-          z-40
+          z-50
           transform transition-transform duration-300 ease-in-out
           ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
           overflow-hidden shadow-2xl
