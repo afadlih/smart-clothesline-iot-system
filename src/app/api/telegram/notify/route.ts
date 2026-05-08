@@ -134,15 +134,41 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const config = await TelegramOpsService.getConfig();
-    const token = config?.botToken || process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = config?.chatId || process.env.TELEGRAM_CHAT_ID;
-    const groupTargets =
-      config?.groupModeEnabled && Array.isArray(config.authorizedGroups)
-        ? config.authorizedGroups
-            .map((group) => group.groupId)
-            .filter((groupId) => Number.isInteger(groupId))
-        : [];
+    // Env-first: token and chatId never require Firestore
+    const envToken = process.env.TELEGRAM_BOT_TOKEN;
+    const envChatId = process.env.TELEGRAM_CHAT_ID;
+    const envGroupMode = process.env.TELEGRAM_ENABLE_GROUP_MODE?.toLowerCase() === "true";
+
+    // Parse TELEGRAM_ALLOWED_GROUPS from env (primary source for group targets)
+    const envGroupIds: number[] = (process.env.TELEGRAM_ALLOWED_GROUPS ?? "")
+      .split(",")
+      .map((s) => Number(s.trim()))
+      .filter((n) => Number.isInteger(n) && n !== 0);
+
+    // Supplement with Firestore config if available (may be blocked by rules)
+    let firestoreGroupIds: number[] = [];
+    let firestoreToken: string | null = null;
+    let firestoreChatId: string | null = null;
+    try {
+      const config = await TelegramOpsService.getConfig();
+      firestoreToken = config?.botToken || null;
+      firestoreChatId = config?.chatId || null;
+      if (config?.groupModeEnabled && Array.isArray(config.authorizedGroups)) {
+        firestoreGroupIds = config.authorizedGroups
+          .map((g) => g.groupId)
+          .filter((id) => Number.isInteger(id));
+      }
+    } catch {
+      // Firestore unavailable — env values are sufficient
+    }
+
+    const token = envToken || firestoreToken;
+    const chatId = envChatId || firestoreChatId;
+
+    // Merge group IDs from env and Firestore, deduplicated
+    const groupModeEnabled = envGroupMode || firestoreGroupIds.length > 0;
+    const allGroupIds = [...new Set([...envGroupIds, ...firestoreGroupIds])];
+    const groupTargets = groupModeEnabled ? allGroupIds : [];
 
     if (!token || !chatId) {
       return NextResponse.json(
