@@ -257,6 +257,7 @@ function updateUiState(now: number = Date.now()): void {
     const resolved = OperationalStateResolver.resolve({
         now,
         mqttConnected: mqttService.isConnected(),
+        mqttState: sharedState.connection.state,
         lastHeartbeatAt: sharedState.lastHeartbeatUpdate,
         lastTelemetryAt: sharedState.lastSensorUpdate,
     });

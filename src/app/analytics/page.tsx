@@ -18,11 +18,14 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import ErrorAlert from "@/components/alerts/ErrorAlert";
+import { resolveThemePalette } from "@/lib/themeResolver";
+import { useThemeStore } from "@/stores/themeStore";
 
 type TimeRange = "today" | "7days" | "30days" | "all";
 
 export default function AnalyticsPage() {
   const { history, connection, commandStatus, commandSentAt } = useSensor();
+  const currentTheme = useThemeStore((state) => state.theme);
   const analytics = useAnalytics(history, connection, {
     commandStatus,
     lastCommandAt: commandSentAt,
@@ -43,6 +46,23 @@ export default function AnalyticsPage() {
   }
 
   const { dailyStats, hourlyBreakdown, deviceHealth, smartAlerts, dataSufficiency } = analytics;
+  const palette = resolveThemePalette(currentTheme);
+
+  const safeNumber = (value: unknown, fallback: number = 0) =>
+    typeof value === "number" && Number.isFinite(value) ? value : fallback;
+
+  const metric = (value: unknown) => ({
+    min: safeNumber((value as { min?: unknown })?.min),
+    max: safeNumber((value as { max?: unknown })?.max),
+    avg: safeNumber((value as { avg?: unknown })?.avg),
+  });
+
+  const tempMetric = metric(dailyStats?.temperature);
+  const humidityMetric = metric(dailyStats?.humidity);
+  const lightMetric = metric(dailyStats?.light);
+  const safeRainEvents = safeNumber(dailyStats?.rainEvents);
+  const safeDataPoints = safeNumber(dailyStats?.dataPoints);
+  const safeOperationHours = safeNumber(dailyStats?.operationHours);
 
   // Download sensor data as CSV
   const handleExportCSV = () => {
@@ -89,7 +109,7 @@ export default function AnalyticsPage() {
   };
 
   const filteredData = getFilteredData();
-  const rainRatio = dailyStats.dataPoints > 0 ? (dailyStats.rainEvents / dailyStats.dataPoints) * 100 : 0;
+  const rainRatio = safeDataPoints > 0 ? (safeRainEvents / safeDataPoints) * 100 : 0;
   const dryingEfficiency = dataSufficiency.canEstimateDryingEfficiency
     ? Math.max(0, Math.min(100, 100 - rainRatio))
     : null;
@@ -175,11 +195,11 @@ export default function AnalyticsPage() {
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="text-sm font-semibold text-gray-500 uppercase">Temperature</h3>
             <p className="text-3xl font-bold text-red-600 mt-2">
-              {dailyStats.temperature.avg.toFixed(1)} C
+              {tempMetric.avg.toFixed(1)} C
             </p>
             <p className="text-sm text-gray-600 mt-2">
-              Min: {dailyStats.temperature.min.toFixed(1)} C / Max:{" "}
-              {dailyStats.temperature.max.toFixed(1)} C
+              Min: {tempMetric.min.toFixed(1)} C / Max:{" "}
+              {tempMetric.max.toFixed(1)} C
             </p>
           </div>
 
@@ -187,11 +207,11 @@ export default function AnalyticsPage() {
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="text-sm font-semibold text-gray-500 uppercase">Humidity</h3>
             <p className="text-3xl font-bold text-blue-600 mt-2">
-              {dailyStats.humidity.avg.toFixed(1)}%
+              {humidityMetric.avg.toFixed(1)}%
             </p>
             <p className="text-sm text-gray-600 mt-2">
-              Min: {dailyStats.humidity.min.toFixed(1)}% / Max:{" "}
-              {dailyStats.humidity.max.toFixed(1)}%
+              Min: {humidityMetric.min.toFixed(1)}% / Max:{" "}
+              {humidityMetric.max.toFixed(1)}%
             </p>
           </div>
 
@@ -199,10 +219,10 @@ export default function AnalyticsPage() {
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="text-sm font-semibold text-gray-500 uppercase">Light</h3>
             <p className="text-3xl font-bold text-amber-600 mt-2">
-              {dailyStats.light.avg.toFixed(0)}
+              {lightMetric.avg.toFixed(0)}
             </p>
             <p className="text-sm text-gray-600 mt-2">
-              Min: {dailyStats.light.min.toFixed(0)} / Max: {dailyStats.light.max.toFixed(0)}
+              Min: {lightMetric.min.toFixed(0)} / Max: {lightMetric.max.toFixed(0)}
             </p>
           </div>
 
@@ -240,7 +260,7 @@ export default function AnalyticsPage() {
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Device Activity Trend</p>
             <p className="mt-2 text-sm font-bold text-slate-900">
-              {dailyStats.dataPoints > 150 ? "High activity" : dailyStats.dataPoints > 60 ? "Stable" : "Low activity"}
+              {safeDataPoints > 150 ? "High activity" : safeDataPoints > 60 ? "Stable" : "Low activity"}
             </p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -257,16 +277,16 @@ export default function AnalyticsPage() {
             {hourlyBreakdown.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={hourlyBreakdown}>
-                  <CartesianGrid strokeDasharray="3 3" />
+                  <CartesianGrid stroke={palette.chart.grid} strokeDasharray="3 3" />
                   <XAxis dataKey="hour" />
                   <YAxis />
                   <Tooltip />
                   <Line
                     type="monotone"
                     dataKey="temperature"
-                    stroke="#ef4444"
+                    stroke={palette.chart.temperature}
                     strokeWidth={2}
-                    dot={{ fill: "#ef4444", r: 3 }}
+                    dot={{ fill: palette.chart.temperature, r: 3 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -283,18 +303,18 @@ export default function AnalyticsPage() {
                 <AreaChart data={hourlyBreakdown}>
                   <defs>
                     <linearGradient id="colorHumidity" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                      <stop offset="5%" stopColor={palette.chart.humidity} stopOpacity={0.8} />
+                      <stop offset="95%" stopColor={palette.chart.humidity} stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" />
+                  <CartesianGrid stroke={palette.chart.grid} strokeDasharray="3 3" />
                   <XAxis dataKey="hour" />
                   <YAxis />
                   <Tooltip />
                   <Area
                     type="monotone"
                     dataKey="humidity"
-                    stroke="#3b82f6"
+                    stroke={palette.chart.humidity}
                     fillOpacity={1}
                     fill="url(#colorHumidity)"
                   />
@@ -311,11 +331,11 @@ export default function AnalyticsPage() {
             {hourlyBreakdown.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={hourlyBreakdown}>
-                  <CartesianGrid strokeDasharray="3 3" />
+                  <CartesianGrid stroke={palette.chart.grid} strokeDasharray="3 3" />
                   <XAxis dataKey="hour" />
                   <YAxis />
                   <Tooltip />
-                  <Bar dataKey="light" fill="#f59e0b" />
+                  <Bar dataKey="light" fill={palette.chart.light} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -328,17 +348,17 @@ export default function AnalyticsPage() {
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Rain Events</h3>
             <div className="space-y-4">
               <div className="text-center">
-                <p className="text-4xl font-bold text-blue-600">{dailyStats.rainEvents}</p>
+                <p className="text-4xl font-bold text-blue-600">{safeRainEvents}</p>
                 <p className="text-gray-600 mt-2">rain events today</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Data Points</p>
-                  <p className="text-2xl font-bold text-gray-900">{dailyStats.dataPoints}</p>
+                  <p className="text-2xl font-bold text-gray-900">{safeDataPoints}</p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600">Operation Hours</p>
-                  <p className="text-2xl font-bold text-gray-900">{dailyStats.operationHours.toFixed(1)}h</p>
+                  <p className="text-2xl font-bold text-gray-900">{safeOperationHours.toFixed(1)}h</p>
                 </div>
               </div>
             </div>
