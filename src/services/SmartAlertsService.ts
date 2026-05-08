@@ -52,13 +52,16 @@ export class SmartAlertsService {
   static checkWeatherStability(data: SensorData[]): SmartAlert | null {
     if (data.length < 2) return null;
 
-    const recent = data.slice(-5); // Last 5 readings
-    const oldest = data[data.length - 5];
-    const newest = data[data.length - 1];
+    const recent = data.slice(-5); // Last up to 5 readings
+    const oldest = recent[0];
+    const newest = recent[recent.length - 1];
+
+    // Guard: insufficient data to compare
+    if (!oldest || !newest) return null;
 
     // Detect sudden rain
     const hasRecentRain = recent.some((d) => d.isRaining());
-    const noRainBefore = oldest && !oldest.isRaining();
+    const noRainBefore = !oldest.isRaining();
 
     if (hasRecentRain && noRainBefore) {
       return {

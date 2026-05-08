@@ -4,7 +4,6 @@ import { logger } from "@/lib/logger";
 import { TelegramBotApiService } from "@/services/TelegramBotApiService";
 import {
   TelegramOpsService,
-  type TelegramAuthorizedGroup,
 } from "@/services/TelegramOpsService";
 import {
   authorizeTelegramActor,
@@ -86,61 +85,111 @@ function toStatusMessage(input: {
   ].join("\n");
 }
 
-function ensureGroupRegistered(
-  groups: TelegramAuthorizedGroup[] | undefined,
-  chatId: number,
-): boolean {
-  if (!groups || groups.length === 0) return false;
-  return groups.some((group) => group.groupId === chatId);
+/**
+ * Resolve the bot token to use for sending replies.
+ *
+ * Priority:
+ *   1. TELEGRAM_BOT_TOKEN env var (server-only, always available on Vercel)
+ *   2. Firestore telegram_config.botToken (fallback, usually blocked by rules)
+ *
+ * Never exposes token to the client.
+ */
+async function resolveBotToken(): Promise<string | null> {
+  const envToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (envToken) return envToken;
+
+  // Graceful fallback to Firestore (will be null in production due to rules)
+  try {
+    const config = await TelegramOpsService.getConfig();
+    return config?.botToken || null;
+  } catch {
+    return null;
+  }
 }
 
-async function upsertGroupRegistration(input: {
-  config: NonNullable<Awaited<ReturnType<typeof TelegramOpsService.getConfig>>>;
-  chatId: number;
-  chatType: "group" | "supergroup";
-  chatTitle?: string;
-}): Promise<void> {
-  const groups = input.config.authorizedGroups ?? [];
-  if (groups.some((group) => group.groupId === input.chatId)) return;
-  await TelegramOpsService.saveConfig({
-    ...input.config,
-    authorizedGroups: [
-      ...groups,
-      { groupId: input.chatId, title: input.chatTitle, type: input.chatType },
-    ],
-  });
+/**
+ * Resolve whether group mode is enabled.
+ * Env var takes precedence; Firestore config is a supplement.
+ */
+async function resolveGroupModeEnabled(): Promise<boolean> {
+  if (process.env.TELEGRAM_ENABLE_GROUP_MODE?.toLowerCase() === "true") return true;
+  try {
+    const config = await TelegramOpsService.getConfig();
+    return Boolean(config?.groupModeEnabled);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve authorized group IDs from env (primary) + Firestore (supplement).
+ * Env format: TELEGRAM_ALLOWED_GROUPS=-1001234567,-1009876543
+ */
+async function resolveAuthorizedGroups(): Promise<Set<number>> {
+  const groups = new Set<number>();
+
+  // Primary: env var (supports negative IDs for groups/supergroups)
+  const envGroups = process.env.TELEGRAM_ALLOWED_GROUPS ?? "";
+  for (const raw of envGroups.split(",")) {
+    const id = Number(raw.trim());
+    if (Number.isInteger(id) && id !== 0) groups.add(id);
+  }
+
+  // Supplement: Firestore (may be empty/blocked)
+  try {
+    const config = await TelegramOpsService.getConfig();
+    for (const g of config?.authorizedGroups ?? []) {
+      if (typeof g.groupId === "number" && Number.isInteger(g.groupId)) {
+        groups.add(g.groupId);
+      }
+    }
+  } catch {
+    // Firestore unavailable — env-only is fine
+  }
+
+  return groups;
 }
 
 export class TelegramCommandRouter {
   static async handle(context: TelegramInboundContext): Promise<HandleResult> {
-    const config = await TelegramOpsService.getConfig();
-    if (!config || !config.enabled || !config.botToken) {
-      return { ok: true, detail: "Telegram disabled" };
+    // ── Resolve bot token from env first ──────────────────────────────────────
+    const botToken = await resolveBotToken();
+    if (!botToken) {
+      logger.warn("telegram", "No bot token available — integration not configured");
+      return { ok: true, detail: "Telegram not configured" };
     }
 
+    // ── Validate minimal context ──────────────────────────────────────────────
     const command = normalizeCommand(context.text);
     if (!command || !context.chatId || !context.userId) {
       return { ok: true, detail: "Ignored invalid message" };
     }
 
     const isGroupChat = context.chatType === "group" || context.chatType === "supergroup";
-    const groupModeEnabled =
-      Boolean(config.groupModeEnabled) || process.env.TELEGRAM_ENABLE_GROUP_MODE?.toLowerCase() === "true";
 
-    if (isGroupChat && !groupModeEnabled) {
-      await TelegramBotApiService.sendMessage(config.botToken, context.chatId, "Group mode is disabled.");
-      return { ok: true, blocked: true, detail: "Group mode disabled" };
+    // ── Group mode check ──────────────────────────────────────────────────────
+    if (isGroupChat) {
+      const groupModeEnabled = await resolveGroupModeEnabled();
+      if (!groupModeEnabled) {
+        await TelegramBotApiService.sendMessage(botToken, context.chatId, "Group mode is disabled.");
+        return { ok: true, blocked: true, detail: "Group mode disabled" };
+      }
+
+      // Allow /register_group to bypass the registered-group check
+      if (command !== "/register_group") {
+        const authorizedGroups = await resolveAuthorizedGroups();
+        if (!authorizedGroups.has(context.chatId)) {
+          await TelegramBotApiService.sendMessage(
+            botToken,
+            context.chatId,
+            "Group not registered. Run /register_group first.",
+          );
+          return { ok: true, blocked: true, detail: "Group not registered" };
+        }
+      }
     }
 
-    if (isGroupChat && groupModeEnabled && command !== "/register_group" && !ensureGroupRegistered(config.authorizedGroups, context.chatId)) {
-      await TelegramBotApiService.sendMessage(
-        config.botToken,
-        context.chatId,
-        "Group not registered. Run /register_group first.",
-      );
-      return { ok: true, blocked: true, detail: "Group not registered" };
-    }
-
+    // ── Authorization ─────────────────────────────────────────────────────────
     const auth = await authorizeTelegramActor({
       userId: context.userId,
       command,
@@ -152,7 +201,7 @@ export class TelegramCommandRouter {
       const denied = auth.reason === "insufficient_role"
         ? "Permission denied for this command."
         : "Unauthorized user. Access denied.";
-      await TelegramBotApiService.sendMessage(config.botToken, context.chatId, denied);
+      await TelegramBotApiService.sendMessage(botToken, context.chatId, denied);
       await TelegramAuditService.log({
         userId: context.userId,
         username: context.username,
@@ -164,14 +213,16 @@ export class TelegramCommandRouter {
       return { ok: true, blocked: true, detail: auth.reason };
     }
 
+    // ── Command handling ──────────────────────────────────────────────────────
     try {
       const telemetry = await getLatestTelemetry();
       const polling = getTelegramPollingDiagnostics();
+
       if (command === "/start") {
-        await TelegramBotApiService.sendMessage(config.botToken, context.chatId, "Smart Clothesline Bot Connected");
+        await TelegramBotApiService.sendMessage(botToken, context.chatId, "Smart Clothesline Bot Connected");
       } else if (command === "/help") {
         await TelegramBotApiService.sendMessage(
-          config.botToken,
+          botToken,
           context.chatId,
           [
             "Available commands:",
@@ -182,15 +233,15 @@ export class TelegramCommandRouter {
         );
       } else if (command === "/status" || command === "/latest" || command === "/health" || command === "/analytics") {
         await TelegramBotApiService.sendMessage(
-          config.botToken,
+          botToken,
           context.chatId,
           toStatusMessage({ command, telemetry, mqtt: polling }),
         );
       } else if (command === "/ping") {
-        await TelegramBotApiService.sendMessage(config.botToken, context.chatId, `PONG ${fmtTime(Date.now())}`);
+        await TelegramBotApiService.sendMessage(botToken, context.chatId, `PONG ${fmtTime(Date.now())}`);
       } else if (command === "/uptime") {
         await TelegramBotApiService.sendMessage(
-          config.botToken,
+          botToken,
           context.chatId,
           [
             "SMART CLOTHESLINE UPTIME",
@@ -202,27 +253,39 @@ export class TelegramCommandRouter {
         );
       } else if (command === "/register_group") {
         if (!isGroupChat || !context.chatType || (context.chatType !== "group" && context.chatType !== "supergroup")) {
-          await TelegramBotApiService.sendMessage(config.botToken, context.chatId, "This command only works in group/supergroup.");
+          await TelegramBotApiService.sendMessage(botToken, context.chatId, "This command only works in group/supergroup.");
         } else {
-          await upsertGroupRegistration({
-            config,
-            chatId: context.chatId,
-            chatType: context.chatType,
-            chatTitle: context.chatTitle,
+          // Determine authorization state: is this group already in env or Firestore?
+          const authorizedGroups = await resolveAuthorizedGroups();
+          const alreadyRegistered = authorizedGroups.has(context.chatId);
+
+          // Log the registration attempt to telegram_audit (always writable per firestore.rules)
+          await TelegramAuditService.log({
+            userId: context.userId,
+            username: context.username,
+            command,
+            result: "success",
+            detail: `register_group chatId=${context.chatId} type=${context.chatType} title=${context.chatTitle ?? "-"} alreadyKnown=${alreadyRegistered}`,
+            source: "telegram-webhook",
           });
+
+          const authState = alreadyRegistered ? "AUTHORIZED" : "PENDING (add to TELEGRAM_ALLOWED_GROUPS env)";
           await TelegramBotApiService.sendMessage(
-            config.botToken,
+            botToken,
             context.chatId,
             [
-              "GROUP REGISTERED",
+              "GROUP REGISTRATION",
               `Group ID: ${context.chatId}`,
               `Group Type: ${context.chatType}`,
               `Title: ${context.chatTitle ?? "-"}`,
-              `Authorization: ENABLED`,
+              `Authorization: ${authState}`,
               `MQTT Polling: ${polling.status.toUpperCase()}`,
               `Timestamp: ${fmtTime(Date.now())}`,
             ].join("\n"),
           );
+
+          // Return early — audit already logged above
+          return { ok: true, detail: "register_group handled" };
         }
       } else if (OPERATOR_COMMANDS.has(command)) {
         const execResult = await executeTelegramCommand({
@@ -233,9 +296,8 @@ export class TelegramCommandRouter {
         });
 
         const replyText = buildCommandReplyMessage(command as ExecutorCommand, execResult, Date.now());
-        await TelegramBotApiService.sendMessage(config.botToken, context.chatId, replyText);
+        await TelegramBotApiService.sendMessage(botToken, context.chatId, replyText);
 
-        // Audit log with result state
         const auditResult: "success" | "failed" | "pending" =
           execResult.result === "failed" ? "failed" :
           execResult.result === "delayed" ? "pending" :
@@ -260,9 +322,9 @@ export class TelegramCommandRouter {
           detail: execResult.detail,
         };
       } else if (command === "/restart") {
-        await TelegramBotApiService.sendMessage(config.botToken, context.chatId, "Restart command acknowledged by admin.");
+        await TelegramBotApiService.sendMessage(botToken, context.chatId, "Restart command acknowledged by admin.");
       } else {
-        await TelegramBotApiService.sendMessage(config.botToken, context.chatId, "Unknown command. Use /help.");
+        await TelegramBotApiService.sendMessage(botToken, context.chatId, "Unknown command. Use /help.");
       }
 
       await TelegramAuditService.log({
@@ -276,7 +338,12 @@ export class TelegramCommandRouter {
       return { ok: true, detail: "Handled successfully" };
     } catch (error) {
       logger.error("telegram", "Command handler failed", error);
-      await TelegramBotApiService.sendMessage(config.botToken, context.chatId, "Command failed. Please try again.");
+      // Always reply on failure
+      try {
+        await TelegramBotApiService.sendMessage(botToken, context.chatId, "Command failed. Please try again.");
+      } catch {
+        // Ignore secondary failure
+      }
       await TelegramAuditService.log({
         userId: context.userId,
         username: context.username,
@@ -284,7 +351,7 @@ export class TelegramCommandRouter {
         result: "failed",
         detail: String(error),
         source: "telegram-webhook",
-      });
+      }).catch(() => {/* ignore */});
       return { ok: false, detail: String(error) };
     }
   }
