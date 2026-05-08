@@ -40,10 +40,16 @@ export type OperationalHealth = {
   statusDriftMs: number | null;
   queueBacklog: number;
   lastAckState: "IDLE" | "WAITING_ACK" | "SYNCED" | "TIMEOUT";
+  reconnectCount: number;
+  connectionUptimeMs: number;
+  connectionState: ConnectionSnapshot["state"];
 };
 
 export type OperationalHealthOptions = {
   mqttConnected: boolean;
+  connectionState: ConnectionSnapshot["state"];
+  reconnectCount?: number;
+  connectionUptimeMs?: number;
   streamState: "NO_DATA" | "STREAMING" | "STALE";
   commandStatus: DeviceCommandStatus;
   lastSensorUpdate: number | null;
@@ -75,6 +81,9 @@ export class DeviceHealthService {
 
     return {
       mqttConnected: options.mqttConnected,
+      connectionState: options.connectionState,
+      reconnectCount: options.reconnectCount ?? 0,
+      connectionUptimeMs: options.connectionUptimeMs ?? 0,
       streamState: options.streamState,
       lastSensorAgeMs,
       lastStatusAgeMs,

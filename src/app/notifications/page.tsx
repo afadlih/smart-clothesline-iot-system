@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Bot, Command, Shield } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 import { useSystemState } from "@/hooks/useSystemState";
+import { formatDateTime } from "@/utils/timeFormat";
 
 type TelegramState = "Connected" | "Invalid Token" | "Awaiting Setup" | "Disabled";
 
@@ -23,6 +24,8 @@ export default function NotificationsPage() {
   const [botToken, setBotToken] = useState("");
   const [chatId, setChatId] = useState("");
   const [authorizedUser, setAuthorizedUser] = useState("");
+  const [authorizedGroups, setAuthorizedGroups] = useState("");
+  const [groupModeEnabled, setGroupModeEnabled] = useState(true);
   const [telegramState, setTelegramState] = useState<TelegramState>("Awaiting Setup");
   const [webhookStatus, setWebhookStatus] = useState("Unknown");
   const [commandRegistration, setCommandRegistration] = useState("Unknown");
@@ -44,6 +47,8 @@ export default function NotificationsPage() {
         polling?: { status?: string; uptimeMs?: number };
         auditLogs?: Array<{ id: string; command: string; result: string; detail: string; timestamp: number; username?: string }>;
         authorizedUsers?: Array<{ userId: number; username?: string; role: "Viewer" | "Operator" | "Admin" }>;
+        authorizedGroups?: Array<{ groupId: number; title?: string; type?: "group" | "supergroup" }>;
+        groupModeEnabled?: boolean;
       };
       setIntegrationMode(data.mode ?? "webhook");
       setWebhookStatus(data.hasWebhookSecret ? "Configured" : "Awaiting Setup");
@@ -54,6 +59,10 @@ export default function NotificationsPage() {
         const first = data.authorizedUsers[0];
         setAuthorizedUser(first.username ? `${first.username} (${first.userId})` : String(first.userId));
       }
+      if (Array.isArray(data.authorizedGroups)) {
+        setAuthorizedGroups(data.authorizedGroups.map((group) => String(group.groupId)).join(","));
+      }
+      setGroupModeEnabled(Boolean(data.groupModeEnabled));
       setTelegramState(data.tokenValid ? "Connected" : "Awaiting Setup");
       setAuditLogs(Array.isArray(data.auditLogs) ? data.auditLogs : []);
     }
@@ -97,6 +106,7 @@ export default function NotificationsPage() {
                 <label className="text-xs text-slate-500">Bot Token<input value={botToken} onChange={(e) => setBotToken(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
                 <label className="text-xs text-slate-500">Chat ID<input value={chatId} onChange={(e) => setChatId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
                 <label className="text-xs text-slate-500 md:col-span-2">Authorized User<input value={authorizedUser} onChange={(e) => setAuthorizedUser(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
+                <label className="text-xs text-slate-500 md:col-span-2">Authorized Groups (comma separated IDs)<input value={authorizedGroups} onChange={(e) => setAuthorizedGroups(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
                 <label className="text-xs text-slate-500">Integration Mode
                   <select value={integrationMode} onChange={(e) => setIntegrationMode(e.target.value as "polling" | "webhook")} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">
                     <option value="webhook">webhook</option>
@@ -104,6 +114,10 @@ export default function NotificationsPage() {
                   </select>
                 </label>
                 <label className="text-xs text-slate-500">Webhook Secret<input value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
+                <label className="flex items-center gap-2 text-xs text-slate-500 md:col-span-2">
+                  <input type="checkbox" checked={groupModeEnabled} onChange={(e) => setGroupModeEnabled(e.target.checked)} />
+                  Enable group mode (group/supergroup commands)
+                </label>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button onClick={async () => {
@@ -116,6 +130,7 @@ export default function NotificationsPage() {
                       webhookSecret,
                       mode: integrationMode,
                       enabled: true,
+                      groupModeEnabled,
                       webhookUrl: typeof window !== "undefined" ? `${window.location.origin}/api/telegram/webhook` : undefined,
                       authorizedUsers: (() => {
                         const parsed = Number(authorizedUser.replace(/[^\d]/g, ""));
@@ -123,6 +138,11 @@ export default function NotificationsPage() {
                           ? [{ userId: parsed, username: authorizedUser, role: "Admin" }]
                           : [];
                       })(),
+                      authorizedGroups: authorizedGroups
+                        .split(",")
+                        .map((item) => Number(item.trim()))
+                        .filter((value) => Number.isInteger(value) && value !== 0)
+                        .map((groupId) => ({ groupId })),
                     }),
                   });
                   const data = (await response.json()) as { ok?: boolean; commandRegistered?: boolean; webhookRegistered?: boolean };
@@ -170,6 +190,15 @@ export default function NotificationsPage() {
                 ))}
               </div>
             </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">BotFather Group Setup</h2>
+              <ol className="mt-3 list-decimal space-y-1 pl-4 text-xs text-slate-600 dark:text-slate-300">
+                <li>Open @BotFather and run <span className="font-semibold">/mybots</span>.</li>
+                <li>Disable bot privacy mode if you want non-mention group commands to be read.</li>
+                <li>Add bot to group/supergroup with message read and send permissions.</li>
+                <li>Run <span className="font-semibold">/register_group</span> in the target group.</li>
+              </ol>
+            </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Alert Severity Rules</h2>
@@ -186,7 +215,7 @@ export default function NotificationsPage() {
                 {notificationHistory.length === 0 ? <p className="text-xs text-slate-500">No notification events.</p> : notificationHistory.map((item, index) => (
                   <div key={`${item.timestamp}-${item.action}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-950">
                     <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{item.action}</p>
-                    <p className="text-[11px] text-slate-500">{new Date(item.timestamp).toLocaleString("en-US")}</p>
+                    <p className="text-[11px] text-slate-500">{formatDateTime(item.timestamp)}</p>
                   </div>
                 ))}
               </div>
@@ -207,7 +236,7 @@ export default function NotificationsPage() {
                     <div key={log.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-950">
                       <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{log.command} • {log.result}</p>
                       <p className="text-[11px] text-slate-500">{log.detail}</p>
-                      <p className="text-[11px] text-slate-500">{new Date(log.timestamp).toLocaleString("en-US")}</p>
+                      <p className="text-[11px] text-slate-500">{formatDateTime(log.timestamp)}</p>
                     </div>
                   ))
                 )}

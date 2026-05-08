@@ -6,7 +6,7 @@ export type TelegramRole = "VIEWER" | "OPERATOR" | "ADMIN";
 export type AuthorizationResult = {
   authorized: boolean;
   role: TelegramRole | null;
-  reason: "authorized" | "unauthorized_user" | "invalid_user_id" | "insufficient_role";
+  reason: "authorized" | "unauthorized_user" | "invalid_user_id" | "insufficient_role" | "unauthorized_group";
   userId: number | null;
 };
 
@@ -24,10 +24,16 @@ export const COMMAND_PERMISSIONS: Record<string, TelegramRole[]> = {
   "/restart": ["ADMIN"],
   "/override": ["ADMIN"],
   "/debug": ["ADMIN"],
+  "/ping": ["VIEWER", "OPERATOR", "ADMIN"],
+  "/uptime": ["VIEWER", "OPERATOR", "ADMIN"],
+  "/analytics": ["VIEWER", "OPERATOR", "ADMIN"],
+  "/register_group": ["ADMIN"],
 };
 
 type TelegramAuthConfig = {
   users: Map<number, TelegramRole>;
+  groups: Set<number>;
+  operatorIds: Set<number>;
   loadedAt: number;
 };
 
@@ -42,14 +48,19 @@ function toRole(role: StoredRole | undefined): TelegramRole {
   return "VIEWER";
 }
 
-function parseAllowedIds(raw: string | undefined): number[] {
+function parseAllowedIds(raw: string | undefined, options?: { allowNegative?: boolean }): number[] {
   if (!raw) return [];
+  const allowNegative = Boolean(options?.allowNegative);
   return raw
     .split(",")
     .map((item) => item.trim())
     .filter((item) => item.length > 0)
     .map((item) => Number(item))
-    .filter((item) => Number.isInteger(item) && item > 0);
+    .filter((item) => {
+      if (!Number.isInteger(item)) return false;
+      if (allowNegative) return item !== 0;
+      return item > 0;
+    });
 }
 
 async function loadConfig(): Promise<TelegramAuthConfig> {
@@ -57,9 +68,18 @@ async function loadConfig(): Promise<TelegramAuthConfig> {
   if (existing) return existing;
 
   const users = new Map<number, TelegramRole>();
-  const fromEnv = parseAllowedIds(process.env.TELEGRAM_ALLOWED_USER_IDS);
+  const groups = new Set<number>();
+  const operators = new Set<number>();
+  const fromEnv = parseAllowedIds(process.env.TELEGRAM_ALLOWED_USER_IDS ?? process.env.TELEGRAM_ALLOWED_USERS);
   for (const userId of fromEnv) {
     users.set(userId, "ADMIN");
+  }
+  for (const groupId of parseAllowedIds(process.env.TELEGRAM_ALLOWED_GROUPS, { allowNegative: true })) {
+    groups.add(groupId);
+  }
+  for (const operatorId of parseAllowedIds(process.env.TELEGRAM_OPERATOR_IDS)) {
+    operators.add(operatorId);
+    if (!users.has(operatorId)) users.set(operatorId, "OPERATOR");
   }
 
   const storedConfig = await TelegramOpsService.getConfig();
@@ -73,9 +93,18 @@ async function loadConfig(): Promise<TelegramAuthConfig> {
       }
     }
   }
+  if (storedConfig?.authorizedGroups) {
+    for (const group of storedConfig.authorizedGroups) {
+      if (typeof group.groupId === "number" && Number.isInteger(group.groupId)) {
+        groups.add(group.groupId);
+      }
+    }
+  }
 
   const config: TelegramAuthConfig = {
     users,
+    groups,
+    operatorIds: operators,
     loadedAt: Date.now(),
   };
 
@@ -96,7 +125,9 @@ export function normalizeCommand(raw: string | undefined): string | null {
   if (!raw || typeof raw !== "string") return null;
   const clean = raw.trim().toLowerCase();
   if (!clean.startsWith("/")) return null;
-  return clean.split(/\s+/)[0];
+  const firstToken = clean.split(/\s+/)[0] ?? "";
+  const [base] = firstToken.split("@");
+  return base || null;
 }
 
 export async function authorizeTelegramUser(input: {
@@ -149,5 +180,48 @@ export async function authorizeTelegramUser(input: {
     reason: "authorized",
     userId: input.userId!,
   };
+}
+
+export async function authorizeTelegramActor(input: {
+  userId?: number;
+  command?: string;
+  chatId?: number;
+  chatType?: "private" | "group" | "supergroup";
+}): Promise<AuthorizationResult> {
+  const base = await authorizeTelegramUser({
+    userId: input.userId,
+    command: input.command,
+  });
+  if (!base.authorized) return base;
+
+  const config = await loadConfig();
+  const isGroup = input.chatType === "group" || input.chatType === "supergroup";
+  if (isGroup) {
+    // Config-first: use persisted groupModeEnabled from Firestore, env var is fallback only
+    const storedConfig = await TelegramOpsService.getConfig();
+    const allowGroupMode =
+      Boolean(storedConfig?.groupModeEnabled) ||
+      process.env.TELEGRAM_ENABLE_GROUP_MODE?.toLowerCase() === "true";
+
+    if (!allowGroupMode) {
+      return {
+        authorized: false,
+        role: base.role,
+        reason: "unauthorized_group",
+        userId: base.userId,
+      };
+    }
+    const command = normalizeCommand(input.command);
+    const canBypassGroupRegistration = command === "/register_group";
+    if (!canBypassGroupRegistration && typeof input.chatId === "number" && !config.groups.has(input.chatId)) {
+      return {
+        authorized: false,
+        role: base.role,
+        reason: "unauthorized_group",
+        userId: base.userId,
+      };
+    }
+  }
+  return base;
 }
 

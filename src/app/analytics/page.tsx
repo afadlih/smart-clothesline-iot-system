@@ -3,7 +3,7 @@
 import { useSensor } from "@/hooks/useSensor";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { DataExportService } from "@/services/DataExportService";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   LineChart,
   Line,
@@ -32,20 +32,7 @@ export default function AnalyticsPage() {
   });
   const [timeRange, setTimeRange] = useState<TimeRange>("7days");
 
-  if (analytics.loading) {
-    return (
-      <main className="bg-gray-100 min-h-screen p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="animate-pulse space-y-4">
-            <div className="h-12 bg-gray-300 rounded-lg"></div>
-            <div className="h-96 bg-gray-300 rounded-lg"></div>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  const { dailyStats, hourlyBreakdown, deviceHealth, smartAlerts, dataSufficiency } = analytics;
+  const { dailyStats, hourlyBreakdown, deviceHealth, smartAlerts, dataSufficiency, hasData } = analytics;
   const palette = resolveThemePalette(currentTheme);
 
   const safeNumber = (value: unknown, fallback: number = 0) =>
@@ -83,7 +70,7 @@ export default function AnalyticsPage() {
   };
 
   // Filter data by time range
-  const getFilteredData = () => {
+  const filteredData = useMemo(() => {
     const now = Date.now();
     let cutoffTime = now;
 
@@ -106,9 +93,18 @@ export default function AnalyticsPage() {
       const timestamp = new Date(h.data.timestamp).getTime();
       return Number.isFinite(timestamp) && timestamp >= cutoffTime;
     });
-  };
-
-  const filteredData = getFilteredData();
+  }, [history, timeRange]);
+  const safeHourlyBreakdown = useMemo(
+    () =>
+      hourlyBreakdown.filter(
+        (item) =>
+          Number.isFinite(item.hour) &&
+          Number.isFinite(item.temperature) &&
+          Number.isFinite(item.humidity) &&
+          Number.isFinite(item.light),
+      ),
+    [hourlyBreakdown],
+  );
   const rainRatio = safeDataPoints > 0 ? (safeRainEvents / safeDataPoints) * 100 : 0;
   const dryingEfficiency = dataSufficiency.canEstimateDryingEfficiency
     ? Math.max(0, Math.min(100, 100 - rainRatio))
@@ -116,6 +112,19 @@ export default function AnalyticsPage() {
   const dominantWeather = dataSufficiency.hasOperationalPattern
     ? rainRatio > 45 ? "Rain-dominant" : rainRatio > 20 ? "Mixed weather" : "Dry-dominant"
     : "Collecting operational patterns";
+
+  if (analytics.loading) {
+    return (
+      <main className="bg-gray-100 min-h-screen p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="animate-pulse space-y-4">
+            <div className="h-12 bg-gray-300 rounded-lg"></div>
+            <div className="h-96 bg-gray-300 rounded-lg"></div>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="bg-gray-100 min-h-screen p-6">
@@ -186,6 +195,15 @@ export default function AnalyticsPage() {
                 />
               ))}
             </div>
+          </div>
+        )}
+
+        {!hasData && (
+          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-900">Insufficient telemetry history</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Waiting for telemetry stream to build reliable analytics insights.
+            </p>
           </div>
         )}
 
@@ -274,9 +292,9 @@ export default function AnalyticsPage() {
           {/* Temperature Trend */}
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Temperature Trend</h3>
-            {hourlyBreakdown.length > 0 ? (
+            {safeHourlyBreakdown.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={hourlyBreakdown}>
+                <LineChart data={safeHourlyBreakdown}>
                   <CartesianGrid stroke={palette.chart.grid} strokeDasharray="3 3" />
                   <XAxis dataKey="hour" />
                   <YAxis />
@@ -298,9 +316,9 @@ export default function AnalyticsPage() {
           {/* Humidity Trend */}
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Humidity Trend</h3>
-            {hourlyBreakdown.length > 0 ? (
+            {safeHourlyBreakdown.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={hourlyBreakdown}>
+                <AreaChart data={safeHourlyBreakdown}>
                   <defs>
                     <linearGradient id="colorHumidity" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor={palette.chart.humidity} stopOpacity={0.8} />
@@ -328,9 +346,9 @@ export default function AnalyticsPage() {
           {/* Light Levels */}
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Light Levels</h3>
-            {hourlyBreakdown.length > 0 ? (
+            {safeHourlyBreakdown.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={hourlyBreakdown}>
+                <BarChart data={safeHourlyBreakdown}>
                   <CartesianGrid stroke={palette.chart.grid} strokeDasharray="3 3" />
                   <XAxis dataKey="hour" />
                   <YAxis />
@@ -384,7 +402,9 @@ export default function AnalyticsPage() {
             <div>
               <p className="text-sm text-gray-600">Last Seen</p>
               <p className="text-2xl font-bold text-gray-900">
-                {(deviceHealth.connectionQuality.lastSeenAgo / 1000).toFixed(0)}s ago
+                {Number.isFinite(deviceHealth.connectionQuality.lastSeenAgo)
+                  ? `${Math.max(0, Math.round(deviceHealth.connectionQuality.lastSeenAgo / 1000))}s ago`
+                  : "--"}
               </p>
             </div>
           </div>

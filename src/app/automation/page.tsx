@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertTriangle, CloudRain, Settings2, Shield, Timer } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 import { useSystemState } from "@/hooks/useSystemState";
+import { formatClock } from "@/utils/timeFormat";
 
 const SETTINGS_STORAGE_KEY = "smart-clothesline-settings-v1";
 
@@ -142,7 +143,7 @@ export default function AutomationPage() {
                 {automationEvents.length === 0 ? <p className="text-xs text-slate-500">No automation logs yet.</p> : automationEvents.map((item, index) => (
                   <div key={`${item.timestamp}-${item.action}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-950">
                     <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{item.action}</p>
-                    <p className="mt-0.5 text-[11px] text-slate-500">{new Date(item.timestamp).toLocaleTimeString("en-US")}</p>
+                    <p className="mt-0.5 text-[11px] text-slate-500">{formatClock(item.timestamp)}</p>
                   </div>
                 ))}
               </div>

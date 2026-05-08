@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useSensorHistory } from "@/hooks/useSensorHistory";
 import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react";
+import { formatClock, formatDateTime } from "@/utils/timeFormat";
 
 type SortKey = "date" | "temperature" | "humidity" | "light" | "status";
 type SortDirection = "asc" | "desc";
@@ -51,10 +52,7 @@ function formatDateLabel(dateKey: string): string {
 }
 
 function formatTime(timestamp: string): string {
-  return new Date(timestamp).toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatClock(timestamp);
 }
 
 function toStatusLabel(status: "OPEN" | "CLOSED"): "OPEN" | "CLOSED" {
@@ -393,7 +391,7 @@ export default function HistoryPage() {
             </p>
           </div>
           <div className="text-xs text-gray-500 dark:text-slate-400">
-            Last sync: {lastFetchedAt ? new Date(lastFetchedAt).toLocaleString("en-US") : "-"}
+            Last sync: {lastFetchedAt ? formatDateTime(lastFetchedAt) : "-"}
           </div>
         </header>
 

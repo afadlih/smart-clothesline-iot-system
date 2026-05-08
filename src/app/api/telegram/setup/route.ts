@@ -18,17 +18,30 @@ const COMMANDS = [
   { command: "debug", description: "Admin debug summary" },
   { command: "alerts", description: "Latest alerts" },
   { command: "help", description: "Available commands" },
+  { command: "ping", description: "Ping bot runtime" },
+  { command: "uptime", description: "Polling uptime diagnostics" },
+  { command: "analytics", description: "Analytics summary" },
+  { command: "register_group", description: "Register current group" },
 ];
 
 export async function GET() {
   try {
-    const boot = await ensureTelegramPollingStarted();
     const config = await TelegramOpsService.getConfig();
     if (!config) {
-      return NextResponse.json({ ok: true, configured: false, polling: getTelegramPollingDiagnostics(), boot });
+      return NextResponse.json({ ok: true, configured: false, polling: getTelegramPollingDiagnostics() });
     }
     const tokenOk = config.botToken ? await TelegramBotApiService.getMe(config.botToken) : { ok: false };
     const auditLogs = await TelegramOpsService.getRecentAuditLogs(20);
+
+    // Only start polling when mode is polling — skip in webhook/production mode
+    let boot: Awaited<ReturnType<typeof ensureTelegramPollingStarted>> | null = null;
+    if (config.mode === "polling") {
+      boot = await ensureTelegramPollingStarted();
+    } else {
+      // Webhook mode: stop any stray polling loop if it was somehow started
+      TelegramBotApiService.stopPolling();
+    }
+
     return NextResponse.json({
       ok: true,
       configured: true,
@@ -38,6 +51,8 @@ export async function GET() {
       tokenDescription: tokenOk.description ?? null,
       hasWebhookSecret: Boolean(config.webhookSecret),
       authorizedUsers: config.authorizedUsers,
+      authorizedGroups: config.authorizedGroups ?? [],
+      groupModeEnabled: Boolean(config.groupModeEnabled),
       auditLogs,
       polling: getTelegramPollingDiagnostics(),
       boot,
@@ -56,6 +71,8 @@ export async function POST(request: NextRequest) {
       mode: "polling" | "webhook";
       enabled: boolean;
       authorizedUsers: Array<{ userId: number; username?: string; role: "Viewer" | "Operator" | "Admin" }>;
+      authorizedGroups?: Array<{ groupId: number; title?: string; type?: "group" | "supergroup" }>;
+      groupModeEnabled?: boolean;
       webhookUrl?: string;
     };
 
@@ -88,10 +105,20 @@ export async function POST(request: NextRequest) {
       mode: body.mode,
       enabled: body.enabled,
       authorizedUsers: body.authorizedUsers ?? [],
+      authorizedGroups: Array.isArray(body.authorizedGroups) ? body.authorizedGroups : [],
+      groupModeEnabled: Boolean(body.groupModeEnabled),
     });
     resetTelegramAuthConfigCache();
 
-    const boot = await ensureTelegramPollingStarted();
+    // Only start polling when mode is polling — webhook mode does not need a long-lived loop
+    let boot: Awaited<ReturnType<typeof ensureTelegramPollingStarted>> | null = null;
+    if (body.mode === "polling") {
+      boot = await ensureTelegramPollingStarted();
+    } else {
+      // Webhook mode: stop any stray polling loop
+      TelegramBotApiService.stopPolling();
+    }
+
     return NextResponse.json({
       ok: true,
       commandRegistered,

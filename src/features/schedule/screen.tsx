@@ -7,6 +7,7 @@ import { useSystemState } from "@/hooks/useSystemState";
 import { isWithinSchedule } from "@/features/system/ScheduleEngine";
 import { ScheduleService, type FirebaseScheduleItem } from "@/services/ScheduleService";
 import { mqttService } from "@/services/MQTTService"; 
+import { logger } from "@/lib/logger";
 
 type FormState = { name: string; timeOpen: string; timeClose: string; };
 const initialForm: FormState = { name: "", timeOpen: "08:00", timeClose: "10:00" };
@@ -49,8 +50,13 @@ export default function SchedulePage() {
   };
 
   useEffect(() => {
-    mqttService.onConnectionStatus((status) => console.log("[MQTT]:", status.state));
+    const unsubscribe = mqttService.onConnectionStatus((status) => {
+      logger.debug("mqtt", "Schedule page connection state", status.state);
+    });
     void ScheduleService.migrateLegacyLocalSchedulesOnce().then(() => { void loadScheduleData(); });
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -106,6 +112,7 @@ export default function SchedulePage() {
   };
 
   const onSubmitSchedule = async () => {
+    setErrorMessage("");
     if (!form.name.trim()) {
       setErrorMessage("Name is required.");
       return;

@@ -27,6 +27,12 @@ export type TelegramAuthorizedUser = {
   role: TelegramRole;
 };
 
+export type TelegramAuthorizedGroup = {
+  groupId: number;
+  title?: string;
+  type?: "group" | "supergroup";
+};
+
 export type TelegramConfig = {
   botToken: string;
   webhookSecret: string;
@@ -34,6 +40,8 @@ export type TelegramConfig = {
   enabled: boolean;
   chatId?: string;
   authorizedUsers: TelegramAuthorizedUser[];
+  authorizedGroups?: TelegramAuthorizedGroup[];
+  groupModeEnabled?: boolean;
   updatedAt?: unknown;
 };
 
@@ -46,6 +54,7 @@ export type TelegramCommandJob = {
     | "/mode_manual";
   status: "pending" | "processing" | "done" | "failed";
   source: "telegram";
+  chatId?: number;
   userId: number;
   username?: string;
   createdAt: number;
@@ -80,6 +89,19 @@ export class TelegramOpsService {
       }
     }
 
+    const authorizedGroups: TelegramAuthorizedGroup[] = [];
+    if (Array.isArray(value.authorizedGroups)) {
+      for (const item of value.authorizedGroups) {
+        const candidate = item as Partial<TelegramAuthorizedGroup>;
+        if (typeof candidate.groupId !== "number") continue;
+        authorizedGroups.push({
+          groupId: candidate.groupId,
+          title: typeof candidate.title === "string" ? candidate.title : undefined,
+          type: candidate.type === "supergroup" ? "supergroup" : "group",
+        });
+      }
+    }
+
     return {
       botToken: typeof value.botToken === "string" ? value.botToken : "",
       webhookSecret: typeof value.webhookSecret === "string" ? value.webhookSecret : "",
@@ -87,6 +109,8 @@ export class TelegramOpsService {
       enabled: Boolean(value.enabled),
       chatId: typeof value.chatId === "string" ? value.chatId : undefined,
       authorizedUsers,
+      authorizedGroups,
+      groupModeEnabled: Boolean(value.groupModeEnabled),
       updatedAt: value.updatedAt,
     };
   }
@@ -104,6 +128,7 @@ export class TelegramOpsService {
 
   static async enqueueCommand(input: {
     command: TelegramCommandJob["command"];
+    chatId?: number;
     userId: number;
     username?: string;
   }): Promise<string> {
@@ -112,6 +137,7 @@ export class TelegramOpsService {
       command: input.command,
       status: "pending",
       source: "telegram",
+      chatId: typeof input.chatId === "number" ? input.chatId : null,
       userId: input.userId,
       username: input.username ?? null,
       createdAt: now,
@@ -155,6 +181,7 @@ export class TelegramOpsService {
             ? value.status
             : "pending",
         source: "telegram",
+        chatId: typeof value.chatId === "number" ? value.chatId : undefined,
         userId: typeof value.userId === "number" ? value.userId : 0,
         username: typeof value.username === "string" ? value.username : undefined,
         createdAt: typeof value.createdAt === "number" ? value.createdAt : Date.now(),

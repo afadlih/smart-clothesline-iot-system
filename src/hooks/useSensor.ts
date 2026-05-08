@@ -25,12 +25,14 @@ import { ScheduleService } from "@/services/ScheduleService";
 import { TelemetryNormalizerService } from "@/services/TelemetryNormalizerService";
 import { OperationalStateResolver } from "@/services/OperationalStateResolver";
 import { TelegramOpsService } from "@/services/TelegramOpsService";
+import { TelegramBotApiService } from "@/services/TelegramBotApiService";
 import { useSensorStore } from "@/stores/sensorStore";
+import { logger } from "@/lib/logger";
 
 type ConnectionState = "connecting" | "online" | "reconnecting" | "offline" | "error";
 type DeviceStatus = "OPEN" | "CLOSED" | "RESTARTING";
 type DeviceMode = "AUTO" | "MANUAL";
-type DeviceCommand = "OPEN" | "CLOSE" | "AUTO" | "RESTART";
+type DeviceCommand = "OPEN" | "CLOSE" | "AUTO" | "MANUAL" | "RESTART";
 type UiConnectionState = "DISCONNECTED" | "CONNECTED";
 type UiStreamState = "NO_DATA" | "STREAMING" | "STALE";
 type UiDeviceSyncState = "IDLE" | "WAITING_ACK" | "SYNCED";
@@ -103,6 +105,9 @@ export type ConnectionSnapshot = {
     source: "MQTT";
     lastError: string | null;
     lastMessageAt: string | null;
+    reconnectCount: number;
+    connectedSinceAt: string | null;
+    uptimeMs: number;
 };
 
 export type SensorHistoryItem = {
@@ -163,7 +168,7 @@ const MAX_EVENT_ITEMS = 10;
 const ACK_TIMEOUT_MS = 5_000;
 const CONFIG_ACK_TIMEOUT_MS = 5_000;
 const CONFIG_PUBLISH_INTERVAL_MS = 5_000;
-const FRESHNESS_MS = 10_000;
+const FRESHNESS_MS = 15_000;
 const STATUS_DEBOUNCE_MS = 1_000;
 const OFFLINE_ALERT_INTERVAL_MS = 10_000;
 const TELEGRAM_ALERT_COOLDOWN_MS = 30_000;
@@ -219,6 +224,9 @@ const sharedState: SensorSnapshot = {
         source: "MQTT",
         lastError: null,
         lastMessageAt: null,
+        reconnectCount: 0,
+        connectedSinceAt: null,
+        uptimeMs: 0,
     },
     queueStats: {
         total: 0,
@@ -237,6 +245,21 @@ let offlineAlertRaised = false;
 let lastConfigPublishAt = 0;
 let lastConfigPublishKey: string | null = null;
 const lastTelegramAlertAtByKey: Record<string, number> = {};
+const alertConditionState: Record<string, boolean> = {};
+
+function normalizePacketTimestamp(input: number | undefined, fallback: number): number {
+    if (typeof input !== "number" || !Number.isFinite(input)) {
+        return fallback;
+    }
+    let value = input;
+    if (value > 0 && value < 1_000_000_000_000) {
+        value *= 1000;
+    }
+    if (value < 1_577_836_800_000 || value > Date.now() + 5 * 60 * 1000) {
+        return fallback;
+    }
+    return Math.floor(value);
+}
 
 function toInternalStatus(status: DeviceStatus | null): "OPEN" | "CLOSED" {
     return status === "OPEN" ? "OPEN" : "CLOSED";
@@ -329,7 +352,7 @@ function appendLegacyEvent(event: EventLog): void {
     notifyListeners();
 
     void EventLogService.logEvent(event).catch((error) => {
-        console.error("[EventLog] Failed to save event:", error);
+        logger.error("firestore", "Failed to save event log", error);
     });
 }
 
@@ -338,7 +361,7 @@ function parseSensorPayload(raw: string, receivedAt: number): MqttSensorPayload 
         const data = JSON.parse(raw) as Record<string, unknown>;
         const normalized = TelemetryNormalizerService.normalize(data, receivedAt);
         if (!normalized.ok) {
-            console.warn("[MQTT] Invalid sensor payload:", normalized.reason);
+            logger.warn("mqtt", "Invalid sensor payload", normalized.reason);
             return null;
         }
         if (normalized.duplicate) {
@@ -355,32 +378,59 @@ function parseSensorPayload(raw: string, receivedAt: number): MqttSensorPayload 
             heartbeat: normalized.value.heartbeat,
         };
     } catch {
-        console.warn("[MQTT] Failed to parse sensor payload:", raw);
+        logger.warn("mqtt", "Failed to parse sensor payload", raw);
         return null;
     }
 }
 
+let cachedBridgeConfig: { token: string | null; lastFetchAt: number } = { token: null, lastFetchAt: 0 };
+const BRIDGE_CONFIG_CACHE_MS = 30_000;
+
+async function getBridgeBotToken(): Promise<string | null> {
+    const now = Date.now();
+    if (cachedBridgeConfig.token !== null && now - cachedBridgeConfig.lastFetchAt < BRIDGE_CONFIG_CACHE_MS) {
+        return cachedBridgeConfig.token;
+    }
+    const config = await TelegramOpsService.getConfig().catch(() => null);
+    cachedBridgeConfig = { token: config?.botToken ?? null, lastFetchAt: now };
+    return cachedBridgeConfig.token;
+}
+
 async function processPendingTelegramCommands(): Promise<void> {
     const pending = await TelegramOpsService.fetchPendingCommands(5);
+    if (pending.length === 0) return;
+    const botToken = await getBridgeBotToken();
     for (const commandJob of pending) {
         try {
             await TelegramOpsService.markCommandStatus(commandJob.id, "processing", "Processing by dashboard bridge");
+            let dispatched = false;
             if (commandJob.command === "/open") {
-                sendCommand("OPEN");
+                dispatched = sendCommand("OPEN");
             } else if (commandJob.command === "/close") {
-                sendCommand("CLOSE");
+                dispatched = sendCommand("CLOSE");
             } else if (commandJob.command === "/mode_auto") {
-                sendCommand("AUTO");
+                dispatched = sendCommand("AUTO");
             } else if (commandJob.command === "/mode_manual") {
-                await TelegramOpsService.markCommandStatus(commandJob.id, "failed", "Manual mode requires operator mode policy");
+                dispatched = sendCommand("MANUAL");
+            }
+
+            if (!dispatched) {
+                await TelegramOpsService.markCommandStatus(commandJob.id, "pending", "Dispatch delayed: waiting device/MQTT/rate window");
                 await TelegramOpsService.addAuditLog({
                     userId: commandJob.userId,
                     username: commandJob.username,
                     command: commandJob.command,
-                    result: "failed",
-                    detail: "Manual mode command is not mapped to low-level MQTT command",
+                    result: "pending",
+                    detail: "Dispatch delayed by runtime state",
                     source: "telegram-bridge",
                 });
+                if (botToken && typeof commandJob.chatId === "number") {
+                    await TelegramBotApiService.sendMessage(
+                        botToken,
+                        commandJob.chatId,
+                        `Command ${commandJob.command} delayed. Waiting device or MQTT to be ready.`,
+                    );
+                }
                 continue;
             }
 
@@ -393,6 +443,13 @@ async function processPendingTelegramCommands(): Promise<void> {
                 detail: "Command dispatched from bridge",
                 source: "telegram-bridge",
             });
+            if (botToken && typeof commandJob.chatId === "number") {
+                await TelegramBotApiService.sendMessage(
+                    botToken,
+                    commandJob.chatId,
+                    `Command ${commandJob.command} dispatched to MQTT successfully.`,
+                );
+            }
             pushSystemEvent({
                 type: "COMMAND",
                 title: "Telegram command executed",
@@ -409,6 +466,13 @@ async function processPendingTelegramCommands(): Promise<void> {
                 detail: String(error),
                 source: "telegram-bridge",
             });
+            if (botToken && typeof commandJob.chatId === "number") {
+                await TelegramBotApiService.sendMessage(
+                    botToken,
+                    commandJob.chatId,
+                    `Command ${commandJob.command} failed to execute.`,
+                );
+            }
         }
     }
 }
@@ -454,7 +518,7 @@ function shouldAcceptDevicePayload(payloadDeviceId?: string): boolean {
 
 function applyConfigAckPayload(payload: MqttConfigAckPayload, receivedAt: number): void {
     if (!shouldAcceptConfigAckPayload(payload)) {
-        console.info("[MQTT][FILTERED CONFIG ACK]", {
+        logger.info("mqtt", "Filtered config ack payload", {
             activeDeviceId: getActiveDeviceId(),
             payloadDeviceId: payload.deviceId ?? null,
         });
@@ -509,7 +573,7 @@ function parseStatusPacket(raw: string): StatusPacket | null {
                 (data.autoCloseOnDark !== undefined && typeof data.autoCloseOnDark !== "boolean") ||
                 (data.autoOpenWhenSafe !== undefined && typeof data.autoOpenWhenSafe !== "boolean")
             ) {
-                console.warn("[MQTT] Invalid config ack payload:", raw);
+                logger.warn("mqtt", "Invalid config ack payload", raw);
                 return null;
             }
 
@@ -546,7 +610,7 @@ function parseStatusPacket(raw: string): StatusPacket | null {
             (data.status !== "OPEN" && data.status !== "CLOSED") ||
             (data.mode !== "AUTO" && data.mode !== "MANUAL")
         ) {
-            console.warn("[MQTT] Invalid status payload:", raw);
+            logger.warn("mqtt", "Invalid status payload", raw);
             return null;
         }
 
@@ -557,7 +621,7 @@ function parseStatusPacket(raw: string): StatusPacket | null {
                 status: data.status,
                 mode: data.mode,
                 lastCommand:
-                    data.lastCommand === "OPEN" || data.lastCommand === "CLOSE" || data.lastCommand === "AUTO"
+                    data.lastCommand === "OPEN" || data.lastCommand === "CLOSE" || data.lastCommand === "AUTO" || data.lastCommand === "MANUAL"
                         ? data.lastCommand
                         : undefined,
                 source: data.source === "DEVICE" ? data.source : undefined,
@@ -565,13 +629,13 @@ function parseStatusPacket(raw: string): StatusPacket | null {
             },
         };
     } catch {
-        console.warn("[MQTT] Failed to parse status payload:", raw);
+        logger.warn("mqtt", "Failed to parse status payload", raw);
         return null;
     }
 }
 
 function mapToSensorData(message: MqttSensorPayload): SensorData {
-    const timestamp = message.timestamp ?? Date.now();
+    const timestamp = normalizePacketTimestamp(message.timestamp, Date.now());
     return new SensorData({
         temp: message.temperature,
         humidity: message.humidity,
@@ -645,6 +709,9 @@ function matchesAcknowledgement(payload: MqttDeviceStatusPayload): boolean {
     if (pending === "AUTO") {
         return payload.mode === "AUTO" && payload.lastCommand === "AUTO";
     }
+    if (pending === "MANUAL") {
+        return payload.mode === "MANUAL" && payload.lastCommand === "MANUAL";
+    }
 
     const expectedStatus = pending === "OPEN" ? "OPEN" : "CLOSED";
     return payload.lastCommand === pending && payload.status === expectedStatus;
@@ -687,7 +754,7 @@ async function sendTelegramAlert(title: string, description: string, alertKey: s
             }),
         });
     } catch (error) {
-        console.warn("[Telegram] Failed to send alert notification:", error);
+        logger.warn("telegram", "Failed to send alert notification", error);
     }
 }
 
@@ -696,23 +763,28 @@ function detectRealtimeAlerts(sensor: SensorData | null, status: DeviceStatus | 
         return;
     }
 
-    if (sensor.isRaining() && status === "OPEN") {
+    const rainOpen = sensor.isRaining() && status === "OPEN";
+    const dryLikely = sensor.humidity < 50 && sensor.temperature > 30;
+
+    if (rainOpen && !alertConditionState["alert-rain-open"]) {
         pushAlertIfNeeded(
             "Rain detected while clothesline is OPEN",
-            "Device remains OPEN while rain=true.",
+            `Device remains OPEN while rain=true. Temp=${sensor.temperature.toFixed(1)}C Hum=${sensor.humidity.toFixed(1)}% Light=${sensor.light.toFixed(0)}.`,
             "alert-rain-open",
             timestamp,
         );
     }
+    alertConditionState["alert-rain-open"] = rainOpen;
 
-    if (sensor.humidity < 50 && sensor.temperature > 30) {
+    if (dryLikely && !alertConditionState["alert-dry-clothes"]) {
         pushAlertIfNeeded(
             "Clothes are likely dry",
-            "Humidity < 50% and temperature > 30C.",
+            `Humidity=${sensor.humidity.toFixed(1)}% and temperature=${sensor.temperature.toFixed(1)}C.`,
             "alert-dry-clothes",
             timestamp,
         );
     }
+    alertConditionState["alert-dry-clothes"] = dryLikely;
 }
 
 function detectOfflineAlert(now: number): void {
@@ -738,8 +810,8 @@ function detectOfflineAlert(now: number): void {
     lastOfflineAlertAt = now;
     offlineAlertRaised = true;
     pushAlertIfNeeded(
-        "Device offline",
-        "No fresh MQTT data for more than 10 seconds.",
+        "No fresh telemetry (stale)",
+        "No MQTT data for more than 15 seconds. Device may be delayed or unreachable.",
         "alert-device-offline",
         now,
     );
@@ -776,7 +848,7 @@ function startStreamIfNeeded(): void {
                 notifyListeners();
             })
             .catch((error) => {
-                console.error("[EventLog] Failed to fetch recent events:", error);
+                logger.error("firestore", "Failed to fetch recent events", error);
             });
     }
 
@@ -795,15 +867,15 @@ function startStreamIfNeeded(): void {
             }
 
             if (!shouldAcceptSensorPayload(payload)) {
-                console.info("[MQTT][FILTERED SENSOR]", {
+                logger.info("mqtt", "Filtered sensor payload", {
                     activeDeviceId: getActiveDeviceId(),
                     payloadDeviceId: payload.deviceId ?? null,
                 });
                 return;
             }
 
-            const sensorTimestamp = payload.timestamp ?? receivedAt;
-            const heartbeatTimestamp = payload.heartbeat ?? sensorTimestamp;
+            const sensorTimestamp = normalizePacketTimestamp(payload.timestamp, receivedAt);
+            const heartbeatTimestamp = normalizePacketTimestamp(payload.heartbeat, sensorTimestamp);
 
             const data = mapToSensorData(payload);
             sharedState.sensorData = data;
@@ -826,7 +898,7 @@ function startStreamIfNeeded(): void {
             };
             // TODO: move to backend ingestion service
             void FirestoreService.saveSensorData(payloadForStorage).catch((error) => {
-                console.error("[Firestore] Failed to save sensor data:", error);
+                logger.error("firestore", "Failed to save sensor data", error);
             });
 
             const id = `${data.timestamp}-${Math.random().toString(36).slice(2, 10)}`;
@@ -863,7 +935,7 @@ function startStreamIfNeeded(): void {
 
             detectRealtimeAlerts(data, sharedState.deviceState.status, sensorTimestamp);
 
-            console.info("[MQTT][STATE UPDATE]", {
+            logger.info("mqtt", "Sensor state update", {
                 topic: SENSOR_TOPIC,
                 sensor: {
                     temperature: payload.temperature,
@@ -900,9 +972,9 @@ function startStreamIfNeeded(): void {
         }
 
         const payload = packet.payload;
-        const statusTimestamp = payload.timestamp ?? receivedAt;
+        const statusTimestamp = normalizePacketTimestamp(payload.timestamp, receivedAt);
         if (!shouldAcceptStatusPayload(payload)) {
-            console.info("[MQTT][FILTERED STATUS]", {
+            logger.info("mqtt", "Filtered status payload", {
                 activeDeviceId: getActiveDeviceId(),
                 payloadDeviceId: payload.deviceId ?? null,
             });
@@ -977,7 +1049,7 @@ function startStreamIfNeeded(): void {
 
         detectRealtimeAlerts(sharedState.sensorData, payload.status, statusTimestamp);
 
-        console.info("[MQTT][STATE UPDATE]", {
+        logger.info("mqtt", "Status state update", {
             topic: STATUS_TOPIC,
             status: payload.status,
             mode: payload.mode,
@@ -987,41 +1059,41 @@ function startStreamIfNeeded(): void {
     });
 }
 
-export function sendCommand(command: DeviceCommand) {
+export function sendCommand(command: DeviceCommand): boolean {
     const now = Date.now();
     updateUiState(now);
-    const isDeviceOnline = sharedState.uiState.stream === "STREAMING";
+    const isDeviceOnline = sharedState.uiState.connection === "CONNECTED";
 
     if (!isDeviceOnline) {
-        console.warn("[CONTROL] Command blocked: device offline");
+        logger.warn("mqtt", "Command blocked because device is offline");
         pushSystemEvent({
             type: "ALERT",
             title: "Command blocked",
             description: "Device is offline, cannot send command",
             timestamp: now,
         });
-        return;
+        return false;
     }
 
     if (sharedState.commandStatus === "pending") {
-        return;
+        return false;
     }
 
     if (!mqttService.isConnected()) {
-        console.warn("[CONTROL] Command blocked: MQTT disconnected");
+        logger.warn("mqtt", "Command blocked because MQTT is disconnected");
         pushSystemEvent({
             type: "ALERT",
             title: "Command blocked",
             description: "MQTT disconnected, cannot send command",
             timestamp: now,
         });
-        return;
+        return false;
     }
 
     // ===== RATE LIMITING CHECK =====
     const rateLimitCheck = commandRateLimiter.canSend(command);
     if (!rateLimitCheck.allowed) {
-        console.warn("[CONTROL] Command rate limited:", {
+        logger.warn("mqtt", "Command rate limited", {
             command,
             waitMs: rateLimitCheck.waitMs,
         });
@@ -1031,7 +1103,7 @@ export function sendCommand(command: DeviceCommand) {
             description: `Please wait ${Math.ceil((rateLimitCheck.waitMs ?? 0) / 1000)}s before sending another command`,
             timestamp: now,
         });
-        return;
+        return false;
     }
 
     if (command === "RESTART") {
@@ -1061,6 +1133,7 @@ export function sendCommand(command: DeviceCommand) {
         });
 
         mqttService.publish(COMMAND_TOPIC, commandPayload);
+        return true;
     }
 
     commandRateLimiter.recordSend(command);
@@ -1089,6 +1162,7 @@ export function sendCommand(command: DeviceCommand) {
     });
 
     mqttService.publish(COMMAND_TOPIC, commandPayload);
+    return true;
 }
 
 export function publishConfig(config: Omit<DeviceConfig, "syncState" | "lastSyncAt" | "syncMessage">): boolean {
@@ -1231,11 +1305,11 @@ export function useSensor() {
         const queueSyncTimer = window.setInterval(async () => {
             const stats = sensorDataQueue.getStats();
             if (stats.total > 0 && mqttService.isConnected()) {
-                console.info("[Queue] Attempting to sync queued sensor data:", stats);
+                logger.info("firestore", "Attempting queued sensor data sync", stats);
                 try {
                     const synced = await FirestoreService.syncQueuedSensorData();
                     if (synced > 0) {
-                        console.info("[Queue] Synced", synced, "items to Firestore");
+                        logger.info("firestore", "Queued sensor data synced", { synced });
                         pushSystemEvent({
                             type: "CONFIG",
                             title: "Queue synced",
@@ -1244,7 +1318,7 @@ export function useSensor() {
                         });
                     }
                 } catch (error) {
-                    console.error("[Queue] Sync failed:", error);
+                    logger.error("firestore", "Queued sensor data sync failed", error);
                 }
             }
         }, 10000); // Every 10 seconds
@@ -1342,7 +1416,12 @@ export function useSensor() {
     const decision = getFinalState({
         sensor: snapshot.sensorData,
         schedules,
-        pendingManual: snapshot.pendingCommand === "CLOSE" ? "CLOSED" : snapshot.pendingCommand,
+        pendingManual:
+            snapshot.pendingCommand === "CLOSE"
+                ? "CLOSED"
+                : snapshot.pendingCommand === "MANUAL"
+                    ? null
+                    : snapshot.pendingCommand,
         currentHour: new Date(now).getHours(),
         safetyConfig: {
             lightThreshold: snapshot.deviceConfig.lightThreshold,
@@ -1362,6 +1441,9 @@ export function useSensor() {
     );
     const operationalHealth = DeviceHealthService.calculateOperationalHealth({
         mqttConnected,
+        connectionState: snapshot.connection.state,
+        reconnectCount: snapshot.connection.reconnectCount,
+        connectionUptimeMs: snapshot.connection.uptimeMs,
         streamState: snapshot.uiState.stream,
         commandStatus: snapshot.commandStatus,
         lastSensorUpdate: snapshot.lastSensorUpdate,

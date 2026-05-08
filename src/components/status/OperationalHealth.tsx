@@ -17,6 +17,19 @@ function formatAge(ageMs: number | null): string {
   return `${(ageMs / 1000).toFixed(1)} s`;
 }
 
+function formatUptime(ageMs: number): string {
+  if (!Number.isFinite(ageMs) || ageMs <= 0) {
+    return "--";
+  }
+  if (ageMs < 60_000) {
+    return `${Math.floor(ageMs / 1000)}s`;
+  }
+  if (ageMs < 3_600_000) {
+    return `${Math.floor(ageMs / 60_000)}m`;
+  }
+  return `${(ageMs / 3_600_000).toFixed(1)}h`;
+}
+
 function badgeClassForStream(stream: OperationalHealth["streamState"]): string {
   if (stream === "STREAMING") {
     return "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300";
@@ -52,7 +65,7 @@ export default function OperationalHealthPanel({ health, compact = false }: Prop
             ACK: {health.lastAckState}
           </span>
           <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-            MQTT: {health.mqttConnected ? "CONNECTED" : "DISCONNECTED"}
+            MQTT: {health.connectionState.toUpperCase()}
           </span>
         </div>
       </div>
@@ -73,7 +86,7 @@ export default function OperationalHealthPanel({ health, compact = false }: Prop
         <div className="rounded-lg bg-gray-50 p-3 dark:bg-slate-800/70">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">MQTT</p>
           <p className="mt-1 text-sm font-bold text-gray-900 dark:text-slate-100">
-            {health.mqttConnected ? "Connected" : "Disconnected"}
+            {health.connectionState}
           </p>
         </div>
         <div className="rounded-lg bg-gray-50 p-3 dark:bg-slate-800/70">
@@ -95,6 +108,14 @@ export default function OperationalHealthPanel({ health, compact = false }: Prop
         <div className="rounded-lg bg-gray-50 p-3 dark:bg-slate-800/70">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Queue Backlog</p>
           <p className="mt-1 text-sm font-bold text-gray-900 dark:text-slate-100">{health.queueBacklog}</p>
+        </div>
+        <div className="rounded-lg bg-gray-50 p-3 dark:bg-slate-800/70">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Reconnect Count</p>
+          <p className="mt-1 text-sm font-bold text-gray-900 dark:text-slate-100">{health.reconnectCount}</p>
+        </div>
+        <div className="rounded-lg bg-gray-50 p-3 dark:bg-slate-800/70">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Connection Uptime</p>
+          <p className="mt-1 text-sm font-bold text-gray-900 dark:text-slate-100">{formatUptime(health.connectionUptimeMs)}</p>
         </div>
       </div>
       <div className="mt-3">

@@ -59,27 +59,35 @@ export default function DashboardScreen() {
   } = useSystemState();
   const { events: timelineEvents, latestAlert, toasts, dismissToast } = useNotificationEngine();
   const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
+  const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
 
   useEffect(() => {
     setActiveDeviceId(localStorage.getItem(ACTIVE_DEVICE_STORAGE_KEY));
-  }, [])
+  }, []);
 
   const heartbeatAgeSec = lastUpdate === null ? null : Math.max(0, Math.floor((Date.now() - lastUpdate) / 1000));
   const deviceStatusLabel =
-    heartbeatAgeSec === null
-      ? "OFFLINE"
-      : heartbeatAgeSec > 30
-        ? "OFFLINE"
-        : heartbeatAgeSec > 15
-          ? "DATA DELAYED"
-          : "ONLINE";
+    connection.state === "reconnecting"
+      ? "RECONNECTING"
+      : connection.state === "offline" || connection.state === "error"
+        ? "DISCONNECTED"
+        : uiState.connection === "DISCONNECTED"
+          ? "OFFLINE"
+          : uiState.stream === "STALE"
+            ? "STALE"
+            : "ONLINE";
   const deviceStatusClass =
-    deviceStatusLabel === "OFFLINE"
+    deviceStatusLabel === "OFFLINE" || deviceStatusLabel === "DISCONNECTED"
       ? badgeClassByState("danger")
-      : deviceStatusLabel === "DATA DELAYED"
+      : deviceStatusLabel === "STALE" || deviceStatusLabel === "RECONNECTING"
         ? badgeClassByState("warn")
         : badgeClassByState("good");
-  const realtimeLabel = uiState.stream === "STREAMING" ? "REALTIME ACTIVE" : "REALTIME IDLE";
+  const realtimeLabel =
+    uiState.stream === "STREAMING"
+      ? "REALTIME ACTIVE"
+      : uiState.stream === "STALE"
+        ? "TELEMETRY STALE"
+        : "REALTIME IDLE";
 
   const systemModeLabel =
     decision.decisionSource === "MANUAL"
@@ -99,9 +107,6 @@ export default function DashboardScreen() {
 
   const displayedStatus = status ?? "--";
   const lastUpdated = formatClock(lastUpdate);
-
-  const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
-
   const isCommandPending = uiState.deviceSync === "WAITING_ACK";
   const canSendCommand = isStreaming && !isCommandPending;
   const commandStatusLabel =
@@ -256,9 +261,14 @@ export default function DashboardScreen() {
                 </div>
               </div>
 
-              {!isOnline && (
+              {!isOnline && deviceStatusLabel === "STALE" && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
+                  Telemetry delayed — last data is stale. Commands blocked until fresh data returns.
+                </div>
+              )}
+              {!isOnline && deviceStatusLabel !== "STALE" && (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-200">
-                  Device offline, command blocked until fresh MQTT data returns.
+                  Device offline or disconnected — commands blocked until MQTT reconnects.
                 </div>
               )}
 

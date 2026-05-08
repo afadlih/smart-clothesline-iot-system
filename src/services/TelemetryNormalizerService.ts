@@ -3,6 +3,7 @@ import {
   type RawTelemetryPayload,
   type ValidTelemetryPayload,
 } from "@/services/SensorValidationLayer";
+import { TelemetryHeartbeatService } from "@/services/TelemetryHeartbeatService";
 
 export type NormalizedTelemetry = ValidTelemetryPayload & {
   receivedAt: number;
@@ -31,7 +32,7 @@ export class TelemetryNormalizerService {
       ...validation.value,
       receivedAt,
       incomplete: validation.incomplete,
-      stale: receivedAt - validation.value.timestamp > 30_000,
+      stale: receivedAt - validation.value.timestamp > TelemetryHeartbeatService.OFFLINE_TIMEOUT_MS,
     };
 
     const prev = TelemetryNormalizerService.previous;

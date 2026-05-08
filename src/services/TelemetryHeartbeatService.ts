@@ -10,8 +10,8 @@ export type HeartbeatSnapshot = {
 };
 
 export class TelemetryHeartbeatService {
-  static readonly OFFLINE_TIMEOUT_MS = 15_000;
-  static readonly STALE_TIMEOUT_MS = 10_000;
+  static readonly STALE_TIMEOUT_MS = 15_000;
+  static readonly OFFLINE_TIMEOUT_MS = 30_000;
 
   static resolve(input: {
     now: number;

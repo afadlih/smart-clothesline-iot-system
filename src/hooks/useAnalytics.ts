@@ -19,6 +19,7 @@ export type AnalyticsSnapshot = {
     hasOperationalPattern: boolean;
     canEstimateDryingEfficiency: boolean;
   };
+  hasData: boolean;
   loading: boolean;
 };
 
@@ -73,7 +74,8 @@ export function useAnalytics(
           hasOperationalPattern: false,
           canEstimateDryingEfficiency: false,
         },
-        loading: true,
+        hasData: false,
+        loading: false,
       };
     }
 
@@ -127,6 +129,7 @@ export function useAnalytics(
         hasOperationalPattern,
         canEstimateDryingEfficiency,
       },
+      hasData: validSensorData.length > 0,
       loading: false,
     };
   }, [historyData, connection, healthOptions]);

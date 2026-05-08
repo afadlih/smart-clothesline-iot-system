@@ -13,7 +13,7 @@ type TelegramUpdate = {
   update_id: number;
   message?: {
     text?: string;
-    chat?: { id?: number };
+    chat?: { id?: number; type?: "private" | "group" | "supergroup"; title?: string };
     from?: { id?: number; username?: string };
   };
 };
@@ -166,8 +166,10 @@ export class TelegramBotApiService {
       this.processed += 1;
       logger.info("polling", "Update received", { updateId: update.update_id });
 
-      const text = typeof update.message?.text === "string" ? update.message.text : undefined;
+      const text = typeof update.message?.text === "string" ? update.message.text.trim() : undefined;
       const chatId = typeof update.message?.chat?.id === "number" ? update.message.chat.id : undefined;
+      const chatType = update.message?.chat?.type;
+      const chatTitle = update.message?.chat?.title;
       const userId = typeof update.message?.from?.id === "number" ? update.message.from.id : undefined;
       const username = typeof update.message?.from?.username === "string" ? update.message.from.username : undefined;
 
@@ -178,6 +180,8 @@ export class TelegramBotApiService {
       await processTelegramCommand({
         text,
         chatId,
+        chatType,
+        chatTitle,
         userId,
         username,
       });
