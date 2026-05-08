@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { processTelegramCommand } from "@/services/telegramCommandService";
+import { TelegramEnvConfigService } from "@/services/telegram/TelegramEnvConfigService";
+import { TelegramCommandRouter } from "@/services/telegram/TelegramCommandRouter";
 
 type TelegramUpdate = {
   message?: {
@@ -7,29 +8,34 @@ type TelegramUpdate = {
     chat?: { id: number; type?: "private" | "group" | "supergroup"; title?: string };
     from?: { id: number; username?: string };
   };
+  edited_message?: {
+    text?: string;
+    chat?: { id: number; type?: "private" | "group" | "supergroup" };
+    from?: { id: number; username?: string };
+  };
+  channel_post?: unknown;
 };
 
 /**
- * Telegram webhook handler.
+ * POST /api/telegram/webhook
  *
- * Uses TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET from env as the primary
- * source of truth — never depends on Firestore telegram_config (which is
- * deny-all in firestore.rules and unavailable on Vercel).
+ * Receives Telegram updates and routes commands.
  *
- * processTelegramCommand handles authorization internally via telegram.security.ts
- * which already loads allowed user IDs from TELEGRAM_ALLOWED_USER_IDS first.
+ * - Reads TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET from env (never Firestore).
+ * - Validates X-Telegram-Bot-Api-Secret-Token header when TELEGRAM_WEBHOOK_SECRET is set.
+ * - Ignores channel_post and edited_message safely.
+ * - Malformed updates do not crash.
  */
 export async function POST(request: NextRequest) {
   try {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    const botToken = TelegramEnvConfigService.getBotToken();
+    const webhookSecret = TelegramEnvConfigService.getWebhookSecret();
 
-    // No token configured — integration not set up
     if (!botToken) {
       return NextResponse.json({ ok: true, skipped: "Telegram integration not configured" });
     }
 
-    // Validate webhook secret (only when TELEGRAM_WEBHOOK_SECRET is set)
+    // Validate webhook secret when configured
     if (webhookSecret) {
       const secretHeader = request.headers.get("x-telegram-bot-api-secret-token");
       if (secretHeader !== webhookSecret) {
@@ -38,20 +44,25 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = (await request.json()) as TelegramUpdate;
-    const text = payload.message?.text;
-    const chatId = payload.message?.chat?.id;
-    const chatType = payload.message?.chat?.type;
-    const chatTitle = payload.message?.chat?.title;
-    const userId = payload.message?.from?.id;
-    const username = payload.message?.from?.username;
 
-    const result = await processTelegramCommand({
-      text,
-      chatId,
-      chatType,
-      chatTitle,
-      userId,
-      username,
+    // Ignore channel_post entirely
+    if (payload.channel_post) {
+      return NextResponse.json({ ok: true, skipped: "channel_post ignored" });
+    }
+
+    // Use message (edited_message is intentionally ignored — no re-processing of edits)
+    const msg = payload.message;
+    if (!msg) {
+      return NextResponse.json({ ok: true, skipped: "No message to process" });
+    }
+
+    const result = await TelegramCommandRouter.handle({
+      text: msg.text,
+      chatId: msg.chat?.id,
+      chatType: msg.chat?.type,
+      chatTitle: msg.chat?.title,
+      userId: msg.from?.id,
+      username: msg.from?.username,
     });
 
     return NextResponse.json(result);

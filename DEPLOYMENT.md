@@ -76,6 +76,56 @@ Missing any of the above variables causes a startup crash with an error message
 that names the exact Vercel environment (`Preview` / `Production`) and links to
 this checklist.
 
+### ⚠ Telegram Webhook URL Strategy
+
+Vercel generates a unique URL per deployment (e.g. `smart-clothesline-xxxx.vercel.app`).
+**Never use a unique per-deploy URL as your Telegram webhook** — it changes every deploy
+and Telegram only supports one active webhook per bot token, so preview branches
+would silently steal the production webhook.
+
+**Correct approach:**
+
+| Environment | Variables |
+|---|---|
+| **Production** (`main`) | `APP_BASE_URL=https://your-stable.vercel.app` `TELEGRAM_WEBHOOK_ENABLED=true` |
+| **Staging** (`develop`) | `APP_BASE_URL=https://stable-staging.vercel.app` `TELEGRAM_WEBHOOK_ENABLED=true` (use separate bot token!) |
+| **Preview / fix branches** | `TELEGRAM_WEBHOOK_ENABLED=false` (or leave unset) |
+
+Rules:
+- `APP_BASE_URL` must be a **stable** domain (custom domain or Vercel production alias).
+- `TELEGRAM_WEBHOOK_ENABLED=true` must only be set for production or stable staging.
+- Preview and `fix/*` branches **must not** enable the webhook.
+- Use a **separate bot token** for staging to avoid conflicts with production.
+- The webhook URL is built automatically: `APP_BASE_URL + /api/telegram/webhook`.
+
+### ⚠ Firebase Environment Variables — Preview & Production Checklist
+
+All `NEXT_PUBLIC_FIREBASE_*` variables are **required** and must be added to
+**both** environments in Vercel → Project Settings → Environment Variables.
+
+| Variable | Preview | Production |
+|---|---|---|
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | ✅ required | ✅ required |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | ✅ required | ✅ required |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | ✅ required | ✅ required |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | ✅ required | ✅ required |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | ✅ required | ✅ required |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | ✅ required | ✅ required |
+
+> **After adding or changing env variables on Vercel you MUST redeploy without
+> build cache** — otherwise the old build artifact (which baked in the old env
+> at build time) will continue to be served.
+>
+> How to force a clean redeploy:
+> 1. Vercel Dashboard → your project → **Deployments** tab
+> 2. Find the latest deployment → click **⋯** → **Redeploy**
+> 3. Uncheck **"Use existing build cache"**
+> 4. Click **Redeploy**
+
+Missing any of the above variables causes a startup crash with an error message
+that names the exact Vercel environment (`Preview` / `Production`) and links to
+this checklist.
+
 ## Firebase Setup
 
 Apply rules and indexes:

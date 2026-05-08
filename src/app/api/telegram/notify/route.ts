@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TelegramBotApiService } from "@/services/TelegramBotApiService";
 import { TelegramOpsService } from "@/services/TelegramOpsService";
+import { TelegramEnvConfigService } from "@/services/telegram/TelegramEnvConfigService";
 import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { formatDateTime } from "@/utils/timeFormat";
@@ -19,8 +20,7 @@ const severityLabel: Record<NonNullable<NotifyPayload["severity"]>, string> = {
   info: "[INFO]",
 };
 
-// Server-side cooldown to deduplicate alerts when multiple browser tabs
-// call this endpoint for the same alert condition.
+// Server-side cooldown to deduplicate alerts across browser tabs
 const NOTIFY_COOLDOWN_MS = 30_000;
 declare global {
   // eslint-disable-next-line no-var
@@ -33,126 +33,69 @@ function getCooldownMap(): Map<string, number> {
   return globalThis.__telegramNotifyCooldown__;
 }
 function isInCooldown(alertKey: string): boolean {
-  const map = getCooldownMap();
-  const lastSent = map.get(alertKey) ?? 0;
-  return Date.now() - lastSent < NOTIFY_COOLDOWN_MS;
+  return Date.now() - (getCooldownMap().get(alertKey) ?? 0) < NOTIFY_COOLDOWN_MS;
 }
 function recordCooldown(alertKey: string): void {
   getCooldownMap().set(alertKey, Date.now());
 }
 
 function normalizeTimestamp(input?: number): number {
-  if (typeof input !== "number" || !Number.isFinite(input)) {
-    return Date.now();
-  }
-
-  let value = input;
-  if (value > 0 && value < 1_000_000_000_000) {
-    value *= 1000;
-  }
-
-  if (value < 1_577_836_800_000 || value > 4_102_444_800_000) {
-    return Date.now();
-  }
-
-  return Math.floor(value);
+  if (typeof input !== "number" || !Number.isFinite(input)) return Date.now();
+  let v = input;
+  if (v > 0 && v < 1_000_000_000_000) v *= 1000;
+  if (v < 1_577_836_800_000 || v > 4_102_444_800_000) return Date.now();
+  return Math.floor(v);
 }
 
 function toTelegramMessage(payload: NotifyPayload): string {
   const title = payload.title?.trim() || "Operational Alert";
-  const description = payload.description?.trim() || "-";
+  const desc = payload.description?.trim() || "-";
   const severity = payload.severity ?? "warning";
-  const timestamp = normalizeTimestamp(payload.timestamp);
-  const when = formatDateTime(timestamp);
-  const prefix = severityLabel[severity] ?? "[WARNING]";
-
-  return `${prefix} ${title}\n${description}\nTime: ${when}`;
+  const when = formatDateTime(normalizeTimestamp(payload.timestamp));
+  return `${severityLabel[severity] ?? "[WARNING]"} ${title}\n${desc}\nTime: ${when}`;
 }
 
-async function getTelemetryContext(): Promise<{
-  deviceStatus: string;
-  rain: string;
-  temperature: string;
-  humidity: string;
-  light: string;
-  delaySec: string;
-}> {
+async function getTelemetryContext() {
   try {
     const q = query(collection(db, "sensor_data"), orderBy("createdAt", "desc"), limit(1));
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) {
-      return {
-        deviceStatus: "UNKNOWN",
-        rain: "-",
-        temperature: "-",
-        humidity: "-",
-        light: "-",
-        delaySec: "-",
-      };
-    }
-    const item = snapshot.docs[0].data() as Record<string, unknown>;
-    const timestampRaw =
-      typeof item.timestamp === "number"
-        ? item.timestamp
-        : typeof item.createdAt === "number"
-          ? item.createdAt
-          : Date.now();
-    const timestamp = normalizeTimestamp(timestampRaw);
-    const delaySec = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    const d = snap.docs[0].data() as Record<string, unknown>;
+    const ts = normalizeTimestamp(
+      typeof d.timestamp === "number" ? d.timestamp : typeof d.createdAt === "number" ? d.createdAt : undefined,
+    );
     return {
-      deviceStatus: typeof item.status === "string" ? item.status : "UNKNOWN",
-      rain: Boolean(item.rain) ? "DETECTED" : "CLEAR",
-      temperature: typeof item.temperature === "number" ? `${item.temperature.toFixed(1)} C` : "-",
-      humidity: typeof item.humidity === "number" ? `${item.humidity.toFixed(1)} %` : "-",
-      light: typeof item.light === "number" ? `${Math.round(item.light)}` : "-",
-      delaySec: `${delaySec}s`,
+      deviceStatus: typeof d.status === "string" ? d.status : "UNKNOWN",
+      rain: Boolean(d.rain) ? "DETECTED" : "CLEAR",
+      temperature: typeof d.temperature === "number" ? `${d.temperature.toFixed(1)} C` : "-",
+      humidity: typeof d.humidity === "number" ? `${d.humidity.toFixed(1)} %` : "-",
+      light: typeof d.light === "number" ? `${Math.round(d.light)}` : "-",
+      delaySec: `${Math.max(0, Math.floor((Date.now() - ts) / 1000))}s`,
     };
   } catch {
-    return {
-      deviceStatus: "UNKNOWN",
-      rain: "-",
-      temperature: "-",
-      humidity: "-",
-      light: "-",
-      delaySec: "-",
-    };
+    return null;
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as NotifyPayload;
-
-    // Server-side dedupe: skip if same alertKey was sent within cooldown window
     const alertKey = body.alertKey || `${body.severity ?? "warning"}-${body.title ?? "alert"}`;
+
     if (isInCooldown(alertKey)) {
-      return NextResponse.json({
-        ok: true,
-        skipped: true,
-        reason: "cooldown",
-        cooldownMs: NOTIFY_COOLDOWN_MS,
-      });
+      return NextResponse.json({ ok: true, skipped: true, reason: "cooldown", cooldownMs: NOTIFY_COOLDOWN_MS });
     }
 
-    // Env-first: token and chatId never require Firestore
-    const envToken = process.env.TELEGRAM_BOT_TOKEN;
-    const envChatId = process.env.TELEGRAM_CHAT_ID;
-    const envGroupMode = process.env.TELEGRAM_ENABLE_GROUP_MODE?.toLowerCase() === "true";
+    // ── Env-first for token and chatId ────────────────────────────────────────
+    const token = TelegramEnvConfigService.getBotToken();
+    const chatId = TelegramEnvConfigService.getDefaultChatId();
+    const groupModeEnabled = TelegramEnvConfigService.isGroupModeEnabled();
+    const envGroupIds = TelegramEnvConfigService.getAllowedGroupIds();
 
-    // Parse TELEGRAM_ALLOWED_GROUPS from env (primary source for group targets)
-    const envGroupIds: number[] = (process.env.TELEGRAM_ALLOWED_GROUPS ?? "")
-      .split(",")
-      .map((s) => Number(s.trim()))
-      .filter((n) => Number.isInteger(n) && n !== 0);
-
-    // Supplement with Firestore config if available (may be blocked by rules)
+    // ── Optional Firestore supplement for group targets ────────────────────────
     let firestoreGroupIds: number[] = [];
-    let firestoreToken: string | null = null;
-    let firestoreChatId: string | null = null;
     try {
       const config = await TelegramOpsService.getConfig();
-      firestoreToken = config?.botToken || null;
-      firestoreChatId = config?.chatId || null;
       if (config?.groupModeEnabled && Array.isArray(config.authorizedGroups)) {
         firestoreGroupIds = config.authorizedGroups
           .map((g) => g.groupId)
@@ -162,50 +105,47 @@ export async function POST(request: NextRequest) {
       // Firestore unavailable — env values are sufficient
     }
 
-    const token = envToken || firestoreToken;
-    const chatId = envChatId || firestoreChatId;
-
-    // Merge group IDs from env and Firestore, deduplicated
-    const groupModeEnabled = envGroupMode || firestoreGroupIds.length > 0;
-    const allGroupIds = [...new Set([...envGroupIds, ...firestoreGroupIds])];
-    const groupTargets = groupModeEnabled ? allGroupIds : [];
-
     if (!token || !chatId) {
       return NextResponse.json(
-        { ok: false, skipped: true, reason: "Telegram env/config is not configured" },
+        { ok: false, skipped: true, reason: "Telegram not configured (missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID)" },
         { status: 200 },
       );
     }
 
-    const context = await getTelemetryContext();
+    // Build target list: primary chatId + group targets (deduped)
+    const allGroupIds = groupModeEnabled
+      ? [...new Set([...envGroupIds, ...firestoreGroupIds])]
+      : [];
+    const targets = [...new Set([chatId, ...allGroupIds.map(String)])].filter(Boolean);
+
+    const ctx = await getTelemetryContext();
     const text = [
       toTelegramMessage(body),
       "",
       "Realtime Context",
-      `Device: ${context.deviceStatus}`,
-      `Rain: ${context.rain}`,
-      `Temperature: ${context.temperature}`,
-      `Humidity: ${context.humidity}`,
-      `Light: ${context.light}`,
-      `Telemetry Delay: ${context.delaySec}`,
+      ctx
+        ? [
+            `Device: ${ctx.deviceStatus}`,
+            `Rain: ${ctx.rain}`,
+            `Temperature: ${ctx.temperature}`,
+            `Humidity: ${ctx.humidity}`,
+            `Light: ${ctx.light}`,
+            `Delay: ${ctx.delaySec}`,
+          ].join("\n")
+        : "Telemetry unavailable",
     ].join("\n");
-    const targets = [
-      chatId,
-      ...groupTargets,
-    ].filter((target, index, arr) => target && arr.indexOf(target) === index);
+
     let sentCount = 0;
     for (const target of targets) {
       const sent = await TelegramBotApiService.sendMessage(token, target as string | number, text);
-      if (sent) sentCount += 1;
+      if (sent) sentCount++;
     }
 
     if (sentCount === 0) {
       return NextResponse.json({ ok: false, error: "Failed to send Telegram notification" }, { status: 502 });
     }
 
-    // Record cooldown after a successful send
     recordCooldown(alertKey);
-
     return NextResponse.json({ ok: true, sentCount });
   } catch (error) {
     return NextResponse.json({ ok: false, error: String(error) }, { status: 500 });
