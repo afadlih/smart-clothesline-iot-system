@@ -9,8 +9,15 @@ type LogScope =
 type LogLevel = "debug" | "info" | "warn" | "error";
 
 const isDev = process.env.NODE_ENV !== "production";
-const debugEnabled = process.env.DEBUG_MODE === "true" || isDev;
-const configuredLevel = (process.env.LOG_LEVEL ?? "info").toLowerCase() as LogLevel;
+const debugEnabled =
+  process.env.NEXT_PUBLIC_DEBUG_MODE === "true" ||
+  process.env.DEBUG_MODE === "true" ||
+  isDev;
+const configuredLevel = (
+  process.env.NEXT_PUBLIC_LOG_LEVEL ??
+  process.env.LOG_LEVEL ??
+  "info"
+).toLowerCase() as LogLevel;
 const levelOrder: Record<LogLevel, number> = {
   debug: 10,
   info: 20,

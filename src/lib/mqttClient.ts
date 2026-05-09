@@ -8,8 +8,10 @@ export interface SensorData {
   status: "OPEN" | "CLOSED";
 }
 
-const MQTT_BROKER_URL = "wss://broker.hivemq.com:8884/mqtt";
-export const MQTT_TOPIC = "smart-clothesline/sensor";
+const MQTT_BROKER_URL = process.env.NEXT_PUBLIC_MQTT_BROKER_URL ?? "wss://broker.hivemq.com:8884/mqtt";
+const MQTT_USER = process.env.NEXT_PUBLIC_MQTT_USERNAME;
+const MQTT_PASS = process.env.NEXT_PUBLIC_MQTT_PASSWORD;
+export const MQTT_TOPIC = process.env.NEXT_PUBLIC_MQTT_TOPIC_SENSOR ?? "smart-clothesline/sensor";
 
 let client: MqttClient | null = null;
 
@@ -23,6 +25,8 @@ export function getMqttClient(): MqttClient {
   }
 
   client = mqtt.connect(MQTT_BROKER_URL, {
+    ...(MQTT_USER ? { username: MQTT_USER } : {}),
+    ...(MQTT_PASS ? { password: MQTT_PASS } : {}),
     reconnectPeriod: 5000,
     connectTimeout: 10000,
     clean: true,
