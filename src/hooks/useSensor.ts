@@ -25,7 +25,6 @@ import { ScheduleService } from "@/services/ScheduleService";
 import { TelemetryNormalizerService } from "@/services/TelemetryNormalizerService";
 import { OperationalStateResolver } from "@/services/OperationalStateResolver";
 import { TelegramOpsService } from "@/services/TelegramOpsService";
-import { TelegramBotApiService } from "@/services/TelegramBotApiService";
 import { useSensorStore } from "@/stores/sensorStore";
 import { logger } from "@/lib/logger";
 
@@ -383,36 +382,51 @@ function parseSensorPayload(raw: string, receivedAt: number): MqttSensorPayload 
     }
 }
 
-let cachedBridgeConfig: { token: string | null; lastFetchAt: number } = { token: null, lastFetchAt: 0 };
-const BRIDGE_CONFIG_CACHE_MS = 30_000;
-
-async function getBridgeBotToken(): Promise<string | null> {
-    const now = Date.now();
-    if (cachedBridgeConfig.token !== null && now - cachedBridgeConfig.lastFetchAt < BRIDGE_CONFIG_CACHE_MS) {
-        return cachedBridgeConfig.token;
+async function notifyCommandResult(commandId: string, result: "done" | "failed" | "pending", message: string): Promise<void> {
+    try {
+        await fetch("/api/telegram/command-result", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ commandId, result, message }),
+        });
+    } catch (error) {
+        logger.warn("telegram", "Failed to notify command result", error);
     }
-    const config = await TelegramOpsService.getConfig().catch(() => null);
-    cachedBridgeConfig = { token: config?.botToken ?? null, lastFetchAt: now };
-    return cachedBridgeConfig.token;
+}
+
+async function updateBridgeHeartbeat(): Promise<void> {
+    try {
+        const stats = sharedState.queueStats;
+        const bridgeRef = doc(db, "system_settings", "telegram_bridge");
+        await setDoc(bridgeRef, {
+            bridgeActive: true,
+            lastSeenAt: serverTimestamp(),
+            mqttConnected: mqttService.isConnected(),
+            streamState: sharedState.uiState.stream,
+            queueBacklog: stats.total,
+        }, { merge: true });
+    } catch {
+        // Silent fail for heartbeat
+    }
 }
 
 async function processPendingTelegramCommands(): Promise<void> {
     const pending = await TelegramOpsService.fetchPendingCommands(5);
-    if (pending.length === 0) return;
-    const botToken = await getBridgeBotToken();
+    if (pending.length === 0) {
+        void updateBridgeHeartbeat();
+        return;
+    }
+
     for (const commandJob of pending) {
         try {
             await TelegramOpsService.markCommandStatus(commandJob.id, "processing", "Processing by dashboard bridge");
             let dispatched = false;
-            if (commandJob.command === "/open") {
-                dispatched = sendCommand("OPEN");
-            } else if (commandJob.command === "/close") {
-                dispatched = sendCommand("CLOSE");
-            } else if (commandJob.command === "/mode_auto") {
-                dispatched = sendCommand("AUTO");
-            } else if (commandJob.command === "/mode_manual") {
-                dispatched = sendCommand("MANUAL");
-            }
+            
+            if (commandJob.command === "/open") dispatched = sendCommand("OPEN");
+            else if (commandJob.command === "/close") dispatched = sendCommand("CLOSE");
+            else if (commandJob.command === "/mode_auto") dispatched = sendCommand("AUTO");
+            else if (commandJob.command === "/mode_manual") dispatched = sendCommand("MANUAL");
+            else if (commandJob.command === "/restart") dispatched = sendCommand("RESTART");
 
             if (!dispatched) {
                 await TelegramOpsService.markCommandStatus(commandJob.id, "pending", "Dispatch delayed: waiting device/MQTT/rate window");
@@ -424,13 +438,8 @@ async function processPendingTelegramCommands(): Promise<void> {
                     detail: "Dispatch delayed by runtime state",
                     source: "telegram-bridge",
                 });
-                if (botToken && typeof commandJob.chatId === "number") {
-                    await TelegramBotApiService.sendMessage(
-                        botToken,
-                        commandJob.chatId,
-                        `Command ${commandJob.command} delayed. Waiting device or MQTT to be ready.`,
-                    );
-                }
+                
+                void notifyCommandResult(commandJob.id, "pending", "Dispatch delayed. Waiting for device or MQTT to be ready.");
                 continue;
             }
 
@@ -443,38 +452,30 @@ async function processPendingTelegramCommands(): Promise<void> {
                 detail: "Command dispatched from bridge",
                 source: "telegram-bridge",
             });
-            if (botToken && typeof commandJob.chatId === "number") {
-                await TelegramBotApiService.sendMessage(
-                    botToken,
-                    commandJob.chatId,
-                    `Command ${commandJob.command} dispatched to MQTT successfully.`,
-                );
-            }
+
+            void notifyCommandResult(commandJob.id, "done", "Command dispatched to MQTT successfully.");
+
             pushSystemEvent({
                 type: "COMMAND",
                 title: "Telegram command executed",
-                description: `${commandJob.command} dispatched by operator ${commandJob.username ?? commandJob.userId}`,
+                description: `${commandJob.command} dispatched by ${commandJob.username ?? commandJob.userId}`,
                 timestamp: Date.now(),
             });
         } catch (error) {
-            await TelegramOpsService.markCommandStatus(commandJob.id, "failed", String(error));
+            const errorMsg = String(error);
+            await TelegramOpsService.markCommandStatus(commandJob.id, "failed", errorMsg);
             await TelegramOpsService.addAuditLog({
                 userId: commandJob.userId,
                 username: commandJob.username,
                 command: commandJob.command,
                 result: "failed",
-                detail: String(error),
+                detail: errorMsg,
                 source: "telegram-bridge",
             });
-            if (botToken && typeof commandJob.chatId === "number") {
-                await TelegramBotApiService.sendMessage(
-                    botToken,
-                    commandJob.chatId,
-                    `Command ${commandJob.command} failed to execute.`,
-                );
-            }
+            void notifyCommandResult(commandJob.id, "failed", `Execution error: ${errorMsg}`);
         }
     }
+    void updateBridgeHeartbeat();
 }
 
 export function getActiveDeviceId(): string | null {
@@ -1293,6 +1294,12 @@ export function useSensor() {
             void refreshSchedules();
         }, 5000);
 
+        const telegramBridgeTimer = window.setInterval(() => {
+            void processPendingTelegramCommands();
+        }, 2000);
+
+        void refreshSchedules();
+
         const timer = window.setInterval(() => {
             const nextNow = Date.now();
             setNow(nextNow);
@@ -1323,12 +1330,6 @@ export function useSensor() {
             }
         }, 10000); // Every 10 seconds
 
-        const telegramBridgeTimer = window.setInterval(() => {
-            void processPendingTelegramCommands();
-        }, 4000);
-
-        void refreshSchedules();
-
         return () => {
             active = false;
             window.clearInterval(timer);
@@ -1343,7 +1344,6 @@ export function useSensor() {
         if (snapshot.commandStatus !== "pending" || snapshot.commandSentAt === null) {
             return;
         }
-
         if (now - snapshot.commandSentAt >= ACK_TIMEOUT_MS) {
             sharedState.commandStatus = "timeout";
             sharedState.pendingCommand = null;
