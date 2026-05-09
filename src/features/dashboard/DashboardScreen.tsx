@@ -42,7 +42,7 @@ export default function DashboardScreen() {
     decision,
     lastUpdate,
     sensor,
-    events,
+    events: sensorEvents,
     serialLogs,
     mqttConnected,
     connection,
@@ -51,7 +51,7 @@ export default function DashboardScreen() {
     drift,
     debug,
   } = useSystemState();
-  const { latestAlert, toasts, dismissToast } = useNotificationEngine();
+  const { latestAlert, toasts, dismissToast, events: timelineEvents } = useNotificationEngine();
   const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
   const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
 
@@ -310,7 +310,7 @@ export default function DashboardScreen() {
 
             <section className="space-y-4">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Event Timeline</h2>
-              <EventTimeline events={events} />
+              <EventTimeline events={timelineEvents} />
             </section>
           </div>
 
@@ -391,10 +391,10 @@ export default function DashboardScreen() {
             <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Event Logs</h2>
               <div className="mt-3 space-y-2">
-                {events.length === 0 ? (
+                {sensorEvents.length === 0 ? (
                   <p className="text-sm text-gray-500 dark:text-slate-400">No events yet.</p>
                 ) : (
-                  events.slice(0, 10).map((event, index) => (
+                  sensorEvents.slice(0, 10).map((event, index) => (
                     <p key={`${event.timestamp}-${event.type}-${index}`} className="text-xs text-gray-700 dark:text-slate-300">
                       [{new Date(event.timestamp).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}] {event.type} - {event.action}
                     </p>

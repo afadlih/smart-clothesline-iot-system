@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { DecisionEngine } from "@/features/dashboard/DecisionEngine";
 import {
     getFinalState,
@@ -27,6 +28,7 @@ import { OperationalStateResolver } from "@/services/OperationalStateResolver";
 import { TelegramOpsService } from "@/services/TelegramOpsService";
 import { useSensorStore } from "@/stores/sensorStore";
 import { logger } from "@/lib/logger";
+import { db } from "@/lib/firebase";
 
 type ConnectionState = "connecting" | "online" | "reconnecting" | "offline" | "error";
 type DeviceStatus = "OPEN" | "CLOSED" | "RESTARTING";

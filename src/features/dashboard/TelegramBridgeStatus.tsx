@@ -15,6 +15,7 @@ interface BridgeStatus {
 
 export default function TelegramBridgeStatus() {
   const [status, setStatus] = useState<BridgeStatus | null>(null);
+  const [loading, setLoading] = useState(true);
   const [diagnostics, setDiagnostics] = useState<{
     botConfigured: boolean;
     webhookEnabled: boolean;
@@ -115,6 +116,9 @@ export default function TelegramBridgeStatus() {
               </div>
             )}
           </div>
+        )}
+        {loading && (
+          <p className="text-xs text-slate-500 dark:text-slate-400">Loading diagnostics...</p>
         )}
       </div>
 

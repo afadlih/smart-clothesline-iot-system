@@ -235,7 +235,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
             value={deviceStatus}
             valueClass={deviceValueClass}
             dotClass={deviceDotClass}
-            dotPulseClass={streamStatus === "Streaming" ? "animate-pulse" : ""}
+            dotPulseClass={runtime.streamState === "STREAMING" ? "animate-pulse" : ""}
             iconBgClass="bg-slate-100 dark:bg-slate-800"
             iconTextClass="text-slate-600 dark:text-slate-200"
             title={
