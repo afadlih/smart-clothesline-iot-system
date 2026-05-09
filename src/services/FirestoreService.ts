@@ -14,7 +14,6 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { SensorData } from "@/models/SensorData";
-import type { SensorData as MqttSensorData } from "@/lib/mqttClient";
 import { LocalStorageQueue, type QueueItem } from "./LocalStorageQueue";
 
 const COLLECTION_NAME = "sensor_data";
@@ -27,34 +26,51 @@ export type SystemSettingsPayload = {
   activeEndHour: number;
 };
 
+export type FirestoreSensorPayload = {
+  deviceId?: string;
+  temperature: number;
+  humidity: number;
+  light: number;
+  rain: boolean;
+  status: "OPEN" | "CLOSED";
+  mode?: "AUTO" | "MANUAL";
+  source?: "STATUS_TOPIC" | "SENSOR_FALLBACK" | "UNKNOWN";
+  receivedAt?: number;
+  deviceTimestamp?: number;
+  deviceUptimeMs?: number;
+};
+
 // Queue for sensor data when Firestore is offline
-export const sensorDataQueue = new LocalStorageQueue<MqttSensorData>("sensor_data", 100, 5);
+export const sensorDataQueue = new LocalStorageQueue<FirestoreSensorPayload>("sensor_data", 100, 5);
 
 export class FirestoreService {
-  static async saveSensorData(data: MqttSensorData): Promise<void> {
+  private static toFirestoreDoc(data: FirestoreSensorPayload) {
+    return {
+      deviceId: data.deviceId ?? null,
+      temperature: data.temperature,
+      humidity: data.humidity,
+      light: data.light,
+      rain: data.rain,
+      status: data.status,
+      mode: data.mode ?? null,
+      source: data.source ?? "UNKNOWN",
+      receivedAt: typeof data.receivedAt === "number" ? data.receivedAt : null,
+      deviceTimestamp: typeof data.deviceTimestamp === "number" ? data.deviceTimestamp : null,
+      deviceUptimeMs: typeof data.deviceUptimeMs === "number" ? data.deviceUptimeMs : null,
+      createdAt: serverTimestamp(),
+    };
+  }
+
+  static async saveSensorData(data: FirestoreSensorPayload): Promise<void> {
     try {
-      await addDoc(collection(db, COLLECTION_NAME), {
-        temperature: data.temperature,
-        humidity: data.humidity,
-        light: data.light,
-        rain: data.rain,
-        status: data.status,
-        createdAt: serverTimestamp(),
-      });
+      await addDoc(collection(db, COLLECTION_NAME), this.toFirestoreDoc(data));
 
       // Clear any queued items on success
       const queued = sensorDataQueue.getAll();
       for (const item of queued.slice(0, 5)) {
         // Try to flush a few items
         try {
-          await addDoc(collection(db, COLLECTION_NAME), {
-            temperature: item.data.temperature,
-            humidity: item.data.humidity,
-            light: item.data.light,
-            rain: item.data.rain,
-            status: item.data.status,
-            createdAt: serverTimestamp(),
-          });
+          await addDoc(collection(db, COLLECTION_NAME), this.toFirestoreDoc(item.data));
           sensorDataQueue.remove(item.id);
         } catch {
           // Stop trying if one fails
@@ -156,15 +172,8 @@ export class FirestoreService {
 
     console.info("[Firestore] Syncing queued sensor data:", stats);
 
-    const { synced } = await sensorDataQueue.syncWith(async (item: QueueItem<MqttSensorData>) => {
-      await addDoc(collection(db, COLLECTION_NAME), {
-        temperature: item.data.temperature,
-        humidity: item.data.humidity,
-        light: item.data.light,
-        rain: item.data.rain,
-        status: item.data.status,
-        createdAt: serverTimestamp(),
-      });
+    const { synced } = await sensorDataQueue.syncWith(async (item: QueueItem<FirestoreSensorPayload>) => {
+      await addDoc(collection(db, COLLECTION_NAME), this.toFirestoreDoc(item.data));
     });
 
     return synced;

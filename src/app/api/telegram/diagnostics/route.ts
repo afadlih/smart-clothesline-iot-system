@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { doc, getDoc } from "firebase/firestore";
 import { TelegramEnvConfigService } from "@/services/telegram/TelegramEnvConfigService";
 import {
   getWebhookEnvironmentLabel,
@@ -9,6 +10,8 @@ import {
 import { TelegramBotApiService } from "@/services/TelegramBotApiService";
 import { TelegramOpsService } from "@/services/TelegramOpsService";
 import { logger } from "@/lib/logger";
+import { ensureTelegramPollingStarted, getTelegramPollingDiagnostics } from "@/lib/telegramSingleton";
+import { db } from "@/lib/firebase";
 
 export const dynamic = "force-dynamic";
 
@@ -29,14 +32,28 @@ export async function GET() {
 
     let botInfo = null;
     let webhookInfo = null;
+    let pollingBoot: { ok: boolean; started: boolean; reason: string } | null = null;
 
     if (botToken) {
       botInfo = await TelegramBotApiService.getMe(botToken).catch((err: unknown) => ({ error: String(err) }));
       webhookInfo = await TelegramBotApiService.getWebhookInfo(botToken).catch((err: unknown) => ({ error: String(err) }));
+      if (runtimeMode === "polling") {
+        pollingBoot = await ensureTelegramPollingStarted().catch(() => null);
+      }
     }
 
     const pendingCommands = await TelegramOpsService.fetchPendingCommands(10).catch(() => []);
     const recentAuditLogs = await TelegramOpsService.getRecentAuditLogs(10).catch(() => []);
+    const bridgeDoc = await getDoc(doc(db, "system_settings", "telegram_bridge")).catch(() => null);
+    const bridgeRaw = bridgeDoc?.exists() ? (bridgeDoc.data() as Record<string, unknown>) : null;
+    const bridgeLastSeenAt =
+      bridgeRaw?.lastSeenAt &&
+      typeof bridgeRaw.lastSeenAt === "object" &&
+      "toMillis" in bridgeRaw.lastSeenAt
+        ? (bridgeRaw.lastSeenAt as { toMillis: () => number }).toMillis()
+        : null;
+    const bridgeAgeMs = bridgeLastSeenAt ? Math.max(0, Date.now() - bridgeLastSeenAt) : null;
+    const bridgeAlive = bridgeAgeMs !== null && bridgeAgeMs <= 15_000;
 
     // Check if we can write to Firestore (simple check)
     let firestoreWriteOk = false;
@@ -49,25 +66,7 @@ export async function GET() {
     }
 
     const warnings: string[] = [];
-    const diagnostics: {
-      ok: boolean;
-      botConfigured: boolean;
-      webhookEnabled: boolean;
-      runtimeMode: "webhook" | "polling" | "unconfigured";
-      environment: string;
-      appBaseUrl: string;
-      resolvedWebhookUrl: string;
-      botInfo: unknown;
-      webhookInfo: unknown;
-      allowedUserIdsCount: number;
-      allowedGroupsCount: number;
-      groupModeEnabled: boolean;
-      firestoreOk: boolean;
-      latestPendingCommandsCount: number;
-      latestAuditLogsCount: number;
-      bridgeExpected: boolean;
-      warnings: string[];
-    } = {
+    const diagnostics = {
       ok: true,
       botConfigured,
       webhookEnabled,
@@ -95,6 +94,21 @@ export async function GET() {
       latestPendingCommandsCount: pendingCommands.length,
       latestAuditLogsCount: recentAuditLogs.length,
       bridgeExpected: true,
+      bridge: {
+        active: Boolean(bridgeRaw?.bridgeActive),
+        alive: bridgeAlive,
+        ageMs: bridgeAgeMs,
+        queueBacklog: typeof bridgeRaw?.queueBacklog === "number" ? bridgeRaw.queueBacklog : null,
+        mqttConnected: typeof bridgeRaw?.mqttConnected === "boolean" ? bridgeRaw.mqttConnected : null,
+        streamState: typeof bridgeRaw?.streamState === "string" ? bridgeRaw.streamState : null,
+        lastDispatchedCommandId:
+          typeof bridgeRaw?.lastDispatchedCommandId === "string"
+            ? bridgeRaw.lastDispatchedCommandId
+            : null,
+        lastError: typeof bridgeRaw?.lastError === "string" ? bridgeRaw.lastError : null,
+      },
+      polling: getTelegramPollingDiagnostics(),
+      pollingBoot,
       warnings,
     };
 
@@ -119,6 +133,12 @@ export async function GET() {
       webhookInfo.result.url !== resolvedWebhookUrl
     ) {
       warnings.push(`Webhook URL mismatch. Telegram reports ${webhookInfo.result.url}, app resolves ${resolvedWebhookUrl}.`);
+    }
+    if (diagnostics.latestPendingCommandsCount > 0 && !diagnostics.bridge.alive) {
+      warnings.push("Command queue has pending items while dashboard bridge is inactive.");
+    }
+    if (diagnostics.bridge.lastError) {
+      warnings.push(`Bridge error: ${diagnostics.bridge.lastError}`);
     }
 
     return NextResponse.json(diagnostics);

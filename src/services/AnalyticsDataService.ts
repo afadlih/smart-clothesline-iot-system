@@ -87,7 +87,10 @@ export class AnalyticsDataService {
 
       snapshot.docs.forEach((doc) => {
         const raw = doc.data() as Record<string, unknown>;
-        const createdAtMs = this.normalizeTimestamp(raw.createdAt);
+        const createdAtMs =
+          this.normalizeTimestamp(raw.createdAt) ??
+          this.normalizeTimestamp(raw.receivedAt) ??
+          this.normalizeTimestamp(raw.timestamp);
         const temperature = this.toFiniteNumber(raw.temperature);
         const humidity = this.toFiniteNumber(raw.humidity);
         const light = this.toFiniteNumber(raw.light);

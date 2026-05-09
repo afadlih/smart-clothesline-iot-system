@@ -6,6 +6,7 @@ import OperationalHealthPanel from "@/components/status/OperationalHealth";
 import PageContainer from "@/components/layout/PageContainer";
 import { useNotificationEngine } from "@/hooks/useNotificationEngine";
 import { useSystemState } from "@/hooks/useSystemState";
+import { MQTT_BROKER_URL } from "@/services/MQTTService";
 
 function formatClock(value: number | null): string {
   if (value === null) {
@@ -30,6 +31,17 @@ function badgeClassByState(state: "good" | "warn" | "danger" | "info"): string {
   if (state === "warn") return "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300";
   if (state === "danger") return "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300";
   return "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300";
+}
+
+function sanitizeBrokerUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.username = "";
+    parsed.password = "";
+    return parsed.toString();
+  } catch {
+    return url.replace(/\/\/.*@/, "//");
+  }
 }
 
 export default function DashboardScreen() {
@@ -375,6 +387,62 @@ export default function DashboardScreen() {
                 <div>
                   <p className="text-[11px] text-gray-500 dark:text-slate-400">Deduped Status</p>
                   <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{debug.dedupedStatusCount}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">State Source</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{debug.deviceStateSource}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Duplicate Telemetry</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{debug.mqttDiagnostics.duplicateCount}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Rejected Payloads</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{debug.mqttDiagnostics.rejectedCount}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Filtered Device Payloads</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{debug.mqttDiagnostics.filteredDeviceCount}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Last Reject Reason</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{debug.mqttDiagnostics.lastRejectReason ?? "--"}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Last Sensor Payload</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                    {formatClock(debug.mqttDiagnostics.lastSensorAt)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Last Status Payload</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                    {formatClock(debug.mqttDiagnostics.lastStatusAt)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Heartbeat Age</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                    {debug.mqttDiagnostics.heartbeatAgeSeconds === null ? "--" : `${debug.mqttDiagnostics.heartbeatAgeSeconds}s`}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Freshness</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                    {debug.mqttDiagnostics.freshnessSeconds === null ? "--" : `${debug.mqttDiagnostics.freshnessSeconds}s`}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Sensor Topic</p>
+                  <p className="break-all text-sm font-semibold text-gray-900 dark:text-slate-100">smart-clothesline/sensor</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Status Topic</p>
+                  <p className="break-all text-sm font-semibold text-gray-900 dark:text-slate-100">smart-clothesline/status</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">MQTT Broker</p>
+                  <p className="break-all text-sm font-semibold text-gray-900 dark:text-slate-100">{sanitizeBrokerUrl(MQTT_BROKER_URL)}</p>
                 </div>
               </div>
               <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-2 dark:border-slate-700 dark:bg-slate-800/60">

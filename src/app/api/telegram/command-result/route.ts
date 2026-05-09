@@ -23,6 +23,7 @@ function parsePayload(input: unknown): CommandResultPayload | null {
   if (body.result !== "done" && body.result !== "failed" && body.result !== "pending") return null;
   if (body.message !== undefined && typeof body.message !== "string") return null;
   if (typeof body.message === "string" && body.message.length > 500) return null;
+
   return {
     commandId: body.commandId.trim(),
     result: body.result,
@@ -51,10 +52,11 @@ function resolveAllowedOrigins(request: NextRequest): string[] {
 
 function isAllowedOrigin(request: NextRequest): boolean {
   if (!isStrictRuntime()) return true;
+
   const origin = request.headers.get("origin");
   if (!origin) return false;
-  const allowedOrigins = resolveAllowedOrigins(request);
-  return allowedOrigins.includes(origin);
+
+  return resolveAllowedOrigins(request).includes(origin);
 }
 
 export async function POST(request: NextRequest) {
@@ -84,7 +86,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, skipped: "Bot token not configured" });
     }
 
-    const emoji = payload.result === "done" ? "✅" : payload.result === "failed" ? "❌" : "⚠️";
+    const statusPrefix =
+      payload.result === "done"
+        ? "[OK]"
+        : payload.result === "failed"
+          ? "[FAILED]"
+          : "[PENDING]";
+
     const statusText =
       payload.result === "done"
         ? "executed successfully"
@@ -93,7 +101,7 @@ export async function POST(request: NextRequest) {
           : "pending";
 
     const lines = [
-      `${emoji} Command ${statusText}: ${commandData.command}`,
+      `${statusPrefix} Command ${statusText}: ${commandData.command}`,
       payload.message ? `Detail: ${payload.message}` : null,
       `Reference: ${payload.commandId}`,
     ].filter(Boolean);

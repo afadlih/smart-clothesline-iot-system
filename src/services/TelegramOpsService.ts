@@ -51,7 +51,8 @@ export type TelegramCommandJob = {
     | "/open"
     | "/close"
     | "/mode_auto"
-    | "/mode_manual";
+    | "/mode_manual"
+    | "/restart";
   status: "pending" | "processing" | "done" | "failed";
   source: "telegram";
   chatId?: number;
@@ -65,7 +66,7 @@ export type TelegramCommandJob = {
 function isCommandJobCommand(
   value: unknown,
 ): value is TelegramCommandJob["command"] {
-  return value === "/open" || value === "/close" || value === "/mode_auto" || value === "/mode_manual";
+  return value === "/open" || value === "/close" || value === "/mode_auto" || value === "/mode_manual" || value === "/restart";
 }
 
 export class TelegramOpsService {

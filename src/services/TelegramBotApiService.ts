@@ -64,7 +64,11 @@ export class TelegramBotApiService {
     }
   }
 
-  static async sendMessage(token: string, chatId: string | number, text: string): Promise<boolean> {
+  static async sendMessageWithResult(
+    token: string,
+    chatId: string | number,
+    text: string,
+  ): Promise<{ ok: boolean; description?: string }> {
     const data = await this.safeRequest<unknown>(endpoint(token, "sendMessage"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -73,7 +77,12 @@ export class TelegramBotApiService {
         text,
       }),
     });
-    return data.ok;
+    return { ok: data.ok, description: data.description };
+  }
+
+  static async sendMessage(token: string, chatId: string | number, text: string): Promise<boolean> {
+    const result = await this.sendMessageWithResult(token, chatId, text);
+    return result.ok;
   }
 
   static async getMe(token: string): Promise<TelegramApiResponse<TelegramBotInfo>> {

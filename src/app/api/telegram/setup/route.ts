@@ -114,7 +114,16 @@ export async function POST(request: NextRequest) {
     const envLabel = getWebhookEnvironmentLabel();
     const resolvedWebhookUrl = resolveTelegramWebhookUrl(request);
     const appBaseUrl = resolveAppBaseUrl(request);
-    const mode = body.mode ?? TelegramEnvConfigService.getRuntimeMode();
+    const runtimeMode = TelegramEnvConfigService.getRuntimeMode();
+    const mode: "polling" | "webhook" =
+      body.mode ??
+      (runtimeMode === "webhook"
+        ? "webhook"
+        : process.env.NODE_ENV !== "production"
+          ? "polling"
+          : webhookEnabled
+            ? "webhook"
+            : "polling");
 
     if (!token) {
       return NextResponse.json(

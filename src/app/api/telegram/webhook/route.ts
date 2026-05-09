@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TelegramEnvConfigService } from "@/services/telegram/TelegramEnvConfigService";
 import { TelegramCommandRouter } from "@/services/telegram/TelegramCommandRouter";
+import { logger } from "@/lib/logger";
 
 type TelegramUpdate = {
   message?: {
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error("[TelegramWebhook] Error:", error);
-    return NextResponse.json({ ok: false, error: String(error) }, { status: 500 });
+    logger.error("telegram", "Webhook handler error", error);
+    return NextResponse.json({ ok: false, error: "Internal server error" }, { status: 500 });
   }
 }

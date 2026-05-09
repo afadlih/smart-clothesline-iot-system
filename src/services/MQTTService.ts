@@ -292,10 +292,15 @@ class MqttService {
     };
   }
 
-  publish(topic: string, payload: string | Record<string, unknown>) {
+  publish(topic: string, payload: string | Record<string, unknown>): boolean {
     this.connect();
+    if (!this.client || !this.client.connected) {
+      logger.warn("mqtt", "Publish skipped, client is not connected", { topic });
+      return false;
+    }
     const message = typeof payload === "string" ? payload : JSON.stringify(payload);
-    this.client?.publish(topic, message);
+    this.client.publish(topic, message);
+    return true;
   }
 
   onMessage(callback: SensorMessageCallback): () => void {

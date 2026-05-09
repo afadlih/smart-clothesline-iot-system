@@ -28,7 +28,7 @@ export const COMMAND_PERMISSIONS: Record<string, TelegramRole[]> = {
   "/ping": ["VIEWER", "OPERATOR", "ADMIN"],
   "/uptime": ["VIEWER", "OPERATOR", "ADMIN"],
   "/analytics": ["VIEWER", "OPERATOR", "ADMIN"],
-  "/register_group": ["ADMIN"],
+  "/register_group": ["VIEWER", "OPERATOR", "ADMIN"],
 };
 
 type TelegramAuthConfig = {
@@ -74,13 +74,9 @@ async function loadConfig(): Promise<TelegramAuthConfig> {
   }
 
   // Operator IDs from optional TELEGRAM_OPERATOR_IDS env
-  const operatorRaw = process.env.TELEGRAM_OPERATOR_IDS;
-  if (operatorRaw) {
-    for (const raw of operatorRaw.split(",")) {
-      const id = Number(raw.trim());
-      if (Number.isInteger(id) && id > 0) {
-        if (!users.has(id)) users.set(id, "OPERATOR");
-      }
+  for (const id of TelegramEnvConfigService.getOperatorIds()) {
+    if (!users.has(id)) {
+      users.set(id, "OPERATOR");
     }
   }
 

@@ -1,67 +1,80 @@
 /**
- * TelegramEnvConfigService
- *
- * Single source of truth for Telegram configuration.
- * All secrets and IDs are read from environment variables.
- * Firestore telegram_config is NOT required and NOT used for secrets.
- *
- * Server-side only — never import from browser/client components.
+ * Single source of truth for Telegram environment configuration.
+ * Secrets remain server-only and are never read from Firestore.
  */
 
 function parseIds(raw: string | undefined, allowNegative = false): number[] {
   if (!raw) return [];
+
   return raw
     .split(",")
-    .map((s) => Number(s.trim()))
-    .filter((n) => Number.isInteger(n) && (allowNegative ? n !== 0 : n > 0));
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isInteger(value) && (allowNegative ? value !== 0 : value > 0));
+}
+
+function isWebhookEnabled(): boolean {
+  return process.env.TELEGRAM_WEBHOOK_ENABLED?.toLowerCase() === "true";
 }
 
 export const TelegramEnvConfigService = {
-  /** Bot token — from TELEGRAM_BOT_TOKEN env. Never from Firestore. */
   getBotToken(): string | null {
     return process.env.TELEGRAM_BOT_TOKEN || null;
   },
 
-  /** Webhook secret — from TELEGRAM_WEBHOOK_SECRET env. Never from Firestore. */
   getWebhookSecret(): string | null {
     return process.env.TELEGRAM_WEBHOOK_SECRET || null;
   },
 
-  /** Default chat ID for outgoing notifications. */
   getDefaultChatId(): string | null {
     return process.env.TELEGRAM_CHAT_ID || null;
   },
 
-  /** User IDs allowed as ADMIN. Source: TELEGRAM_ALLOWED_USER_IDS (comma-sep). */
   getAllowedUserIds(): number[] {
     return parseIds(
       process.env.TELEGRAM_ALLOWED_USER_IDS ?? process.env.TELEGRAM_ALLOWED_USERS,
     );
   },
 
-  /** Group/supergroup chat IDs (negative) allowed. Source: TELEGRAM_ALLOWED_GROUPS. */
   getAllowedGroupIds(): number[] {
     return parseIds(process.env.TELEGRAM_ALLOWED_GROUPS, true);
   },
 
-  /** Whether group/supergroup commands are enabled. Source: TELEGRAM_ENABLE_GROUP_MODE. */
+  getOperatorIds(): number[] {
+    return parseIds(process.env.TELEGRAM_OPERATOR_IDS);
+  },
+
   isGroupModeEnabled(): boolean {
     return process.env.TELEGRAM_ENABLE_GROUP_MODE?.toLowerCase() === "true";
   },
 
-  /**
-   * Runtime mode.
-   * On Vercel preview/production → always "webhook" (polling must not run).
-   * Locally with TELEGRAM_BOT_TOKEN set → "polling" (dev convenience).
-   */
   getRuntimeMode(): "webhook" | "polling" | "unconfigured" {
+    const explicitMode = process.env.TELEGRAM_RUNTIME_MODE?.toLowerCase();
+    if (explicitMode === "webhook" || explicitMode === "polling") {
+      return explicitMode;
+    }
+
+    if (!process.env.TELEGRAM_BOT_TOKEN) {
+      return "unconfigured";
+    }
+
+    // Local development should use polling by default.
+    // This prevents local apps from being blocked by production webhook settings.
+    if (process.env.NODE_ENV !== "production") {
+      return "polling";
+    }
+
+    if (isWebhookEnabled()) {
+      return "webhook";
+    }
+
     const vercelEnv = process.env.VERCEL_ENV;
-    if (vercelEnv === "production" || vercelEnv === "preview") return "webhook";
-    if (process.env.TELEGRAM_BOT_TOKEN) return "polling";
-    return "unconfigured";
+    if (vercelEnv === "production" || vercelEnv === "preview") {
+      return "unconfigured";
+    }
+
+    return "polling";
   },
 
-  /** True when the minimum required config (bot token) is present. */
   isConfigured(): boolean {
     return Boolean(process.env.TELEGRAM_BOT_TOKEN);
   },

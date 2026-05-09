@@ -26,6 +26,12 @@ service cloud.firestore {
         && data.light <= 100000
         && isBoolean(data.rain)
         && (data.status == 'OPEN' || data.status == 'CLOSED')
+        && (data.deviceId == null || (data.deviceId is string && data.deviceId.size() > 0))
+        && (data.mode == null || data.mode == 'AUTO' || data.mode == 'MANUAL')
+        && (data.source == null || data.source in ['STATUS_TOPIC', 'SENSOR_FALLBACK', 'UNKNOWN'])
+        && (data.receivedAt == null || isValidTimestampMs(data.receivedAt))
+        && (data.deviceTimestamp == null || isValidTimestampMs(data.deviceTimestamp))
+        && (data.deviceUptimeMs == null || (isNumber(data.deviceUptimeMs) && data.deviceUptimeMs >= 0))
         && (data.createdAt != null || isValidTimestampMs(data.timestamp));
     }
 
