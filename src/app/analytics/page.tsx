@@ -2,324 +2,221 @@
 
 import { useMemo, useState } from "react";
 import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  Cell,
 } from "recharts";
-import {
-  CloudRain,
-  Download,
-  Info,
-  Layers,
-  LayoutDashboard,
-  Maximize2,
-  RefreshCw,
-  Sun,
-  Thermometer,
-} from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 import { useAnalyticsData } from "@/hooks/useAnalyticsData";
-import { TimeRange } from "@/services/AnalyticsDataService";
+import type { TimeRange } from "@/services/AnalyticsDataService";
+
+function formatMetric(value: number | null | undefined, suffix = "", digits = 1): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "--";
+  return `${value.toFixed(digits)}${suffix}`;
+}
+
+function getTooltipStyle(isDark: boolean) {
+  return {
+    borderRadius: "12px",
+    border: isDark ? "1px solid #334155" : "1px solid #e2e8f0",
+    backgroundColor: isDark ? "#0f172a" : "#ffffff",
+    color: isDark ? "#e2e8f0" : "#0f172a",
+  };
+}
 
 export default function AnalyticsPage() {
   const { range, setRange, result, loading, error, refresh } = useAnalyticsData("24h");
   const [activeTab, setActiveTab] = useState<"environment" | "operations">("environment");
 
   const chartData = useMemo(() => {
-    if (!result?.data) return [];
-    return result.data.map((item) => ({
-      time: new Date(item.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      temp: item.temperature,
-      humidity: item.humidity,
-      light: item.light,
-      isRain: item.isRaining() ? 100 : 0,
-      isOpen: item.status === "OPEN" ? 1 : 0,
-    }));
+    if (!result?.data?.length) return [];
+    return result.data
+      .map((item) => {
+        const ms = Date.parse(item.timestamp);
+        if (!Number.isFinite(ms)) return null;
+        return {
+          timestamp: ms,
+          time: new Date(ms).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+          temp: item.temperature,
+          humidity: item.humidity,
+          light: item.light,
+          rain: item.isRaining() ? 1 : 0,
+          isOpen: item.status === "OPEN" ? 1 : 0,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
   }, [result]);
 
-  const stats = result?.stats;
-
   const exportData = () => {
-    if (!result?.data) return;
-    const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: "application/json" });
+    if (!result?.data?.length) return;
+    const payload = {
+      range,
+      rangeStart: result.rangeStart,
+      rangeEnd: result.rangeEnd,
+      source: result.source,
+      data: result.data,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `analytics-${range}-${new Date().toISOString().split("T")[0]}.json`;
+    a.download = `analytics-${range}-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
+    URL.revokeObjectURL(url);
   };
 
-  return (
-    <main className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
-      <PageContainer className="py-8">
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold text-sm uppercase tracking-wider">
-              <LayoutDashboard size={16} />
-              Operational Insights
-            </div>
-            <h1 className="text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-              Analytics <span className="text-slate-400 dark:text-slate-600">Dashboard</span>
-            </h1>
-          </div>
+  const isDark =
+    typeof document !== "undefined" && document.documentElement.classList.contains("dark");
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="bg-white dark:bg-slate-900 p-1 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex">
-              {(["1h", "6h", "24h", "7d", "30d"] as TimeRange[]).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setRange(r)}
-                  className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                    range === r
-                      ? "bg-blue-600 text-white shadow-md"
-                      : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-200"
-                  }`}
-                >
-                  {r.toUpperCase()}
-                </button>
-              ))}
-            </div>
+  return (
+    <main className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      <PageContainer className="space-y-6 py-6">
+        <header className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Operational Insights</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Historical telemetry from Firestore</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {(["1h", "6h", "24h", "7d", "30d"] as TimeRange[]).map((r) => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                  range === r
+                    ? "bg-blue-600 text-white"
+                    : "border border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                }`}
+              >
+                {r.toUpperCase()}
+              </button>
+            ))}
             <button
               onClick={refresh}
-              className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
               disabled={loading}
+              className="rounded-lg border border-slate-200 bg-white p-2 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
             >
-              <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             </button>
             <button
               onClick={exportData}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold text-xs hover:opacity-90 transition-opacity"
+              disabled={!result?.data?.length}
+              className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
             >
-              <Download size={16} />
-              EXPORT
+              <span className="inline-flex items-center gap-1">
+                <Download className="h-3.5 w-3.5" />
+                Export
+              </span>
             </button>
           </div>
         </header>
 
         {error && (
-          <div className="mb-6 p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40 text-red-700 dark:text-red-300 flex items-center gap-3">
-            <Info size={20} />
-            <p className="font-medium">{error}</p>
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/40 dark:bg-red-900/20">
+            <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+            <button onClick={refresh} className="mt-2 text-xs font-semibold text-red-700 underline dark:text-red-300">
+              Retry
+            </button>
           </div>
         )}
 
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <StatCard
-            icon={<Thermometer className="text-orange-500" />}
-            label="Avg Temperature"
-            value={stats ? `${stats.avgTemp.toFixed(1)}°C` : "--"}
-            subValue="Thermal conditions"
-          />
-          <StatCard
-            icon={<CloudRain className="text-blue-500" />}
-            label="Rain Events"
-            value={stats ? stats.rainCount.toString() : "--"}
-            subValue="Wet detections"
-          />
-          <StatCard
-            icon={<Sun className="text-amber-500" />}
-            label="Avg Light Intensity"
-            value={stats ? Math.round(stats.avgLight).toString() : "--"}
-            subValue="Lumens reading"
-          />
-          <StatCard
-            icon={<Maximize2 className="text-emerald-500" />}
-            label="Clothesline Open"
-            value={stats ? `${Math.round(stats.openPercentage)}%` : "--"}
-            subValue="Operational time"
-          />
-        </section>
+        {loading ? (
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-24 animate-pulse rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" />
+            ))}
+          </section>
+        ) : (
+          <>
+            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <MetricCard label="Average Temperature" value={formatMetric(result?.stats.avgTemp, "°C", 1)} />
+              <MetricCard label="Average Humidity" value={formatMetric(result?.stats.avgHumidity, "%", 1)} />
+              <MetricCard label="Average Light" value={formatMetric(result?.stats.avgLight, "", 0)} />
+              <MetricCard label="Rain Events in Selected Range" value={String(result?.stats.rainCount ?? 0)} />
+              <MetricCard label="Data Points" value={String(result?.stats.dataPoints ?? 0)} />
+              <MetricCard label="Clothesline Open Time" value={formatMetric(result?.stats.openPercentage, "%", 0)} />
+            </section>
 
-        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-          <div className="border-b border-slate-100 dark:border-slate-800 px-8 py-4 flex items-center justify-between">
-            <div className="flex gap-8">
-              <button
-                onClick={() => setActiveTab("environment")}
-                className={`text-sm font-bold pb-4 -mb-[17px] border-b-2 transition-all ${
-                  activeTab === "environment"
-                    ? "border-blue-600 text-blue-600 dark:text-blue-400"
-                    : "border-transparent text-slate-400 hover:text-slate-600"
-                }`}
-              >
-                Environmental Trends
-              </button>
-              <button
-                onClick={() => setActiveTab("operations")}
-                className={`text-sm font-bold pb-4 -mb-[17px] border-b-2 transition-all ${
-                  activeTab === "operations"
-                    ? "border-blue-600 text-blue-600 dark:text-blue-400"
-                    : "border-transparent text-slate-400 hover:text-slate-600"
-                }`}
-              >
-                Device Operations
-              </button>
-            </div>
-            <div className="text-xs text-slate-400 font-medium">
-              {stats?.dataPoints ?? 0} data points collected
-            </div>
-          </div>
-
-          <div className="p-8 h-[400px]">
-            {loading ? (
-              <div className="h-full flex flex-col items-center justify-center space-y-4">
-                <div className="w-12 h-12 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin" />
-                <p className="text-slate-400 font-medium text-sm">Processing telemetry...</p>
-              </div>
-            ) : chartData.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center space-y-2 opacity-40">
-                <Layers size={48} />
-                <p className="font-bold">No data found for this range</p>
-              </div>
+            {!chartData.length ? (
+              <section className="rounded-xl border border-slate-200 bg-white p-6 text-center dark:border-slate-800 dark:bg-slate-900">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">No analytics data yet</h2>
+                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                  Start the IoT device and wait for telemetry to be stored.
+                </p>
+              </section>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                {activeTab === "environment" ? (
-                  <AreaChart data={chartData}>
-                    <defs>
-                      <linearGradient id="colorTemp" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f97316" stopOpacity={0.1} />
-                        <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="colorHum" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#94a3b8" }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#94a3b8" }} />
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: "16px",
-                        border: "none",
-                        boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
-                        backgroundColor: "rgba(255, 255, 255, 0.9)",
-                        padding: "12px",
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="temp"
-                      stroke="#f97316"
-                      strokeWidth={3}
-                      fillOpacity={1}
-                      fill="url(#colorTemp)"
-                      name="Temperature (°C)"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="humidity"
-                      stroke="#3b82f6"
-                      strokeWidth={3}
-                      fillOpacity={1}
-                      fill="url(#colorHum)"
-                      name="Humidity (%)"
-                    />
-                  </AreaChart>
-                ) : (
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#94a3b8" }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#94a3b8" }} />
-                    <Tooltip
-                      cursor={{ fill: "rgba(0,0,0,0.05)" }}
-                      contentStyle={{
-                        borderRadius: "16px",
-                        border: "none",
-                        boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
-                        backgroundColor: "rgba(255, 255, 255, 0.9)",
-                        padding: "12px",
-                      }}
-                    />
-                    <Bar dataKey="isOpen" name="Device State (1=Open)" radius={[4, 4, 0, 0]}>
-                      {chartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.isOpen === 1 ? "#10b981" : "#f43f5e"} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                )}
-              </ResponsiveContainer>
+              <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setActiveTab("environment")}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+                      activeTab === "environment"
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                    }`}
+                  >
+                    Environment Trends
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("operations")}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+                      activeTab === "operations"
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                    }`}
+                  >
+                    Device Operations
+                  </button>
+                </div>
+
+                <div className="h-[320px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    {activeTab === "environment" ? (
+                      <AreaChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="time" tick={{ fontSize: 11 }} minTickGap={24} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <Tooltip contentStyle={getTooltipStyle(isDark)} />
+                        <Area type="monotone" dataKey="temp" stroke="#f97316" fill="#f9731633" name="Temperature (°C)" />
+                        <Area type="monotone" dataKey="humidity" stroke="#3b82f6" fill="#3b82f633" name="Humidity (%)" />
+                        <Area type="monotone" dataKey="light" stroke="#eab308" fill="#eab30833" name="Light" />
+                      </AreaChart>
+                    ) : (
+                      <BarChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="time" tick={{ fontSize: 11 }} minTickGap={24} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <Tooltip contentStyle={getTooltipStyle(isDark)} />
+                        <Bar dataKey="isOpen" name="Clothesline Open State">
+                          {chartData.map((row, idx) => (
+                            <Cell key={`${row.timestamp}-${idx}`} fill={row.isOpen ? "#10b981" : "#ef4444"} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </div>
+              </section>
             )}
-          </div>
-        </div>
-
-        <section className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-3xl p-8 border border-slate-200 dark:border-slate-800">
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-6">Operational Summary</h2>
-            <div className="space-y-6">
-              <SummaryItem
-                label="Drying Efficiency"
-                value={stats && stats.avgLight > 500 ? "Excellent" : "Moderate"}
-                desc="Based on light intensity and humidity trends during daylight hours."
-              />
-              <SummaryItem
-                label="Safety Response"
-                value="High"
-                desc="Device automatically closed on all rain events detected in this period."
-              />
-              <SummaryItem
-                label="Connectivity Health"
-                value="Stable"
-                desc="Telemetry stream remained consistent with minimal drift."
-              />
-            </div>
-          </div>
-
-          <div className="bg-blue-600 rounded-3xl p-8 text-white relative overflow-hidden group">
-            <div className="relative z-10">
-              <Sun className="mb-4 text-blue-200" size={32} />
-              <h3 className="text-2xl font-bold mb-2">Smart Prediction</h3>
-              <p className="text-blue-100 text-sm leading-relaxed opacity-90">
-                Tomorrow&apos;s drying conditions look <strong>Favorable</strong>. 
-                High light intensity expected between 10:00 - 14:00.
-              </p>
-              <div className="mt-8 pt-8 border-t border-white/20">
-                <p className="text-[10px] uppercase font-bold tracking-widest opacity-60">Insight Model</p>
-                <p className="font-bold">v2.1 Reactive Engine</p>
-              </div>
-            </div>
-            <div className="absolute -right-12 -bottom-12 w-48 h-48 bg-white/10 rounded-full group-hover:scale-110 transition-transform duration-700" />
-          </div>
-        </section>
+          </>
+        )}
       </PageContainer>
     </main>
   );
 }
 
-function StatCard({ icon, label, value, subValue }: { icon: React.ReactNode; label: string; value: string; subValue: string }) {
+function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800">
-          {icon}
-        </div>
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{label}</span>
-      </div>
-      <div className="text-3xl font-black text-slate-900 dark:text-white mb-1">{value}</div>
-      <div className="text-xs text-slate-500 font-medium">{subValue}</div>
-    </div>
-  );
-}
-
-function SummaryItem({ label, value, desc }: { label: string; value: string; desc: string }) {
-  return (
-    <div className="flex gap-4">
-      <div className="mt-1 h-2 w-2 rounded-full bg-blue-600 shrink-0" />
-      <div>
-        <div className="flex items-center gap-3 mb-1">
-          <span className="font-bold text-slate-900 dark:text-white">{label}</span>
-          <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-[10px] font-black uppercase tracking-tighter">
-            {value}
-          </span>
-        </div>
-        <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">{desc}</p>
-      </div>
-    </div>
+    <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{value}</p>
+    </article>
   );
 }
