@@ -6,6 +6,7 @@ import PageContainer from "@/components/layout/PageContainer";
 import PairingDeviceSettings, { type PairableDevice } from "@/features/settings/PairingDeviceSettings";
 import { useSystemState } from "@/hooks/useSystemState";
 import { mqttService, PAIRING_DISCOVERY_TOPIC, type PairingDiscoveryMessage } from "@/services/MQTTService";
+import TelegramBridgeStatus from "@/features/dashboard/TelegramBridgeStatus";
 
 const DEVICES_STORAGE_KEY = "smart-clothesline-devices-v1";
 const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
@@ -99,6 +100,7 @@ export default function IoTHubPage() {
           </div>
 
           <aside className="space-y-4 xl:col-span-4">
+            <TelegramBridgeStatus />
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Device Console</h2>
               <div className="mt-3 space-y-2 text-sm text-slate-700 dark:text-slate-200">

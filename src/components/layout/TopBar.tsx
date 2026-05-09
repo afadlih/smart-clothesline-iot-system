@@ -29,7 +29,7 @@ const SETTINGS_STORAGE_KEY = "smart-clothesline-settings-v1";
 
 export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: TopBarProps) {
   const router = useRouter();
-  const { mode, decision, uiState, lastUpdate } = useSystemState();
+  const { runtime } = useSystemState();
   const {
     events: notificationEvents,
     unreadCount,
@@ -139,33 +139,31 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
       .map((part) => part[0]?.toUpperCase() ?? "")
       .join("") || "OP";
 
-  const lastUpdateSeconds =
-    lastUpdate === null
-      ? null
-      : Math.max(0, Math.floor((Date.now() - lastUpdate) / 1000));
   const deviceStatus =
-    lastUpdateSeconds === null
-      ? "Offline"
-      : lastUpdateSeconds > 30
-        ? "Offline"
-        : lastUpdateSeconds > 15
-          ? "Delayed"
-          : "Online";
-  const streamStatus =
-    uiState.stream === "STREAMING"
-      ? "Streaming"
-      : uiState.stream === "NO_DATA"
-        ? "Waiting Data"
-        : "Idle";
-  const modeLabel = mode === "MANUAL" ? "Manual" : "Auto";
+    runtime.deviceConnectivity === "ONLINE"
+      ? "Online"
+      : runtime.deviceConnectivity === "DELAYED"
+        ? "Delayed"
+        : "Offline";
+
+  const modeLabel =
+    runtime.actualDeviceMode === "MANUAL"
+      ? "Manual"
+      : runtime.actualDeviceMode === "AUTO"
+        ? "Auto"
+        : "Unknown";
+
   const systemState =
-    decision.decisionSource === "MANUAL"
+    runtime.decisionSource === "MANUAL"
       ? "Manual Override"
-      : decision.decisionSource === "SAFETY"
-        ? decision.reason.toLowerCase().includes("rain")
+      : runtime.decisionSource === "SAFETY"
+        ? runtime.safetyLabel === "RAIN DETECTED"
           ? "Rain Detected"
-          : "Auto Closed"
+          : runtime.safetyLabel === "LOW LIGHT"
+            ? "Auto Closed"
+            : "Safety Alert"
         : "Safe";
+
   const deviceDotClass =
     deviceStatus === "Online"
       ? "bg-emerald-500"
@@ -237,13 +235,13 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
             value={deviceStatus}
             valueClass={deviceValueClass}
             dotClass={deviceDotClass}
-            dotPulseClass={streamStatus === "Streaming" ? "animate-pulse" : ""}
+            dotPulseClass={runtime.streamState === "STREAMING" ? "animate-pulse" : ""}
             iconBgClass="bg-slate-100 dark:bg-slate-800"
             iconTextClass="text-slate-600 dark:text-slate-200"
             title={
-              lastUpdateSeconds === null
+              runtime.freshnessSeconds === null
                 ? "Last update: -"
-                : `Last update: ${lastUpdateSeconds}s ago`
+                : `Last update: ${runtime.freshnessSeconds}s ago`
             }
           />
           <div className="h-8 border-l border-slate-200 dark:border-slate-700" />
