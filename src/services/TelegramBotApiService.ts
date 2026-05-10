@@ -18,6 +18,21 @@ type TelegramUpdate = {
   };
 };
 
+type TelegramBotInfo = {
+  id: number;
+  first_name: string;
+  username?: string;
+  can_join_groups?: boolean;
+};
+
+type TelegramWebhookInfo = {
+  url: string;
+  has_custom_certificate?: boolean;
+  pending_update_count?: number;
+  max_connections?: number;
+  ip_address?: string;
+};
+
 function endpoint(token: string, method: string): string {
   return `https://api.telegram.org/bot${token}/${method}`;
 }
@@ -49,7 +64,11 @@ export class TelegramBotApiService {
     }
   }
 
-  static async sendMessage(token: string, chatId: string | number, text: string): Promise<boolean> {
+  static async sendMessageWithResult(
+    token: string,
+    chatId: string | number,
+    text: string,
+  ): Promise<{ ok: boolean; description?: string }> {
     const data = await this.safeRequest<unknown>(endpoint(token, "sendMessage"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -58,15 +77,26 @@ export class TelegramBotApiService {
         text,
       }),
     });
-    return data.ok;
+    return { ok: data.ok, description: data.description };
   }
 
-  static async getMe(token: string): Promise<{ ok: boolean; description?: string }> {
-    const data = await this.safeRequest<unknown>(endpoint(token, "getMe"), {
+  static async sendMessage(token: string, chatId: string | number, text: string): Promise<boolean> {
+    const result = await this.sendMessageWithResult(token, chatId, text);
+    return result.ok;
+  }
+
+  static async getMe(token: string): Promise<TelegramApiResponse<TelegramBotInfo>> {
+    return this.safeRequest<TelegramBotInfo>(endpoint(token, "getMe"), {
       method: "GET",
       headers: { "Content-Type": "application/json" },
     });
-    return { ok: data.ok, description: data.description };
+  }
+
+  static async getWebhookInfo(token: string): Promise<TelegramApiResponse<TelegramWebhookInfo>> {
+    return this.safeRequest<TelegramWebhookInfo>(endpoint(token, "getWebhookInfo"), {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   static async setWebhook(token: string, webhookUrl: string, secret: string): Promise<boolean> {

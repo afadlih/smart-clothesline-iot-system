@@ -1,425 +1,222 @@
 "use client";
 
-import { useSensor } from "@/hooks/useSensor";
-import { useAnalytics } from "@/hooks/useAnalytics";
-import { DataExportService } from "@/services/DataExportService";
 import { useMemo, useState } from "react";
 import {
-  LineChart,
-  Line,
-  AreaChart,
   Area,
-  BarChart,
+  AreaChart,
   Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
 } from "recharts";
-import ErrorAlert from "@/components/alerts/ErrorAlert";
-import { resolveThemePalette } from "@/lib/themeResolver";
-import { useThemeStore } from "@/stores/themeStore";
+import { Download, RefreshCw } from "lucide-react";
+import PageContainer from "@/components/layout/PageContainer";
+import { useAnalyticsData } from "@/hooks/useAnalyticsData";
+import type { TimeRange } from "@/services/AnalyticsDataService";
 
-type TimeRange = "today" | "7days" | "30days" | "all";
+function formatMetric(value: number | null | undefined, suffix = "", digits = 1): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "--";
+  return `${value.toFixed(digits)}${suffix}`;
+}
+
+function getTooltipStyle(isDark: boolean) {
+  return {
+    borderRadius: "12px",
+    border: isDark ? "1px solid #334155" : "1px solid #e2e8f0",
+    backgroundColor: isDark ? "#0f172a" : "#ffffff",
+    color: isDark ? "#e2e8f0" : "#0f172a",
+  };
+}
 
 export default function AnalyticsPage() {
-  const { history, connection, commandStatus, commandSentAt } = useSensor();
-  const currentTheme = useThemeStore((state) => state.theme);
-  const analytics = useAnalytics(history, connection, {
-    commandStatus,
-    lastCommandAt: commandSentAt,
-  });
-  const [timeRange, setTimeRange] = useState<TimeRange>("7days");
+  const { range, setRange, result, loading, error, refresh } = useAnalyticsData("24h");
+  const [activeTab, setActiveTab] = useState<"environment" | "operations">("environment");
 
-  const { dailyStats, hourlyBreakdown, deviceHealth, smartAlerts, dataSufficiency, hasData } = analytics;
-  const palette = resolveThemePalette(currentTheme);
+  const chartData = useMemo(() => {
+    if (!result?.data?.length) return [];
+    return result.data
+      .map((item) => {
+        const ms = Date.parse(item.timestamp);
+        if (!Number.isFinite(ms)) return null;
+        return {
+          timestamp: ms,
+          time: new Date(ms).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+          temp: item.temperature,
+          humidity: item.humidity,
+          light: item.light,
+          rain: item.isRaining() ? 1 : 0,
+          isOpen: item.status === "OPEN" ? 1 : 0,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
+  }, [result]);
 
-  const safeNumber = (value: unknown, fallback: number = 0) =>
-    typeof value === "number" && Number.isFinite(value) ? value : fallback;
-
-  const metric = (value: unknown) => ({
-    min: safeNumber((value as { min?: unknown })?.min),
-    max: safeNumber((value as { max?: unknown })?.max),
-    avg: safeNumber((value as { avg?: unknown })?.avg),
-  });
-
-  const tempMetric = metric(dailyStats?.temperature);
-  const humidityMetric = metric(dailyStats?.humidity);
-  const lightMetric = metric(dailyStats?.light);
-  const safeRainEvents = safeNumber(dailyStats?.rainEvents);
-  const safeDataPoints = safeNumber(dailyStats?.dataPoints);
-  const safeOperationHours = safeNumber(dailyStats?.operationHours);
-
-  // Download sensor data as CSV
-  const handleExportCSV = () => {
-    const filename = `clothesline-${new Date().toISOString().split("T")[0]}.csv`;
-    DataExportService.exportToCSV(
-      history.map((h) => h.data),
-      filename,
-    );
+  const exportData = () => {
+    if (!result?.data?.length) return;
+    const payload = {
+      range,
+      rangeStart: result.rangeStart,
+      rangeEnd: result.rangeEnd,
+      source: result.source,
+      data: result.data,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `analytics-${range}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
-  // Download sensor data as JSON
-  const handleExportJSON = () => {
-    const filename = `clothesline-${new Date().toISOString().split("T")[0]}.json`;
-    DataExportService.exportToJSON(
-      history.map((h) => h.data),
-      filename,
-    );
-  };
-
-  // Filter data by time range
-  const filteredData = useMemo(() => {
-    const now = Date.now();
-    let cutoffTime = now;
-
-    switch (timeRange) {
-      case "today":
-        cutoffTime = now - 24 * 60 * 60 * 1000;
-        break;
-      case "7days":
-        cutoffTime = now - 7 * 24 * 60 * 60 * 1000;
-        break;
-      case "30days":
-        cutoffTime = now - 30 * 24 * 60 * 60 * 1000;
-        break;
-      case "all":
-        cutoffTime = 0;
-        break;
-    }
-
-    return history.filter((h) => {
-      const timestamp = new Date(h.data.timestamp).getTime();
-      return Number.isFinite(timestamp) && timestamp >= cutoffTime;
-    });
-  }, [history, timeRange]);
-  const safeHourlyBreakdown = useMemo(
-    () =>
-      hourlyBreakdown.filter(
-        (item) =>
-          Number.isFinite(item.hour) &&
-          Number.isFinite(item.temperature) &&
-          Number.isFinite(item.humidity) &&
-          Number.isFinite(item.light),
-      ),
-    [hourlyBreakdown],
-  );
-  const rainRatio = safeDataPoints > 0 ? (safeRainEvents / safeDataPoints) * 100 : 0;
-  const dryingEfficiency = dataSufficiency.canEstimateDryingEfficiency
-    ? Math.max(0, Math.min(100, 100 - rainRatio))
-    : null;
-  const dominantWeather = dataSufficiency.hasOperationalPattern
-    ? rainRatio > 45 ? "Rain-dominant" : rainRatio > 20 ? "Mixed weather" : "Dry-dominant"
-    : "Collecting operational patterns";
-
-  if (analytics.loading) {
-    return (
-      <main className="bg-gray-100 min-h-screen p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="animate-pulse space-y-4">
-            <div className="h-12 bg-gray-300 rounded-lg"></div>
-            <div className="h-96 bg-gray-300 rounded-lg"></div>
-          </div>
-        </div>
-      </main>
-    );
-  }
+  const isDark =
+    typeof document !== "undefined" && document.documentElement.classList.contains("dark");
 
   return (
-    <main className="bg-gray-100 min-h-screen p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <main className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      <PageContainer className="space-y-6 py-6">
+        <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900">Operational Insights</h1>
-            <p className="text-gray-600 mt-2">Readable trends for drying performance and device activity</p>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Operational Insights</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Historical telemetry from Firestore</p>
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex flex-wrap items-center gap-2">
+            {(["1h", "6h", "24h", "7d", "30d"] as TimeRange[]).map((r) => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                  range === r
+                    ? "bg-blue-600 text-white"
+                    : "border border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                }`}
+              >
+                {r.toUpperCase()}
+              </button>
+            ))}
             <button
-              onClick={handleExportCSV}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+              onClick={refresh}
+              disabled={loading}
+              className="rounded-lg border border-slate-200 bg-white p-2 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
             >
-              Export CSV
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             </button>
             <button
-              onClick={handleExportJSON}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+              onClick={exportData}
+              disabled={!result?.data?.length}
+              className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
             >
-              Export JSON
+              <span className="inline-flex items-center gap-1">
+                <Download className="h-3.5 w-3.5" />
+                Export
+              </span>
             </button>
           </div>
-        </div>
+        </header>
 
-        {/* Time Range Selector */}
-        <div className="flex gap-2 flex-wrap bg-white rounded-lg shadow p-4 dark:bg-slate-900">
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center">Time Range:</p>
-          {(["today", "7days", "30days", "all"] as const).map((range) => (
-            <button
-              key={range}
-              onClick={() => setTimeRange(range)}
-              className={`px-3 py-1 rounded-lg text-sm font-medium transition ${
-                timeRange === range
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300"
-              }`}
-            >
-              {range === "today" && "Today"}
-              {range === "7days" && "Last 7 Days"}
-              {range === "30days" && "Last 30 Days"}
-              {range === "all" && "All Data"}
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/40 dark:bg-red-900/20">
+            <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+            <button onClick={refresh} className="mt-2 text-xs font-semibold text-red-700 underline dark:text-red-300">
+              Retry
             </button>
-          ))}
-          <span className="ml-auto text-xs text-gray-600 dark:text-gray-400 flex items-center">
-            {filteredData.length} records
-          </span>
-        </div>
-
-        {/* Smart Alerts */}
-        {smartAlerts.length > 0 && (
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold text-gray-900">Active Alerts</h2>
-            <div className="space-y-2">
-              {smartAlerts.map((alert) => (
-                <ErrorAlert
-                  key={alert.id}
-                  type={
-                    alert.severity === "critical"
-                      ? "error"
-                      : alert.severity === "warning"
-                        ? "warning"
-                        : "info"
-                  }
-                  message={`${alert.title}: ${alert.description}`}
-                  dismissible={true}
-                />
-              ))}
-            </div>
           </div>
         )}
 
-        {!hasData && (
-          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900">Insufficient telemetry history</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Waiting for telemetry stream to build reliable analytics insights.
-            </p>
-          </div>
+        {loading ? (
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-24 animate-pulse rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" />
+            ))}
+          </section>
+        ) : (
+          <>
+            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <MetricCard label="Average Temperature" value={formatMetric(result?.stats.avgTemp, "°C", 1)} />
+              <MetricCard label="Average Humidity" value={formatMetric(result?.stats.avgHumidity, "%", 1)} />
+              <MetricCard label="Average Light" value={formatMetric(result?.stats.avgLight, "", 0)} />
+              <MetricCard label="Rain Events in Selected Range" value={String(result?.stats.rainCount ?? 0)} />
+              <MetricCard label="Data Points" value={String(result?.stats.dataPoints ?? 0)} />
+              <MetricCard label="Clothesline Open Time" value={formatMetric(result?.stats.openPercentage, "%", 0)} />
+            </section>
+
+            {!chartData.length ? (
+              <section className="rounded-xl border border-slate-200 bg-white p-6 text-center dark:border-slate-800 dark:bg-slate-900">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">No analytics data yet</h2>
+                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                  Start the IoT device and wait for telemetry to be stored.
+                </p>
+              </section>
+            ) : (
+              <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setActiveTab("environment")}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+                      activeTab === "environment"
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                    }`}
+                  >
+                    Environment Trends
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("operations")}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+                      activeTab === "operations"
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                    }`}
+                  >
+                    Device Operations
+                  </button>
+                </div>
+
+                <div className="h-[320px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    {activeTab === "environment" ? (
+                      <AreaChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="time" tick={{ fontSize: 11 }} minTickGap={24} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <Tooltip contentStyle={getTooltipStyle(isDark)} />
+                        <Area type="monotone" dataKey="temp" stroke="#f97316" fill="#f9731633" name="Temperature (°C)" />
+                        <Area type="monotone" dataKey="humidity" stroke="#3b82f6" fill="#3b82f633" name="Humidity (%)" />
+                        <Area type="monotone" dataKey="light" stroke="#eab308" fill="#eab30833" name="Light" />
+                      </AreaChart>
+                    ) : (
+                      <BarChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="time" tick={{ fontSize: 11 }} minTickGap={24} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <Tooltip contentStyle={getTooltipStyle(isDark)} />
+                        <Bar dataKey="isOpen" name="Clothesline Open State">
+                          {chartData.map((row, idx) => (
+                            <Cell key={`${row.timestamp}-${idx}`} fill={row.isOpen ? "#10b981" : "#ef4444"} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </div>
+              </section>
+            )}
+          </>
         )}
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Temperature Card */}
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase">Temperature</h3>
-            <p className="text-3xl font-bold text-red-600 mt-2">
-              {tempMetric.avg.toFixed(1)} C
-            </p>
-            <p className="text-sm text-gray-600 mt-2">
-              Min: {tempMetric.min.toFixed(1)} C / Max:{" "}
-              {tempMetric.max.toFixed(1)} C
-            </p>
-          </div>
-
-          {/* Humidity Card */}
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase">Humidity</h3>
-            <p className="text-3xl font-bold text-blue-600 mt-2">
-              {humidityMetric.avg.toFixed(1)}%
-            </p>
-            <p className="text-sm text-gray-600 mt-2">
-              Min: {humidityMetric.min.toFixed(1)}% / Max:{" "}
-              {humidityMetric.max.toFixed(1)}%
-            </p>
-          </div>
-
-          {/* Light Card */}
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase">Light</h3>
-            <p className="text-3xl font-bold text-amber-600 mt-2">
-              {lightMetric.avg.toFixed(0)}
-            </p>
-            <p className="text-sm text-gray-600 mt-2">
-              Min: {lightMetric.min.toFixed(0)} / Max: {lightMetric.max.toFixed(0)}
-            </p>
-          </div>
-
-          {/* Device Health Card */}
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase">Device Health</h3>
-            <p className={`text-3xl font-bold mt-2 ${
-              deviceHealth.status === "healthy"
-                ? "text-green-600"
-                : deviceHealth.status === "degraded"
-                  ? "text-yellow-600"
-                  : "text-red-600"
-            }`}>
-              {deviceHealth.healthScore}%
-            </p>
-            <p className="text-sm text-gray-600 mt-2 capitalize">{deviceHealth.status}</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Best Drying Period</p>
-            <p className="mt-2 text-sm font-bold text-slate-900">
-              {dailyStats.temperature.avg > 27 && dailyStats.humidity.avg < 75 ? "Favorable" : "Moderate"}
-            </p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rain Frequency</p>
-            <p className="mt-2 text-sm font-bold text-slate-900">{dataSufficiency.hasOperationalPattern ? `${rainRatio.toFixed(1)}%` : "Insufficient telemetry history"}</p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Dominant Weather</p>
-            <p className="mt-2 text-sm font-bold text-slate-900">{dominantWeather}</p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Device Activity Trend</p>
-            <p className="mt-2 text-sm font-bold text-slate-900">
-              {safeDataPoints > 150 ? "High activity" : safeDataPoints > 60 ? "Stable" : "Low activity"}
-            </p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Drying Efficiency</p>
-            <p className="mt-2 text-sm font-bold text-slate-900">{dryingEfficiency === null ? "Waiting for telemetry stream" : `${dryingEfficiency.toFixed(0)}%`}</p>
-          </div>
-        </div>
-
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Temperature Trend */}
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Temperature Trend</h3>
-            {safeHourlyBreakdown.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={safeHourlyBreakdown}>
-                  <CartesianGrid stroke={palette.chart.grid} strokeDasharray="3 3" />
-                  <XAxis dataKey="hour" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line
-                    type="monotone"
-                    dataKey="temperature"
-                    stroke={palette.chart.temperature}
-                    strokeWidth={2}
-                    dot={{ fill: palette.chart.temperature, r: 3 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-gray-500 text-center py-12">No hourly data available</p>
-            )}
-          </div>
-
-          {/* Humidity Trend */}
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Humidity Trend</h3>
-            {safeHourlyBreakdown.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={safeHourlyBreakdown}>
-                  <defs>
-                    <linearGradient id="colorHumidity" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={palette.chart.humidity} stopOpacity={0.8} />
-                      <stop offset="95%" stopColor={palette.chart.humidity} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke={palette.chart.grid} strokeDasharray="3 3" />
-                  <XAxis dataKey="hour" />
-                  <YAxis />
-                  <Tooltip />
-                  <Area
-                    type="monotone"
-                    dataKey="humidity"
-                    stroke={palette.chart.humidity}
-                    fillOpacity={1}
-                    fill="url(#colorHumidity)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-gray-500 text-center py-12">No hourly data available</p>
-            )}
-          </div>
-
-          {/* Light Levels */}
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Light Levels</h3>
-            {safeHourlyBreakdown.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={safeHourlyBreakdown}>
-                  <CartesianGrid stroke={palette.chart.grid} strokeDasharray="3 3" />
-                  <XAxis dataKey="hour" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="light" fill={palette.chart.light} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-gray-500 text-center py-12">No hourly data available</p>
-            )}
-          </div>
-
-          {/* Rain Events */}
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Rain Events</h3>
-            <div className="space-y-4">
-              <div className="text-center">
-                <p className="text-4xl font-bold text-blue-600">{safeRainEvents}</p>
-                <p className="text-gray-600 mt-2">rain events today</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Data Points</p>
-                  <p className="text-2xl font-bold text-gray-900">{safeDataPoints}</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Operation Hours</p>
-                  <p className="text-2xl font-bold text-gray-900">{safeOperationHours.toFixed(1)}h</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Device Health Details */}
-        <div className="bg-white rounded-xl shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Device Health Details</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <p className="text-sm text-gray-600">Telemetry Freshness</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {deviceHealth.uptime.percentage}%
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Command Reliability</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {Math.round(deviceHealth.reliability.commandSuccessRate)}%
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Last Seen</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {Number.isFinite(deviceHealth.connectionQuality.lastSeenAgo)
-                  ? `${Math.max(0, Math.round(deviceHealth.connectionQuality.lastSeenAgo / 1000))}s ago`
-                  : "--"}
-              </p>
-            </div>
-          </div>
-          {deviceHealth.anomalies.length > 0 && (
-            <div className="mt-4 p-4 bg-yellow-50 rounded-lg">
-              <p className="text-sm font-semibold text-yellow-800 mb-2">Detected Anomalies:</p>
-              <ul className="text-sm text-yellow-700 space-y-1">
-                {deviceHealth.anomalies.map((anomaly, i) => (
-                  <li key={i}>- {anomaly}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      </div>
+      </PageContainer>
     </main>
+  );
+}
+
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{value}</p>
+    </article>
   );
 }

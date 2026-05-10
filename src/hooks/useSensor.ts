@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { DecisionEngine } from "@/features/dashboard/DecisionEngine";
 import {
     getFinalState,
@@ -25,9 +26,10 @@ import { ScheduleService } from "@/services/ScheduleService";
 import { TelemetryNormalizerService } from "@/services/TelemetryNormalizerService";
 import { OperationalStateResolver } from "@/services/OperationalStateResolver";
 import { TelegramOpsService } from "@/services/TelegramOpsService";
-import { TelegramBotApiService } from "@/services/TelegramBotApiService";
+import { MqttDiagnosticsService, type DeviceStateSource } from "@/services/MqttDiagnosticsService";
 import { useSensorStore } from "@/stores/sensorStore";
 import { logger } from "@/lib/logger";
+import { db } from "@/lib/firebase";
 
 type ConnectionState = "connecting" | "online" | "reconnecting" | "offline" | "error";
 type DeviceStatus = "OPEN" | "CLOSED" | "RESTARTING";
@@ -46,6 +48,16 @@ type MqttSensorPayload = {
     rain: boolean;
     timestamp?: number;
     heartbeat?: number;
+    mode?: DeviceMode;
+    status?: DeviceStatus;
+    lastCommand?: DeviceCommand;
+    receivedAt: number;
+    deviceTimestamp?: number;
+    deviceUptimeMs?: number;
+    heartbeatAt?: number;
+    duplicate: boolean;
+    incomplete: boolean;
+    stale: boolean;
 };
 
 type MqttDeviceStatusPayload = {
@@ -151,6 +163,8 @@ type SensorSnapshot = {
         lastTransitionAt: number | null;
         lastAckResult: "none" | "matched" | "mismatch" | "timeout";
         dedupedStatusCount: number;
+        deviceStateSource: DeviceStateSource;
+        mqttDiagnostics: ReturnType<typeof MqttDiagnosticsService.snapshot>;
     };
     events: EventLog[];
     connection: ConnectionSnapshot;
@@ -172,6 +186,7 @@ const FRESHNESS_MS = 15_000;
 const STATUS_DEBOUNCE_MS = 1_000;
 const OFFLINE_ALERT_INTERVAL_MS = 10_000;
 const TELEGRAM_ALERT_COOLDOWN_MS = 30_000;
+const SENSOR_STORAGE_SAMPLING_MS = 30_000;
 const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
 const WOKWI_DEVICE_ID = "wokwi-default";
 
@@ -215,6 +230,8 @@ const sharedState: SensorSnapshot = {
         lastTransitionAt: null,
         lastAckResult: "none",
         dedupedStatusCount: 0,
+        deviceStateSource: "UNKNOWN",
+        mqttDiagnostics: MqttDiagnosticsService.snapshot(),
     },
     events: [],
     connection: {
@@ -246,6 +263,10 @@ let lastConfigPublishAt = 0;
 let lastConfigPublishKey: string | null = null;
 const lastTelegramAlertAtByKey: Record<string, number> = {};
 const alertConditionState: Record<string, boolean> = {};
+let lastSensorStoredAt = 0;
+let lastStatusPayloadAt = 0;
+let lastBridgeDispatchedCommandId: string | null = null;
+let lastBridgeError: string | null = null;
 
 function normalizePacketTimestamp(input: number | undefined, fallback: number): number {
     if (typeof input !== "number" || !Number.isFinite(input)) {
@@ -362,12 +383,9 @@ function parseSensorPayload(raw: string, receivedAt: number): MqttSensorPayload 
         const normalized = TelemetryNormalizerService.normalize(data, receivedAt);
         if (!normalized.ok) {
             logger.warn("mqtt", "Invalid sensor payload", normalized.reason);
+            MqttDiagnosticsService.recordRejected(normalized.reason);
             return null;
         }
-        if (normalized.duplicate) {
-            return null;
-        }
-
         return {
             deviceId: normalized.value.deviceId,
             temperature: normalized.value.temperature,
@@ -376,45 +394,71 @@ function parseSensorPayload(raw: string, receivedAt: number): MqttSensorPayload 
             rain: normalized.value.rain,
             timestamp: normalized.value.timestamp,
             heartbeat: normalized.value.heartbeat,
+            mode: normalized.value.mode,
+            status: normalized.value.deviceState,
+            lastCommand: normalized.value.lastCommand,
+            receivedAt: normalized.value.receivedAt,
+            deviceTimestamp: normalized.value.deviceTimestamp,
+            deviceUptimeMs: normalized.value.deviceUptimeMs,
+            heartbeatAt: normalized.value.heartbeatAt,
+            duplicate: normalized.duplicate,
+            incomplete: normalized.value.incomplete,
+            stale: normalized.value.stale,
         };
     } catch {
         logger.warn("mqtt", "Failed to parse sensor payload", raw);
+        MqttDiagnosticsService.recordRejected("Failed to parse sensor payload");
         return null;
     }
 }
 
-let cachedBridgeConfig: { token: string | null; lastFetchAt: number } = { token: null, lastFetchAt: 0 };
-const BRIDGE_CONFIG_CACHE_MS = 30_000;
-
-async function getBridgeBotToken(): Promise<string | null> {
-    const now = Date.now();
-    if (cachedBridgeConfig.token !== null && now - cachedBridgeConfig.lastFetchAt < BRIDGE_CONFIG_CACHE_MS) {
-        return cachedBridgeConfig.token;
+async function notifyCommandResult(commandId: string, result: "done" | "failed" | "pending", message: string): Promise<void> {
+    try {
+        await fetch("/api/telegram/command-result", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ commandId, result, message }),
+        });
+    } catch (error) {
+        logger.warn("telegram", "Failed to notify command result", error);
     }
-    const config = await TelegramOpsService.getConfig().catch(() => null);
-    cachedBridgeConfig = { token: config?.botToken ?? null, lastFetchAt: now };
-    return cachedBridgeConfig.token;
+}
+
+async function updateBridgeHeartbeat(): Promise<void> {
+    try {
+        const stats = sharedState.queueStats;
+        const bridgeRef = doc(db, "system_settings", "telegram_bridge");
+        await setDoc(bridgeRef, {
+            bridgeActive: true,
+            lastSeenAt: serverTimestamp(),
+            mqttConnected: mqttService.isConnected(),
+            streamState: sharedState.uiState.stream,
+            queueBacklog: stats.total,
+            lastDispatchedCommandId: lastBridgeDispatchedCommandId,
+            lastError: lastBridgeError,
+        }, { merge: true });
+    } catch {
+        // Silent fail for heartbeat
+    }
 }
 
 async function processPendingTelegramCommands(): Promise<void> {
     const pending = await TelegramOpsService.fetchPendingCommands(5);
     if (pending.length === 0) return;
-    const botToken = await getBridgeBotToken();
+
     for (const commandJob of pending) {
         try {
             await TelegramOpsService.markCommandStatus(commandJob.id, "processing", "Processing by dashboard bridge");
             let dispatched = false;
-            if (commandJob.command === "/open") {
-                dispatched = sendCommand("OPEN");
-            } else if (commandJob.command === "/close") {
-                dispatched = sendCommand("CLOSE");
-            } else if (commandJob.command === "/mode_auto") {
-                dispatched = sendCommand("AUTO");
-            } else if (commandJob.command === "/mode_manual") {
-                dispatched = sendCommand("MANUAL");
-            }
+            
+            if (commandJob.command === "/open") dispatched = sendCommand("OPEN");
+            else if (commandJob.command === "/close") dispatched = sendCommand("CLOSE");
+            else if (commandJob.command === "/mode_auto") dispatched = sendCommand("AUTO");
+            else if (commandJob.command === "/mode_manual") dispatched = sendCommand("MANUAL");
+            else if (commandJob.command === "/restart") dispatched = sendCommand("RESTART");
 
             if (!dispatched) {
+                lastBridgeError = "Dispatch delayed: waiting device/MQTT/rate window";
                 await TelegramOpsService.markCommandStatus(commandJob.id, "pending", "Dispatch delayed: waiting device/MQTT/rate window");
                 await TelegramOpsService.addAuditLog({
                     userId: commandJob.userId,
@@ -424,17 +468,14 @@ async function processPendingTelegramCommands(): Promise<void> {
                     detail: "Dispatch delayed by runtime state",
                     source: "telegram-bridge",
                 });
-                if (botToken && typeof commandJob.chatId === "number") {
-                    await TelegramBotApiService.sendMessage(
-                        botToken,
-                        commandJob.chatId,
-                        `Command ${commandJob.command} delayed. Waiting device or MQTT to be ready.`,
-                    );
-                }
+                
+                void notifyCommandResult(commandJob.id, "pending", "Dispatch delayed. Waiting for device or MQTT to be ready.");
                 continue;
             }
 
             await TelegramOpsService.markCommandStatus(commandJob.id, "done", "Command dispatched to MQTT");
+            lastBridgeDispatchedCommandId = commandJob.id;
+            lastBridgeError = null;
             await TelegramOpsService.addAuditLog({
                 userId: commandJob.userId,
                 username: commandJob.username,
@@ -443,36 +484,28 @@ async function processPendingTelegramCommands(): Promise<void> {
                 detail: "Command dispatched from bridge",
                 source: "telegram-bridge",
             });
-            if (botToken && typeof commandJob.chatId === "number") {
-                await TelegramBotApiService.sendMessage(
-                    botToken,
-                    commandJob.chatId,
-                    `Command ${commandJob.command} dispatched to MQTT successfully.`,
-                );
-            }
+
+            void notifyCommandResult(commandJob.id, "done", "Command dispatched to MQTT successfully.");
+
             pushSystemEvent({
                 type: "COMMAND",
                 title: "Telegram command executed",
-                description: `${commandJob.command} dispatched by operator ${commandJob.username ?? commandJob.userId}`,
+                description: `${commandJob.command} dispatched by ${commandJob.username ?? commandJob.userId}`,
                 timestamp: Date.now(),
             });
         } catch (error) {
-            await TelegramOpsService.markCommandStatus(commandJob.id, "failed", String(error));
+            const errorMsg = String(error);
+            lastBridgeError = errorMsg;
+            await TelegramOpsService.markCommandStatus(commandJob.id, "failed", errorMsg);
             await TelegramOpsService.addAuditLog({
                 userId: commandJob.userId,
                 username: commandJob.username,
                 command: commandJob.command,
                 result: "failed",
-                detail: String(error),
+                detail: errorMsg,
                 source: "telegram-bridge",
             });
-            if (botToken && typeof commandJob.chatId === "number") {
-                await TelegramBotApiService.sendMessage(
-                    botToken,
-                    commandJob.chatId,
-                    `Command ${commandJob.command} failed to execute.`,
-                );
-            }
+            void notifyCommandResult(commandJob.id, "failed", `Execution error: ${errorMsg}`);
         }
     }
 }
@@ -621,7 +654,7 @@ function parseStatusPacket(raw: string): StatusPacket | null {
                 status: data.status,
                 mode: data.mode,
                 lastCommand:
-                    data.lastCommand === "OPEN" || data.lastCommand === "CLOSE" || data.lastCommand === "AUTO" || data.lastCommand === "MANUAL"
+                    data.lastCommand === "OPEN" || data.lastCommand === "CLOSE" || data.lastCommand === "AUTO" || data.lastCommand === "MANUAL" || data.lastCommand === "RESTART"
                         ? data.lastCommand
                         : undefined,
                 source: data.source === "DEVICE" ? data.source : undefined,
@@ -636,12 +669,17 @@ function parseStatusPacket(raw: string): StatusPacket | null {
 
 function mapToSensorData(message: MqttSensorPayload): SensorData {
     const timestamp = normalizePacketTimestamp(message.timestamp, Date.now());
+    const statusFromState = toInternalStatus(sharedState.deviceState.status);
+    const statusFromSensor =
+        message.status === "OPEN" || message.status === "CLOSED"
+            ? message.status
+            : statusFromState;
     return new SensorData({
         temp: message.temperature,
         humidity: message.humidity,
         light: message.light,
         rain: message.rain ? 1 : 0,
-        status: toInternalStatus(sharedState.deviceState.status),
+        status: statusFromSensor,
         timestamp: new Date(timestamp).toISOString(),
     });
 }
@@ -665,7 +703,10 @@ function cloneSnapshot(): SensorSnapshot {
         lastMqttMessage: sharedState.lastMqttMessage
             ? { ...sharedState.lastMqttMessage }
             : null,
-        debug: { ...sharedState.debug },
+        debug: {
+            ...sharedState.debug,
+            mqttDiagnostics: { ...sharedState.debug.mqttDiagnostics },
+        },
         events: [...sharedState.events],
         connection: { ...sharedState.connection },
         queueStats: { ...sharedState.queueStats },
@@ -674,6 +715,8 @@ function cloneSnapshot(): SensorSnapshot {
 
 function notifyListeners(): void {
     updateUiState();
+    MqttDiagnosticsService.setFreshness(Date.now(), sharedState.lastSensorUpdate, sharedState.lastHeartbeatUpdate);
+    sharedState.debug.mqttDiagnostics = MqttDiagnosticsService.snapshot();
     // Update queue stats
     sharedState.queueStats = sensorDataQueue.getStats();
     useSensorStore.getState().setRealtimeState({
@@ -861,6 +904,7 @@ function startStreamIfNeeded(): void {
         };
 
         if (topic === SENSOR_TOPIC) {
+            MqttDiagnosticsService.recordSensorPayload(rawPayload, receivedAt);
             const payload = parseSensorPayload(rawPayload, receivedAt);
             if (!payload) {
                 return;
@@ -871,7 +915,13 @@ function startStreamIfNeeded(): void {
                     activeDeviceId: getActiveDeviceId(),
                     payloadDeviceId: payload.deviceId ?? null,
                 });
+                MqttDiagnosticsService.recordFilteredDevice();
                 return;
+            }
+
+            if (payload.duplicate) {
+                sharedState.debug.dedupedStatusCount += 1;
+                MqttDiagnosticsService.recordDuplicate();
             }
 
             const sensorTimestamp = normalizePacketTimestamp(payload.timestamp, receivedAt);
@@ -889,33 +939,58 @@ function startStreamIfNeeded(): void {
                 lastMessageAt: new Date(heartbeatTimestamp).toISOString(),
             });
 
-            const payloadForStorage = {
-                temperature: payload.temperature,
-                humidity: payload.humidity,
-                light: payload.light,
-                rain: payload.rain,
-                status: toInternalStatus(sharedState.deviceState.status),
-            };
-            // TODO: move to backend ingestion service
-            void FirestoreService.saveSensorData(payloadForStorage).catch((error) => {
-                logger.error("firestore", "Failed to save sensor data", error);
-            });
+            const statusTopicFresh = lastStatusPayloadAt > 0 && receivedAt - lastStatusPayloadAt <= 30_000;
+            if (!statusTopicFresh && payload.status && payload.mode) {
+                sharedState.deviceState = {
+                    status: payload.status,
+                    mode: payload.mode,
+                    lastCommand: payload.lastCommand ?? sharedState.deviceState.lastCommand,
+                    updatedAt: sensorTimestamp,
+                };
+                sharedState.debug.deviceStateSource = "SENSOR_FALLBACK";
+                MqttDiagnosticsService.setDeviceStateSource("SENSOR_FALLBACK");
+            }
 
-            const id = `${data.timestamp}-${Math.random().toString(36).slice(2, 10)}`;
-            const historyStatus = toInternalStatus(sharedState.deviceState.status);
-            sharedState.history = [
-                {
-                    id,
-                    data,
-                    status: historyStatus,
-                    reason: DecisionEngine.getReason(data, {
-                        lightThreshold: sharedState.deviceConfig.lightThreshold,
-                        autoCloseOnRain: sharedState.deviceConfig.autoCloseOnRain,
-                        autoCloseOnDark: sharedState.deviceConfig.autoCloseOnDark,
-                    }),
-                },
-                ...sharedState.history,
-            ].slice(0, MAX_HISTORY_ITEMS);
+            const shouldStore =
+                !payload.duplicate ||
+                Date.now() - lastSensorStoredAt >= SENSOR_STORAGE_SAMPLING_MS;
+            if (shouldStore) {
+                lastSensorStoredAt = Date.now();
+                const payloadForStorage = {
+                    deviceId: payload.deviceId,
+                    temperature: payload.temperature,
+                    humidity: payload.humidity,
+                    light: payload.light,
+                    rain: payload.rain,
+                    status: toInternalStatus(sharedState.deviceState.status),
+                    mode: sharedState.deviceState.mode ?? undefined,
+                    source: sharedState.debug.deviceStateSource,
+                    receivedAt,
+                    deviceTimestamp: payload.deviceTimestamp,
+                    deviceUptimeMs: payload.deviceUptimeMs,
+                } as const;
+                void FirestoreService.saveSensorData(payloadForStorage).catch((error) => {
+                    logger.error("firestore", "Failed to save sensor data", error);
+                });
+            }
+
+            if (!payload.duplicate) {
+                const id = `${data.timestamp}-${Math.random().toString(36).slice(2, 10)}`;
+                const historyStatus = toInternalStatus(sharedState.deviceState.status);
+                sharedState.history = [
+                    {
+                        id,
+                        data,
+                        status: historyStatus,
+                        reason: DecisionEngine.getReason(data, {
+                            lightThreshold: sharedState.deviceConfig.lightThreshold,
+                            autoCloseOnRain: sharedState.deviceConfig.autoCloseOnRain,
+                            autoCloseOnDark: sharedState.deviceConfig.autoCloseOnDark,
+                        }),
+                    },
+                    ...sharedState.history,
+                ].slice(0, MAX_HISTORY_ITEMS);
+            }
 
             appendSerialLog(
                 "SENSOR",
@@ -926,12 +1001,14 @@ function startStreamIfNeeded(): void {
                     ? "WARN"
                     : "INFO",
             );
-            pushSystemEvent({
-                type: "SENSOR",
-                title: "Sensor update",
-                description: `Temp ${payload.temperature.toFixed(1)}C, Hum ${payload.humidity.toFixed(1)}%, Light ${payload.light.toFixed(0)}, Rain ${payload.rain ? "yes" : "no"}`,
-                timestamp: sensorTimestamp,
-            });
+            if (!payload.duplicate) {
+                pushSystemEvent({
+                    type: "SENSOR",
+                    title: "Sensor update",
+                    description: `Temp ${payload.temperature.toFixed(1)}C, Hum ${payload.humidity.toFixed(1)}%, Light ${payload.light.toFixed(0)}, Rain ${payload.rain ? "yes" : "no"}`,
+                    timestamp: sensorTimestamp,
+                });
+            }
 
             detectRealtimeAlerts(data, sharedState.deviceState.status, sensorTimestamp);
 
@@ -949,6 +1026,7 @@ function startStreamIfNeeded(): void {
         }
 
         if (topic === CONFIG_ACK_TOPIC) {
+            MqttDiagnosticsService.recordConfigAckPayload(rawPayload, receivedAt);
             const packet = parseStatusPacket(rawPayload);
             if (packet?.kind === "configAck") {
                 applyConfigAckPayload(packet.payload, receivedAt);
@@ -960,9 +1038,12 @@ function startStreamIfNeeded(): void {
             notifyListeners();
             return;
         }
+        MqttDiagnosticsService.recordStatusPayload(rawPayload, receivedAt);
+        lastStatusPayloadAt = receivedAt;
 
         const packet = parseStatusPacket(rawPayload);
         if (!packet) {
+            MqttDiagnosticsService.recordRejected("Invalid status payload");
             return;
         }
 
@@ -978,6 +1059,7 @@ function startStreamIfNeeded(): void {
                 activeDeviceId: getActiveDeviceId(),
                 payloadDeviceId: payload.deviceId ?? null,
             });
+            MqttDiagnosticsService.recordFilteredDevice();
             return;
         }
         const ackMatched = matchesAcknowledgement(payload);
@@ -1009,6 +1091,8 @@ function startStreamIfNeeded(): void {
         sharedState.lastStatusUpdate = receivedAt;
         sharedState.lastHeartbeatUpdate = statusTimestamp;
         sharedState.loading = false;
+        sharedState.debug.deviceStateSource = "STATUS_TOPIC";
+        MqttDiagnosticsService.setDeviceStateSource("STATUS_TOPIC");
         updateConnectionStatus({
             state: "online",
             isOnline: true,
@@ -1030,6 +1114,8 @@ function startStreamIfNeeded(): void {
             lastCommand: payload.lastCommand ?? sharedState.deviceState.lastCommand,
             updatedAt: statusTimestamp,
         };
+        sharedState.debug.deviceStateSource = "STATUS_TOPIC";
+        MqttDiagnosticsService.setDeviceStateSource("STATUS_TOPIC");
 
         appendSerialLog(
             "STATUS",
@@ -1132,8 +1218,15 @@ export function sendCommand(command: DeviceCommand): boolean {
             timestamp: now,
         });
 
-        mqttService.publish(COMMAND_TOPIC, commandPayload);
-        return true;
+        MqttDiagnosticsService.recordCommandPayload(JSON.stringify(commandPayload), now);
+        const published = mqttService.publish(COMMAND_TOPIC, commandPayload);
+        if (!published) {
+            sharedState.pendingCommand = null;
+            sharedState.commandStatus = "idle";
+            sharedState.commandSentAt = null;
+            notifyListeners();
+        }
+        return published;
     }
 
     commandRateLimiter.recordSend(command);
@@ -1161,8 +1254,15 @@ export function sendCommand(command: DeviceCommand): boolean {
         timestamp: now,
     });
 
-    mqttService.publish(COMMAND_TOPIC, commandPayload);
-    return true;
+    MqttDiagnosticsService.recordCommandPayload(JSON.stringify(commandPayload), now);
+    const published = mqttService.publish(COMMAND_TOPIC, commandPayload);
+    if (!published) {
+        sharedState.pendingCommand = null;
+        sharedState.commandStatus = "idle";
+        sharedState.commandSentAt = null;
+        notifyListeners();
+    }
+    return published;
 }
 
 export function publishConfig(config: Omit<DeviceConfig, "syncState" | "lastSyncAt" | "syncMessage">): boolean {
@@ -1280,6 +1380,10 @@ export function useSensor() {
             setSchedules(result.schedules);
         };
 
+        void fetch("/api/telegram/polling").catch(() => {
+            // Polling bootstrap is best-effort for local development.
+        });
+
         void ScheduleService.migrateLegacyLocalSchedulesOnce().then(() => {
             void refreshSchedules();
         });
@@ -1292,6 +1396,16 @@ export function useSensor() {
         const scheduleRefreshTimer = window.setInterval(() => {
             void refreshSchedules();
         }, 5000);
+
+        const telegramBridgeTimer = window.setInterval(() => {
+            void processPendingTelegramCommands();
+        }, 2000);
+        const telegramBridgeHeartbeatTimer = window.setInterval(() => {
+            void updateBridgeHeartbeat();
+        }, 5000);
+        void updateBridgeHeartbeat();
+
+        void refreshSchedules();
 
         const timer = window.setInterval(() => {
             const nextNow = Date.now();
@@ -1323,18 +1437,13 @@ export function useSensor() {
             }
         }, 10000); // Every 10 seconds
 
-        const telegramBridgeTimer = window.setInterval(() => {
-            void processPendingTelegramCommands();
-        }, 4000);
-
-        void refreshSchedules();
-
         return () => {
             active = false;
             window.clearInterval(timer);
             window.clearInterval(scheduleRefreshTimer);
             window.clearInterval(queueSyncTimer);
             window.clearInterval(telegramBridgeTimer);
+            window.clearInterval(telegramBridgeHeartbeatTimer);
             window.removeEventListener("schedule-updated", onScheduleUpdated);
         };
     }, []);
@@ -1343,7 +1452,6 @@ export function useSensor() {
         if (snapshot.commandStatus !== "pending" || snapshot.commandSentAt === null) {
             return;
         }
-
         if (now - snapshot.commandSentAt >= ACK_TIMEOUT_MS) {
             sharedState.commandStatus = "timeout";
             sharedState.pendingCommand = null;

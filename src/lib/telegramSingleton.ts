@@ -1,5 +1,5 @@
 import { TelegramBotApiService } from "@/services/TelegramBotApiService";
-import { TelegramOpsService } from "@/services/TelegramOpsService";
+import { TelegramEnvConfigService } from "@/services/telegram/TelegramEnvConfigService";
 import { logger } from "@/lib/logger";
 
 type TelegramSingletonState = {
@@ -14,10 +14,7 @@ declare global {
 
 function getState(): TelegramSingletonState {
   if (!globalThis.__telegramSingletonState__) {
-    globalThis.__telegramSingletonState__ = {
-      started: false,
-      tokenFingerprint: null,
-    };
+    globalThis.__telegramSingletonState__ = { started: false, tokenFingerprint: null };
   }
   return globalThis.__telegramSingletonState__;
 }
@@ -26,22 +23,33 @@ function fingerprint(token: string): string {
   return token.slice(-8);
 }
 
+/**
+ * Start polling if and only if:
+ * - A bot token is configured in env
+ * - The runtime mode is "polling" (local dev only)
+ *
+ * On Vercel production/preview, getRuntimeMode() returns "webhook" and
+ * this function returns immediately without starting a polling loop.
+ */
 export async function ensureTelegramPollingStarted(): Promise<{
   ok: boolean;
   started: boolean;
   reason: string;
 }> {
-  const config = await TelegramOpsService.getConfig();
-  if (!config?.enabled || config.mode !== "polling" || !config.botToken) {
+  const mode = TelegramEnvConfigService.getRuntimeMode();
+  const token = TelegramEnvConfigService.getBotToken();
+
+  if (mode !== "polling" || !token) {
     TelegramBotApiService.stopPolling();
     const state = getState();
     state.started = false;
     state.tokenFingerprint = null;
-    return { ok: true, started: false, reason: "Polling disabled by config" };
+    return { ok: true, started: false, reason: `Polling disabled (mode=${mode})` };
   }
 
   const state = getState();
-  const fp = fingerprint(config.botToken);
+  const fp = fingerprint(token);
+
   if (state.started && state.tokenFingerprint === fp) {
     return { ok: true, started: true, reason: "Already running" };
   }
@@ -51,16 +59,16 @@ export async function ensureTelegramPollingStarted(): Promise<{
     state.started = false;
   }
 
-  const webhookDeleted = await TelegramBotApiService.deleteWebhook(config.botToken);
+  const webhookDeleted = await TelegramBotApiService.deleteWebhook(token);
   logger.info("telegram", "Webhook deleted before polling", { webhookDeleted });
 
   state.started = true;
   state.tokenFingerprint = fp;
-  void TelegramBotApiService.startPolling(config.botToken);
+  void TelegramBotApiService.startPolling(token);
+
   return { ok: true, started: true, reason: "Polling started" };
 }
 
 export function getTelegramPollingDiagnostics() {
   return TelegramBotApiService.getPollingDiagnostics();
 }
-

@@ -11,7 +11,7 @@ export type NormalizedTelemetry = ValidTelemetryPayload & {
   stale: boolean;
 };
 
-type NormalizeResult =
+export type NormalizeResult =
   | { ok: true; value: NormalizedTelemetry; duplicate: boolean }
   | { ok: false; reason: string };
 
@@ -32,7 +32,7 @@ export class TelemetryNormalizerService {
       ...validation.value,
       receivedAt,
       incomplete: validation.incomplete,
-      stale: receivedAt - validation.value.timestamp > TelemetryHeartbeatService.OFFLINE_TIMEOUT_MS,
+      stale: receivedAt - validation.value.heartbeat > TelemetryHeartbeatService.OFFLINE_TIMEOUT_MS,
     };
 
     const prev = TelemetryNormalizerService.previous;
@@ -43,7 +43,9 @@ export class TelemetryNormalizerService {
       isNearEqual(prev.humidity, normalized.humidity) &&
       isNearEqual(prev.light, normalized.light) &&
       prev.rain === normalized.rain &&
-      Math.abs(prev.timestamp - normalized.timestamp) < 1000;
+      prev.mode === normalized.mode &&
+      prev.deviceState === normalized.deviceState &&
+      prev.lastCommand === normalized.lastCommand;
 
     if (!duplicate) {
       TelemetryNormalizerService.previous = normalized;

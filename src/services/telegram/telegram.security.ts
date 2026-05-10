@@ -1,5 +1,6 @@
 import { logger } from "@/lib/logger";
 import { TelegramOpsService, type TelegramRole as StoredRole } from "@/services/TelegramOpsService";
+import { TelegramEnvConfigService } from "@/services/telegram/TelegramEnvConfigService";
 
 export type TelegramRole = "VIEWER" | "OPERATOR" | "ADMIN";
 
@@ -27,13 +28,12 @@ export const COMMAND_PERMISSIONS: Record<string, TelegramRole[]> = {
   "/ping": ["VIEWER", "OPERATOR", "ADMIN"],
   "/uptime": ["VIEWER", "OPERATOR", "ADMIN"],
   "/analytics": ["VIEWER", "OPERATOR", "ADMIN"],
-  "/register_group": ["ADMIN"],
+  "/register_group": ["VIEWER", "OPERATOR", "ADMIN"],
 };
 
 type TelegramAuthConfig = {
   users: Map<number, TelegramRole>;
   groups: Set<number>;
-  operatorIds: Set<number>;
   loadedAt: number;
 };
 
@@ -48,70 +48,72 @@ function toRole(role: StoredRole | undefined): TelegramRole {
   return "VIEWER";
 }
 
-function parseAllowedIds(raw: string | undefined, options?: { allowNegative?: boolean }): number[] {
-  if (!raw) return [];
-  const allowNegative = Boolean(options?.allowNegative);
-  return raw
-    .split(",")
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0)
-    .map((item) => Number(item))
-    .filter((item) => {
-      if (!Number.isInteger(item)) return false;
-      if (allowNegative) return item !== 0;
-      return item > 0;
-    });
-}
-
+/**
+ * Load authorization config.
+ *
+ * Priority:
+ *   1. Environment variables (always available, primary source)
+ *   2. Firestore telegram_config (optional supplement — may be blocked by rules)
+ *
+ * If Firestore is unavailable or denied, env-based config is used.
+ * Users from env receive ADMIN role. Users from Firestore keep their stored role.
+ */
 async function loadConfig(): Promise<TelegramAuthConfig> {
   const existing = globalThis.__telegramAuthConfig__;
   if (existing) return existing;
 
   const users = new Map<number, TelegramRole>();
   const groups = new Set<number>();
-  const operators = new Set<number>();
-  const fromEnv = parseAllowedIds(process.env.TELEGRAM_ALLOWED_USER_IDS ?? process.env.TELEGRAM_ALLOWED_USERS);
-  for (const userId of fromEnv) {
+
+  // ── Env-first (primary, always works) ─────────────────────────────────────
+  for (const userId of TelegramEnvConfigService.getAllowedUserIds()) {
     users.set(userId, "ADMIN");
   }
-  for (const groupId of parseAllowedIds(process.env.TELEGRAM_ALLOWED_GROUPS, { allowNegative: true })) {
+  for (const groupId of TelegramEnvConfigService.getAllowedGroupIds()) {
     groups.add(groupId);
   }
-  for (const operatorId of parseAllowedIds(process.env.TELEGRAM_OPERATOR_IDS)) {
-    operators.add(operatorId);
-    if (!users.has(operatorId)) users.set(operatorId, "OPERATOR");
+
+  // Operator IDs from optional TELEGRAM_OPERATOR_IDS env
+  for (const id of TelegramEnvConfigService.getOperatorIds()) {
+    if (!users.has(id)) {
+      users.set(id, "OPERATOR");
+    }
   }
 
-  const storedConfig = await TelegramOpsService.getConfig();
-  if (storedConfig?.authorizedUsers) {
-    for (const item of storedConfig.authorizedUsers) {
-      if (typeof item.userId !== "number" || !Number.isInteger(item.userId) || item.userId <= 0) {
-        continue;
-      }
-      if (!users.has(item.userId)) {
-        users.set(item.userId, toRole(item.role));
-      }
-    }
-  }
-  if (storedConfig?.authorizedGroups) {
-    for (const group of storedConfig.authorizedGroups) {
-      if (typeof group.groupId === "number" && Number.isInteger(group.groupId)) {
-        groups.add(group.groupId);
+  // ── Firestore supplement (optional, graceful fallback) ─────────────────────
+  try {
+    const storedConfig = await TelegramOpsService.getConfig();
+    if (storedConfig?.authorizedUsers) {
+      for (const item of storedConfig.authorizedUsers) {
+        if (typeof item.userId !== "number" || !Number.isInteger(item.userId) || item.userId <= 0) continue;
+        if (!users.has(item.userId)) {
+          users.set(item.userId, toRole(item.role));
+        }
       }
     }
+    if (storedConfig?.authorizedGroups) {
+      for (const group of storedConfig.authorizedGroups) {
+        if (typeof group.groupId === "number" && Number.isInteger(group.groupId)) {
+          groups.add(group.groupId);
+        }
+      }
+    }
+  } catch (err) {
+    // Firestore telegram_config denied by rules — env-only config is sufficient
+    logger.warn("telegram", "Firestore config unavailable for auth — using env only", String(err));
   }
 
   const config: TelegramAuthConfig = {
     users,
     groups,
-    operatorIds: operators,
     loadedAt: Date.now(),
   };
 
   globalThis.__telegramAuthConfig__ = config;
-  logger.info("telegram", "Loaded allowed Telegram user IDs", {
-    total: users.size,
-    ids: Array.from(users.keys()),
+  logger.info("telegram", "Loaded Telegram auth config", {
+    totalUsers: users.size,
+    totalGroups: groups.size,
+    userIds: Array.from(users.keys()),
     loadedAt: config.loadedAt,
   });
   return config;
@@ -135,51 +137,26 @@ export async function authorizeTelegramUser(input: {
   command?: string;
 }): Promise<AuthorizationResult> {
   if (!Number.isInteger(input.userId) || (input.userId ?? 0) <= 0) {
-    return {
-      authorized: false,
-      role: null,
-      reason: "invalid_user_id",
-      userId: null,
-    };
+    return { authorized: false, role: null, reason: "invalid_user_id", userId: null };
   }
 
   const config = await loadConfig();
   const role = config.users.get(input.userId!);
   if (!role) {
-    return {
-      authorized: false,
-      role: null,
-      reason: "unauthorized_user",
-      userId: input.userId!,
-    };
+    return { authorized: false, role: null, reason: "unauthorized_user", userId: input.userId! };
   }
 
   const command = normalizeCommand(input.command);
   if (!command) {
-    return {
-      authorized: true,
-      role,
-      reason: "authorized",
-      userId: input.userId!,
-    };
+    return { authorized: true, role, reason: "authorized", userId: input.userId! };
   }
 
   const allowedRoles = COMMAND_PERMISSIONS[command];
   if (Array.isArray(allowedRoles) && !allowedRoles.includes(role)) {
-    return {
-      authorized: false,
-      role,
-      reason: "insufficient_role",
-      userId: input.userId!,
-    };
+    return { authorized: false, role, reason: "insufficient_role", userId: input.userId! };
   }
 
-  return {
-    authorized: true,
-    role,
-    reason: "authorized",
-    userId: input.userId!,
-  };
+  return { authorized: true, role, reason: "authorized", userId: input.userId! };
 }
 
 export async function authorizeTelegramActor(input: {
@@ -188,40 +165,34 @@ export async function authorizeTelegramActor(input: {
   chatId?: number;
   chatType?: "private" | "group" | "supergroup";
 }): Promise<AuthorizationResult> {
-  const base = await authorizeTelegramUser({
-    userId: input.userId,
-    command: input.command,
-  });
+  const base = await authorizeTelegramUser({ userId: input.userId, command: input.command });
   if (!base.authorized) return base;
 
-  const config = await loadConfig();
   const isGroup = input.chatType === "group" || input.chatType === "supergroup";
-  if (isGroup) {
-    // Config-first: use persisted groupModeEnabled from Firestore, env var is fallback only
-    const storedConfig = await TelegramOpsService.getConfig();
-    const allowGroupMode =
-      Boolean(storedConfig?.groupModeEnabled) ||
-      process.env.TELEGRAM_ENABLE_GROUP_MODE?.toLowerCase() === "true";
+  if (!isGroup) return base;
 
-    if (!allowGroupMode) {
-      return {
-        authorized: false,
-        role: base.role,
-        reason: "unauthorized_group",
-        userId: base.userId,
-      };
+  // Group mode: env-first, Firestore supplement (all wrapped safely)
+  let groupModeEnabled = TelegramEnvConfigService.isGroupModeEnabled();
+  try {
+    if (!groupModeEnabled) {
+      const storedConfig = await TelegramOpsService.getConfig();
+      groupModeEnabled = Boolean(storedConfig?.groupModeEnabled);
     }
-    const command = normalizeCommand(input.command);
-    const canBypassGroupRegistration = command === "/register_group";
-    if (!canBypassGroupRegistration && typeof input.chatId === "number" && !config.groups.has(input.chatId)) {
-      return {
-        authorized: false,
-        role: base.role,
-        reason: "unauthorized_group",
-        userId: base.userId,
-      };
-    }
+  } catch {
+    // Firestore unavailable — use env value already set above
   }
+
+  if (!groupModeEnabled) {
+    return { authorized: false, role: base.role, reason: "unauthorized_group", userId: base.userId };
+  }
+
+  const command = normalizeCommand(input.command);
+  if (command === "/register_group") return base; // bypass group registration check
+
+  const config = await loadConfig();
+  if (typeof input.chatId === "number" && !config.groups.has(input.chatId)) {
+    return { authorized: false, role: base.role, reason: "unauthorized_group", userId: base.userId };
+  }
+
   return base;
 }
-

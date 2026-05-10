@@ -6,6 +6,7 @@ import OperationalHealthPanel from "@/components/status/OperationalHealth";
 import PageContainer from "@/components/layout/PageContainer";
 import { useNotificationEngine } from "@/hooks/useNotificationEngine";
 import { useSystemState } from "@/hooks/useSystemState";
+import { MQTT_BROKER_URL } from "@/services/MQTTService";
 
 function formatClock(value: number | null): string {
   if (value === null) {
@@ -32,32 +33,37 @@ function badgeClassByState(state: "good" | "warn" | "danger" | "info"): string {
   return "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300";
 }
 
+function sanitizeBrokerUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.username = "";
+    parsed.password = "";
+    return parsed.toString();
+  } catch {
+    return url.replace(/\/\/.*@/, "//");
+  }
+}
+
 export default function DashboardScreen() {
   const {
-    sensor,
-    connection,
-    status,
-    mode,
-    lastCommand,
-    isOnline,
-    isStreaming,
-    mqttConnected,
-    lastUpdate,
-    lastSensorUpdate,
-    lastStatusUpdate,
-    debug,
-    pendingCommand,
-    commandStatus,
-    events,
-    serialLogs,
-    uiState,
-    drift,
-    decision,
+    runtime,
     sendCommand,
     operationalHealth,
     smartAlerts,
+    uiState,
+    decision,
+    lastUpdate,
+    sensor,
+    events: sensorEvents,
+    serialLogs,
+    mqttConnected,
+    connection,
+    lastSensorUpdate,
+    lastStatusUpdate,
+    drift,
+    debug,
   } = useSystemState();
-  const { events: timelineEvents, latestAlert, toasts, dismissToast } = useNotificationEngine();
+  const { latestAlert, toasts, dismissToast, events: timelineEvents } = useNotificationEngine();
   const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
   const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
 
@@ -65,56 +71,36 @@ export default function DashboardScreen() {
     setActiveDeviceId(localStorage.getItem(ACTIVE_DEVICE_STORAGE_KEY));
   }, []);
 
-  const heartbeatAgeSec = lastUpdate === null ? null : Math.max(0, Math.floor((Date.now() - lastUpdate) / 1000));
-  const deviceStatusLabel =
-    connection.state === "reconnecting"
-      ? "RECONNECTING"
-      : connection.state === "offline" || connection.state === "error"
-        ? "DISCONNECTED"
-        : uiState.connection === "DISCONNECTED"
-          ? "OFFLINE"
-          : uiState.stream === "STALE"
-            ? "STALE"
-            : "ONLINE";
+  const deviceStatusLabel = runtime.deviceConnectivity.toUpperCase();
   const deviceStatusClass =
-    deviceStatusLabel === "OFFLINE" || deviceStatusLabel === "DISCONNECTED"
+    runtime.deviceConnectivity === "OFFLINE" || runtime.deviceConnectivity === "UNKNOWN"
       ? badgeClassByState("danger")
-      : deviceStatusLabel === "STALE" || deviceStatusLabel === "RECONNECTING"
+      : runtime.deviceConnectivity === "DELAYED"
         ? badgeClassByState("warn")
         : badgeClassByState("good");
+
   const realtimeLabel =
-    uiState.stream === "STREAMING"
+    runtime.streamState === "STREAMING"
       ? "REALTIME ACTIVE"
-      : uiState.stream === "STALE"
+      : runtime.streamState === "STALE"
         ? "TELEMETRY STALE"
         : "REALTIME IDLE";
 
-  const systemModeLabel =
-    decision.decisionSource === "MANUAL"
-      ? "MANUAL"
-      : decision.decisionSource === "SCHEDULE"
-        ? "SCHEDULE"
-        : "AUTO";
-  const safetyLabel =
-    decision.decisionSource === "SAFETY"
-      ? decision.reason.toLowerCase().includes("rain")
-        ? "RAIN DETECTED"
-        : decision.reason.toLowerCase().includes("light")
-          ? "LOW LIGHT"
-          : "OVERRIDE"
-      : "SAFE";
-  const safetyClass = decision.decisionSource === "SAFETY" ? badgeClassByState("danger") : badgeClassByState("good");
+  const deviceModeLabel = runtime.actualDeviceMode.toUpperCase();
+  const safetyLabel = runtime.safetyLabel;
+  const safetyClass = runtime.decisionSource === "SAFETY" ? badgeClassByState("danger") : badgeClassByState("good");
 
-  const displayedStatus = status ?? "--";
+  const displayedStatus = runtime.actualDeviceStatus ?? "--";
   const lastUpdated = formatClock(lastUpdate);
   const isCommandPending = uiState.deviceSync === "WAITING_ACK";
-  const canSendCommand = isStreaming && !isCommandPending;
+  const canSendCommand = runtime.streamState === "STREAMING" && !isCommandPending;
+
   const commandStatusLabel =
     uiState.deviceSync === "WAITING_ACK"
       ? "Syncing..."
       : uiState.deviceSync === "SYNCED"
         ? "Synced"
-        : commandStatus === "timeout"
+        : runtime.commandStatus === "timeout"
           ? "Failed (timeout)"
           : "Idle";
   const commandStatusClass =
@@ -122,9 +108,10 @@ export default function DashboardScreen() {
       ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
       : uiState.deviceSync === "SYNCED"
         ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
-        : commandStatus === "timeout"
+        : runtime.commandStatus === "timeout"
           ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
           : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
+
   const criticalAlerts = smartAlerts.filter((alert) => alert.severity === "critical");
   const warningAlerts = smartAlerts.filter((alert) => alert.severity === "warning");
   const infoAlerts = smartAlerts.filter((alert) => alert.severity === "info");
@@ -160,7 +147,7 @@ export default function DashboardScreen() {
               DEVICE: {deviceStatusLabel}
             </span>
             <span className={`inline-flex items-center justify-center rounded-full px-3 py-2 text-xs font-semibold ${badgeClassByState("info")}`}>
-              MODE: {systemModeLabel}
+              DEVICE MODE: {deviceModeLabel}
             </span>
             <span className={`inline-flex items-center justify-center rounded-full px-3 py-2 text-xs font-semibold ${safetyClass}`}>
               {safetyLabel}
@@ -180,8 +167,8 @@ export default function DashboardScreen() {
           <p className="mt-3 text-sm text-slate-700 dark:text-slate-300">{decision.reason}</p>
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Mode</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{systemModeLabel}</p>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Device Mode</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{deviceModeLabel}</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
               <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Safety</p>
@@ -190,7 +177,7 @@ export default function DashboardScreen() {
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
               <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Latest Update</p>
               <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{lastUpdated}</p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">{heartbeatAgeSec === null ? "-" : `${heartbeatAgeSec}s ago`}</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">{runtime.freshnessSeconds === null ? "-" : `${runtime.freshnessSeconds}s ago`}</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
               <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Schedule Window</p>
@@ -232,11 +219,11 @@ export default function DashboardScreen() {
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
                   <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Decision Source</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{decision.decisionSource}</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{runtime.decisionSource}</p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
                   <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Final State</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{decision.recommendedStatus}</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{runtime.recommendedStatus}</p>
                 </div>
               </div>
               <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
@@ -249,24 +236,24 @@ export default function DashboardScreen() {
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
                 <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Device Status</p>
-                  <p className="mt-2 text-lg font-bold text-gray-900 dark:text-slate-100">{status ?? "--"}</p>
+                  <p className="mt-2 text-lg font-bold text-gray-900 dark:text-slate-100">{runtime.actualDeviceStatus ?? "--"}</p>
                 </div>
                 <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Device Mode</p>
-                  <p className="mt-2 text-lg font-bold text-gray-900 dark:text-slate-100">{mode ?? "--"}</p>
+                  <p className="mt-2 text-lg font-bold text-gray-900 dark:text-slate-100">{runtime.actualDeviceMode ?? "--"}</p>
                 </div>
                 <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Last Device Command</p>
-                  <p className="mt-2 text-lg font-bold text-gray-900 dark:text-slate-100">{lastCommand ?? "-"}</p>
+                  <p className="mt-2 text-lg font-bold text-gray-900 dark:text-slate-100">{runtime.lastDeviceCommand ?? "-"}</p>
                 </div>
               </div>
 
-              {!isOnline && deviceStatusLabel === "STALE" && (
+              {runtime.deviceConnectivity === "OFFLINE" && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
                   Telemetry delayed — last data is stale. Commands blocked until fresh data returns.
                 </div>
               )}
-              {!isOnline && deviceStatusLabel !== "STALE" && (
+              {runtime.deviceConnectivity === "OFFLINE" && runtime.freshnessSeconds !== null && (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-200">
                   Device offline or disconnected — commands blocked until MQTT reconnects.
                 </div>
@@ -276,9 +263,9 @@ export default function DashboardScreen() {
                 <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${commandStatusClass}`}>
                   Sync State: {commandStatusLabel}
                 </span>
-                {pendingCommand && (
+                {runtime.lastDeviceCommand && uiState.deviceSync === "WAITING_ACK" && (
                   <span className="inline-flex rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-                    Pending Command: {pendingCommand}
+                    Pending Command: {runtime.lastDeviceCommand}
                   </span>
                 )}
               </div>
@@ -401,6 +388,62 @@ export default function DashboardScreen() {
                   <p className="text-[11px] text-gray-500 dark:text-slate-400">Deduped Status</p>
                   <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{debug.dedupedStatusCount}</p>
                 </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">State Source</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{debug.deviceStateSource}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Duplicate Telemetry</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{debug.mqttDiagnostics.duplicateCount}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Rejected Payloads</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{debug.mqttDiagnostics.rejectedCount}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Filtered Device Payloads</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{debug.mqttDiagnostics.filteredDeviceCount}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Last Reject Reason</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{debug.mqttDiagnostics.lastRejectReason ?? "--"}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Last Sensor Payload</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                    {formatClock(debug.mqttDiagnostics.lastSensorAt)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Last Status Payload</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                    {formatClock(debug.mqttDiagnostics.lastStatusAt)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Heartbeat Age</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                    {debug.mqttDiagnostics.heartbeatAgeSeconds === null ? "--" : `${debug.mqttDiagnostics.heartbeatAgeSeconds}s`}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Freshness</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                    {debug.mqttDiagnostics.freshnessSeconds === null ? "--" : `${debug.mqttDiagnostics.freshnessSeconds}s`}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Sensor Topic</p>
+                  <p className="break-all text-sm font-semibold text-gray-900 dark:text-slate-100">smart-clothesline/sensor</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Status Topic</p>
+                  <p className="break-all text-sm font-semibold text-gray-900 dark:text-slate-100">smart-clothesline/status</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">MQTT Broker</p>
+                  <p className="break-all text-sm font-semibold text-gray-900 dark:text-slate-100">{sanitizeBrokerUrl(MQTT_BROKER_URL)}</p>
+                </div>
               </div>
               <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-2 dark:border-slate-700 dark:bg-slate-800/60">
                 <p className="text-[11px] text-gray-500 dark:text-slate-400">Last Transition</p>
@@ -416,10 +459,10 @@ export default function DashboardScreen() {
             <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Event Logs</h2>
               <div className="mt-3 space-y-2">
-                {events.length === 0 ? (
+                {sensorEvents.length === 0 ? (
                   <p className="text-sm text-gray-500 dark:text-slate-400">No events yet.</p>
                 ) : (
-                  events.slice(0, 10).map((event, index) => (
+                  sensorEvents.slice(0, 10).map((event, index) => (
                     <p key={`${event.timestamp}-${event.type}-${index}`} className="text-xs text-gray-700 dark:text-slate-300">
                       [{new Date(event.timestamp).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}] {event.type} - {event.action}
                     </p>
