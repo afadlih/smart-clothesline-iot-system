@@ -35,11 +35,16 @@
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 - `NEXT_PUBLIC_MQTT_BROKER_URL`
-- `NEXT_PUBLIC_MQTT_USERNAME` (optional, if broker requires auth)
-- `NEXT_PUBLIC_MQTT_PASSWORD` (optional, if broker requires auth)
+- `NEXT_PUBLIC_MQTT_USERNAME` (optional; browser-visible)
+- `NEXT_PUBLIC_MQTT_PASSWORD` (optional; browser-visible)
 - `NEXT_PUBLIC_MQTT_TOPIC_SENSOR`
 - `NEXT_PUBLIC_MQTT_TOPIC_STATUS`
 - `NEXT_PUBLIC_MQTT_TOPIC_COMMAND`
+
+Important:
+- Do not put privileged MQTT credentials in `NEXT_PUBLIC_*`.
+- Browser MQTT credentials are visible to users.
+- Use low-privilege ACL credentials only for preview/demo browser MQTT.
 
 ## Vercel Setup
 
@@ -162,3 +167,15 @@ firebase deploy --only firestore:indexes
 
 - Telegram polling diagnostics: `GET /api/telegram/polling`
 - Telegram setup status: `GET /api/telegram/setup`
+
+## MQTT Credential Separation
+
+- Preview environment:
+  - use preview broker or low-privilege preview MQTT credentials
+  - never reuse production browser MQTT credentials
+- Production environment:
+  - use production broker and separate credentials
+- Device/Firmware:
+  - use separate device credentials, never shared with browser dashboard
+- Local development:
+  - use local/dev credentials separate from preview and production

@@ -15,23 +15,30 @@ import { db } from "@/lib/firebase";
 
 export const dynamic = "force-dynamic";
 
+function safeMillis(value: unknown): number | null {
+  if (value && typeof value === "object" && "toMillis" in value) {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+  return null;
+}
+
 export async function GET() {
   try {
     const botToken = TelegramEnvConfigService.getBotToken();
-    const webhookSecret = TelegramEnvConfigService.getWebhookSecret();
     const defaultChatId = TelegramEnvConfigService.getDefaultChatId();
     const allowedUserIds = TelegramEnvConfigService.getAllowedUserIds();
     const allowedGroupIds = TelegramEnvConfigService.getAllowedGroupIds();
     const groupModeEnabled = TelegramEnvConfigService.isGroupModeEnabled();
     const runtimeMode = TelegramEnvConfigService.getRuntimeMode();
-    const botConfigured = TelegramEnvConfigService.isConfigured();
     const webhookEnabled = isTelegramWebhookEnabled();
-    const environment = getWebhookEnvironmentLabel();
+    const vercelEnv = getWebhookEnvironmentLabel();
     const appBaseUrl = resolveAppBaseUrl();
     const resolvedWebhookUrl = resolveTelegramWebhookUrl();
+    const botConfigured = TelegramEnvConfigService.isConfigured();
 
-    let botInfo = null;
-    let webhookInfo = null;
+    let botInfo: unknown = null;
+    let webhookInfo: unknown = null;
+    let telegramWebhookUrl: string | null = null;
     let pollingBoot: { ok: boolean; started: boolean; reason: string } | null = null;
 
     if (botToken) {
@@ -40,113 +47,93 @@ export async function GET() {
       if (runtimeMode === "polling") {
         pollingBoot = await ensureTelegramPollingStarted().catch(() => null);
       }
+      if (
+        webhookInfo &&
+        typeof webhookInfo === "object" &&
+        "ok" in webhookInfo &&
+        (webhookInfo as { ok?: boolean }).ok &&
+        "result" in webhookInfo
+      ) {
+        const result = (webhookInfo as { result?: { url?: string } }).result;
+        telegramWebhookUrl = typeof result?.url === "string" ? result.url : null;
+      }
     }
 
     const pendingCommands = await TelegramOpsService.fetchPendingCommands(10).catch(() => []);
     const recentAuditLogs = await TelegramOpsService.getRecentAuditLogs(10).catch(() => []);
-    const bridgeDoc = await getDoc(doc(db, "system_settings", "telegram_bridge")).catch(() => null);
-    const bridgeRaw = bridgeDoc?.exists() ? (bridgeDoc.data() as Record<string, unknown>) : null;
-    const bridgeLastSeenAt =
-      bridgeRaw?.lastSeenAt &&
-      typeof bridgeRaw.lastSeenAt === "object" &&
-      "toMillis" in bridgeRaw.lastSeenAt
-        ? (bridgeRaw.lastSeenAt as { toMillis: () => number }).toMillis()
-        : null;
-    const bridgeAgeMs = bridgeLastSeenAt ? Math.max(0, Date.now() - bridgeLastSeenAt) : null;
-    const bridgeAlive = bridgeAgeMs !== null && bridgeAgeMs <= 15_000;
 
-    // Check if we can write to Firestore (simple check)
-    let firestoreWriteOk = false;
+    let firestoreOk = false;
     try {
-      // Just a read check is safer for diagnostics
       await TelegramOpsService.fetchPendingCommands(1);
-      firestoreWriteOk = true;
+      firestoreOk = true;
     } catch {
-      firestoreWriteOk = false;
+      firestoreOk = false;
     }
 
-    const warnings: string[] = [];
-    const diagnostics = {
-      ok: true,
-      botConfigured,
-      webhookEnabled,
-      runtimeMode,
-      environment,
-      appBaseUrl,
-      resolvedWebhookUrl,
-      botInfo: botInfo && !("error" in botInfo) && botInfo.ok && botInfo.result ? {
-        id: botInfo.result.id,
-        first_name: botInfo.result.first_name,
-        username: botInfo.result.username,
-        can_join_groups: botInfo.result.can_join_groups,
-      } : botInfo,
-      webhookInfo: webhookInfo && !("error" in webhookInfo) && webhookInfo.ok && webhookInfo.result ? {
-        url: webhookInfo.result.url,
-        has_custom_certificate: webhookInfo.result.has_custom_certificate,
-        pending_update_count: webhookInfo.result.pending_update_count,
-        max_connections: webhookInfo.result.max_connections,
-        ip_address: webhookInfo.result.ip_address,
-      } : webhookInfo,
-      allowedUserIdsCount: allowedUserIds.length,
-      allowedGroupsCount: allowedGroupIds.length,
-      groupModeEnabled,
-      firestoreOk: firestoreWriteOk,
-      latestPendingCommandsCount: pendingCommands.length,
-      latestAuditLogsCount: recentAuditLogs.length,
-      bridgeExpected: true,
-      bridge: {
-        active: Boolean(bridgeRaw?.bridgeActive),
-        alive: bridgeAlive,
-        ageMs: bridgeAgeMs,
-        queueBacklog: typeof bridgeRaw?.queueBacklog === "number" ? bridgeRaw.queueBacklog : null,
-        mqttConnected: typeof bridgeRaw?.mqttConnected === "boolean" ? bridgeRaw.mqttConnected : null,
-        streamState: typeof bridgeRaw?.streamState === "string" ? bridgeRaw.streamState : null,
-        lastDispatchedCommandId:
-          typeof bridgeRaw?.lastDispatchedCommandId === "string"
-            ? bridgeRaw.lastDispatchedCommandId
-            : null,
-        lastError: typeof bridgeRaw?.lastError === "string" ? bridgeRaw.lastError : null,
-      },
-      polling: getTelegramPollingDiagnostics(),
-      pollingBoot,
-      warnings,
-    };
+    const bridgeDoc = await getDoc(doc(db, "system_settings", "telegram_bridge")).catch(() => null);
+    const bridgeRaw = bridgeDoc?.exists() ? (bridgeDoc.data() as Record<string, unknown>) : null;
+    const bridgeLastSeenAt = safeMillis(bridgeRaw?.lastSeenAt);
+    const bridgeAgeMs = bridgeLastSeenAt ? Math.max(0, Date.now() - bridgeLastSeenAt) : null;
+    const bridgeAlive = bridgeAgeMs !== null && bridgeAgeMs <= 15_000;
+    const webhookUrlMatch = Boolean(telegramWebhookUrl && telegramWebhookUrl === resolvedWebhookUrl);
 
-    if (!diagnostics.botConfigured) {
-      warnings.push("TELEGRAM_BOT_TOKEN is missing in environment variables.");
+    const warnings: string[] = [];
+    const unconfiguredReasons: string[] = [];
+
+    if (!botConfigured) unconfiguredReasons.push("missing TELEGRAM_BOT_TOKEN");
+    if (webhookEnabled && !process.env.APP_BASE_URL) unconfiguredReasons.push("APP_BASE_URL missing");
+    if (vercelEnv !== "development" && !webhookEnabled) unconfiguredReasons.push("webhook disabled on Vercel");
+    if (webhookEnabled && telegramWebhookUrl && !webhookUrlMatch) unconfiguredReasons.push("webhook URL mismatch");
+    if (allowedUserIds.length === 0) unconfiguredReasons.push("allowed user missing");
+
+    if (vercelEnv === "preview" && !webhookEnabled) {
+      warnings.push(
+        "Telegram webhook is disabled for this preview deployment. Commands will not be processed unless using a separate staging bot with webhook enabled.",
+      );
     }
     if (!defaultChatId) {
       warnings.push("TELEGRAM_CHAT_ID is missing. Direct notification target is not configured.");
     }
-    if (!webhookSecret && webhookEnabled) {
-      warnings.push("TELEGRAM_WEBHOOK_SECRET is empty while webhook mode is enabled.");
-    }
-    if (webhookEnabled && !appBaseUrl) {
-      warnings.push("Webhook is enabled but APP_BASE_URL is missing.");
-    }
-    if (
-      webhookInfo &&
-      !("error" in webhookInfo) &&
-      webhookInfo.ok &&
-      webhookInfo.result &&
-      webhookEnabled &&
-      webhookInfo.result.url !== resolvedWebhookUrl
-    ) {
-      warnings.push(`Webhook URL mismatch. Telegram reports ${webhookInfo.result.url}, app resolves ${resolvedWebhookUrl}.`);
-    }
-    if (diagnostics.latestPendingCommandsCount > 0 && !diagnostics.bridge.alive) {
+    if (pendingCommands.length > 0 && !bridgeAlive) {
       warnings.push("Command queue has pending items while dashboard bridge is inactive.");
     }
-    if (diagnostics.bridge.lastError) {
-      warnings.push(`Bridge error: ${diagnostics.bridge.lastError}`);
+    if (typeof bridgeRaw?.lastError === "string" && bridgeRaw.lastError.length > 0) {
+      warnings.push(`Bridge error: ${bridgeRaw.lastError}`);
     }
 
-    return NextResponse.json(diagnostics);
+    return NextResponse.json({
+      ok: true,
+      runtimeMode,
+      vercelEnv,
+      webhookEnabled,
+      appBaseUrl,
+      resolvedWebhookUrl,
+      telegramWebhookUrl,
+      webhookUrlMatch,
+      botConfigured,
+      allowedUserIdsCount: allowedUserIds.length,
+      allowedGroupsCount: allowedGroupIds.length,
+      groupModeEnabled,
+      pendingCommandsCount: pendingCommands.length,
+      bridgeActive: Boolean(bridgeRaw?.bridgeActive),
+      bridgeAlive,
+      bridgeLastSeenAt,
+      bridgeAgeMs,
+      mqttConnectedFromBridge: typeof bridgeRaw?.mqttConnected === "boolean" ? bridgeRaw.mqttConnected : null,
+      lastBridgeError: typeof bridgeRaw?.lastError === "string" ? bridgeRaw.lastError : null,
+      bridgeQueueBacklog: typeof bridgeRaw?.queueBacklog === "number" ? bridgeRaw.queueBacklog : null,
+      bridgeStreamState: typeof bridgeRaw?.streamState === "string" ? bridgeRaw.streamState : null,
+      latestAuditLogsCount: recentAuditLogs.length,
+      firestoreOk,
+      polling: getTelegramPollingDiagnostics(),
+      pollingBoot,
+      unconfiguredReasons: runtimeMode === "unconfigured" ? unconfiguredReasons : [],
+      warnings,
+      botInfo,
+      webhookInfo,
+    });
   } catch (error) {
     logger.error("telegram", "Diagnostics failed", error);
-    return NextResponse.json({
-      ok: false,
-      error: String(error),
-    }, { status: 500 });
+    return NextResponse.json({ ok: false, error: String(error) }, { status: 500 });
   }
 }

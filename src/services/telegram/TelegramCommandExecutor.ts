@@ -58,13 +58,14 @@ export async function executeTelegramCommand(input: {
     return {
       result: "queued",
       commandId,
-      detail: `Command ${input.command} accepted and queued for execution`,
+      detail: "Queued. Requires active dashboard bridge for MQTT dispatch.",
     };
   } catch (error) {
     logger.error("telegram", "Command enqueue failed", { command: input.command, error });
+    const reason = error instanceof Error ? error.message : "Command queue unavailable";
     return {
       result: "failed",
-      detail: `Failed to enqueue command: ${String(error)}`,
+      detail: reason,
     };
   }
 }
@@ -97,10 +98,10 @@ export function buildCommandReplyMessage(
     case "queued":
       return [
         `Command accepted: ${command}`,
-        `Execution: queued (pending bridge dispatch)`,
+        `Execution: queued`,
         `Reference: ${ref}`,
         `Time: ${timeStr}`,
-        `Note: Command will execute when dashboard is active`,
+        "Queued. Requires active dashboard bridge for MQTT dispatch.",
       ].join("\n");
 
     case "delayed":

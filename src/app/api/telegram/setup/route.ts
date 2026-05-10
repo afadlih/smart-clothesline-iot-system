@@ -29,14 +29,24 @@ const COMMANDS = [
   { command: "register_group", description: "Register current group" },
 ];
 
-/**
- * GET /api/telegram/setup
- * Returns current integration diagnostics. Does not require Firestore config.
- */
+function hostFromUrl(url: string): string {
+  try {
+    return new URL(url).host.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isLikelyEphemeralVercelUrl(url: string): boolean {
+  const host = hostFromUrl(url);
+  if (!host.endsWith(".vercel.app")) return false;
+  return host.includes("-git-") || /[a-z0-9-]+-[a-z0-9]{8,}\.vercel\.app$/.test(host);
+}
+
 export async function GET(request: NextRequest) {
   try {
     const token = TelegramEnvConfigService.getBotToken();
-    const envLabel = getWebhookEnvironmentLabel();
+    const vercelEnv = getWebhookEnvironmentLabel();
     const webhookEnabled = isTelegramWebhookEnabled();
     const appBaseUrl = resolveAppBaseUrl(request);
     const resolvedWebhookUrl = resolveTelegramWebhookUrl(request);
@@ -44,7 +54,6 @@ export async function GET(request: NextRequest) {
 
     const tokenCheck = token ? await TelegramBotApiService.getMe(token) : { ok: false };
 
-    // Audit logs are readable per firestore.rules — safe to attempt
     let auditLogs: unknown[] = [];
     try {
       auditLogs = await TelegramOpsService.getRecentAuditLogs(20);
@@ -52,7 +61,6 @@ export async function GET(request: NextRequest) {
       auditLogs = [];
     }
 
-    // Start polling only in local dev (never on Vercel)
     let boot = null;
     if (mode === "polling") {
       boot = await ensureTelegramPollingStarted();
@@ -69,7 +77,7 @@ export async function GET(request: NextRequest) {
       webhookEnabled,
       resolvedWebhookUrl,
       appBaseUrl,
-      vercelEnv: envLabel,
+      vercelEnv,
       allowedUserIds: TelegramEnvConfigService.getAllowedUserIds(),
       allowedGroups: TelegramEnvConfigService.getAllowedGroupIds(),
       groupModeEnabled: TelegramEnvConfigService.isGroupModeEnabled(),
@@ -83,114 +91,133 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * POST /api/telegram/setup
- *
- * Registers bot commands with Telegram and (optionally) sets the webhook.
- *
- * Rules:
- * - TELEGRAM_BOT_TOKEN from env is preferred over request body.
- * - TELEGRAM_WEBHOOK_SECRET from env is preferred over request body.
- * - botToken and webhookSecret are NEVER saved to Firestore.
- * - setWebhook is called only when TELEGRAM_WEBHOOK_ENABLED=true.
- * - Preview/fix branches must have TELEGRAM_WEBHOOK_ENABLED=false to avoid
- *   overwriting the production webhook.
- * - The webhook URL is resolved from APP_BASE_URL (not from request body).
- */
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as {
       mode?: "polling" | "webhook";
-      // UI may send these for connection testing ONLY — they are not persisted
       botToken?: string;
       chatId?: string;
     };
 
-    // Env-first for all secrets
     const token = TelegramEnvConfigService.getBotToken() || body.botToken || "";
     const chatId = TelegramEnvConfigService.getDefaultChatId() || body.chatId;
     const webhookSecret = TelegramEnvConfigService.getWebhookSecret() ?? "";
     const webhookEnabled = isTelegramWebhookEnabled();
-    const envLabel = getWebhookEnvironmentLabel();
+    const vercelEnv = getWebhookEnvironmentLabel();
     const resolvedWebhookUrl = resolveTelegramWebhookUrl(request);
     const appBaseUrl = resolveAppBaseUrl(request);
     const runtimeMode = TelegramEnvConfigService.getRuntimeMode();
-    const mode: "polling" | "webhook" =
+    const setupMode: "polling" | "webhook" =
       body.mode ??
-      (runtimeMode === "webhook"
-        ? "webhook"
-        : process.env.NODE_ENV !== "production"
-          ? "polling"
-          : webhookEnabled
-            ? "webhook"
-            : "polling");
+      (runtimeMode === "webhook" ? "webhook" : process.env.NODE_ENV !== "production" ? "polling" : webhookEnabled ? "webhook" : "polling");
 
     if (!token) {
       return NextResponse.json(
         {
           ok: false,
           error: "TELEGRAM_BOT_TOKEN is not configured in environment variables.",
-          hint: "Add TELEGRAM_BOT_TOKEN to Vercel Environment Variables for this environment.",
-          vercelEnv: envLabel,
+          vercelEnv,
+          nextAction: "Set TELEGRAM_BOT_TOKEN in Vercel environment variables.",
         },
         { status: 400 },
       );
     }
 
-    // Test connection
+    if (setupMode === "webhook") {
+      if (!webhookEnabled) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "TELEGRAM_WEBHOOK_ENABLED is false. Webhook setup is disabled.",
+            setupMode,
+            vercelEnv,
+            nextAction: "Enable TELEGRAM_WEBHOOK_ENABLED=true for production/staging only.",
+          },
+          { status: 400 },
+        );
+      }
+
+      if (!process.env.APP_BASE_URL) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "APP_BASE_URL is required when TELEGRAM_WEBHOOK_ENABLED=true.",
+            setupMode,
+            vercelEnv,
+            nextAction: "Set APP_BASE_URL to your stable production/staging domain.",
+          },
+          { status: 400 },
+        );
+      }
+
+      if (isLikelyEphemeralVercelUrl(appBaseUrl)) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "APP_BASE_URL points to an ephemeral Vercel deployment URL.",
+            setupMode,
+            appBaseUrl,
+            nextAction: "Use a stable domain/alias. Do not use unique deployment URLs for Telegram webhook.",
+          },
+          { status: 400 },
+        );
+      }
+    }
+
     const connectionTest = await TelegramBotApiService.testTelegramConnection({ token, chatId });
     if (!connectionTest.tokenValid) {
       return NextResponse.json({ ok: false, error: "Invalid bot token" }, { status: 400 });
     }
 
-    // Register bot commands with Telegram
     const commandRegistered = await TelegramBotApiService.setMyCommands(token, COMMANDS);
-
-    // Webhook registration — gated by TELEGRAM_WEBHOOK_ENABLED
     let webhookRegistered = false;
-    let webhookSkipped = false;
-    let webhookSkipReason = "";
+    let webhookInfoAfterSetup: unknown = null;
 
-    if (mode === "webhook") {
-      if (!webhookEnabled) {
-        webhookSkipped = true;
-        webhookSkipReason =
-          envLabel === "preview"
-            ? "TELEGRAM_WEBHOOK_ENABLED is not true. Preview branches must not overwrite the production webhook. Set TELEGRAM_WEBHOOK_ENABLED=true only for the production or stable staging environment."
-            : "TELEGRAM_WEBHOOK_ENABLED is not set to true. Set it in Vercel Environment Variables for this environment to enable webhook registration.";
-      } else {
-        webhookRegistered = await TelegramBotApiService.setWebhook(token, resolvedWebhookUrl, webhookSecret);
-      }
-    } else if (mode === "polling") {
+    if (setupMode === "webhook") {
+      webhookRegistered = await TelegramBotApiService.setWebhook(token, resolvedWebhookUrl, webhookSecret);
+      webhookInfoAfterSetup = await TelegramBotApiService.getWebhookInfo(token).catch((err: unknown) => ({ error: String(err) }));
+      TelegramBotApiService.stopPolling();
+    } else {
       await TelegramBotApiService.deleteWebhook(token);
+      await ensureTelegramPollingStarted();
+      webhookInfoAfterSetup = await TelegramBotApiService.getWebhookInfo(token).catch((err: unknown) => ({ error: String(err) }));
     }
 
-    // Reset auth cache so new env values take effect
     resetTelegramAuthConfigCache();
 
-    // Start/stop polling based on mode
-    let boot = null;
-    if (mode === "polling") {
-      boot = await ensureTelegramPollingStarted();
-    } else {
-      TelegramBotApiService.stopPolling();
-    }
+    const webhookUrlAfter =
+      webhookInfoAfterSetup &&
+      typeof webhookInfoAfterSetup === "object" &&
+      "ok" in webhookInfoAfterSetup &&
+      (webhookInfoAfterSetup as { ok?: boolean }).ok &&
+      "result" in webhookInfoAfterSetup
+        ? ((webhookInfoAfterSetup as { result?: { url?: string } }).result?.url ?? null)
+        : null;
+
+    const webhookMatchesAppBaseUrl =
+      setupMode !== "webhook" ? false : Boolean(webhookUrlAfter && webhookUrlAfter === resolvedWebhookUrl);
+
+    const nextAction =
+      setupMode === "webhook"
+        ? webhookMatchesAppBaseUrl
+          ? "Webhook is configured correctly."
+          : "Webhook mismatch detected. Re-run setup after validating APP_BASE_URL."
+        : "Polling mode active for local diagnostics only.";
 
     return NextResponse.json({
       ok: true,
-      mode,
+      setupMode,
       commandRegistered,
       webhookRegistered,
-      webhookSkipped,
-      webhookSkipReason: webhookSkipReason || null,
-      webhookEnabled,
+      webhookInfoAfterSetup,
+      webhookMatchesAppBaseUrl,
       resolvedWebhookUrl,
       appBaseUrl,
-      vercelEnv: envLabel,
+      vercelEnv,
       tokenValid: true,
       connectionTest,
       polling: getTelegramPollingDiagnostics(),
-      boot,
+      nextAction,
     });
   } catch (error) {
     return NextResponse.json({ ok: false, error: String(error) }, { status: 500 });

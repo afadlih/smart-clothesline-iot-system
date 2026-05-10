@@ -12,10 +12,10 @@
 const char* ssid = "Wokwi-GUEST";
 const char* password = "";
 
-const char* mqtt_server = "ba30f548c6ba4db2a6eae072d0a0ab18.s1.eu.hivemq.cloud";
+const char* mqtt_server = "YOUR_MQTT_HOST";
 const int mqtt_port = 8883;
-const char* mqtt_user = "fabiqnn";
-const char* mqtt_pass = "WmGgym2vPTa7dR.";
+const char* mqtt_user = "YOUR_MQTT_USERNAME";
+const char* mqtt_pass = "YOUR_MQTT_PASSWORD";
 
 const char* device_id = "wokwi-default";
 const char* deviceName = "Wokwi Clothesline";

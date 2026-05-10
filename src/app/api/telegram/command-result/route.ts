@@ -54,14 +54,33 @@ function isAllowedOrigin(request: NextRequest): boolean {
   if (!isStrictRuntime()) return true;
 
   const origin = request.headers.get("origin");
-  if (!origin) return false;
+  const allowedOrigins = resolveAllowedOrigins(request);
+  if (origin) {
+    return allowedOrigins.includes(origin);
+  }
 
-  return resolveAllowedOrigins(request).includes(origin);
+  const referer = request.headers.get("referer");
+  if (referer) {
+    try {
+      const refererOrigin = new URL(referer).origin;
+      if (allowedOrigins.includes(refererOrigin)) return true;
+    } catch {
+      return false;
+    }
+  }
+
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite === "same-origin" || fetchSite === "same-site" || fetchSite === "none") {
+    return true;
+  }
+
+  return false;
 }
 
 export async function POST(request: NextRequest) {
   try {
     if (!isAllowedOrigin(request)) {
+      logger.warn("telegram", "Rejected command-result request due to origin policy");
       return NextResponse.json({ ok: false, error: "Forbidden origin" }, { status: 403 });
     }
 

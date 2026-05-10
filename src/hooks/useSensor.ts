@@ -444,10 +444,7 @@ async function updateBridgeHeartbeat(): Promise<void> {
 
 async function processPendingTelegramCommands(): Promise<void> {
     const pending = await TelegramOpsService.fetchPendingCommands(5);
-    if (pending.length === 0) {
-        void updateBridgeHeartbeat();
-        return;
-    }
+    if (pending.length === 0) return;
 
     for (const commandJob of pending) {
         try {
@@ -511,7 +508,6 @@ async function processPendingTelegramCommands(): Promise<void> {
             void notifyCommandResult(commandJob.id, "failed", `Execution error: ${errorMsg}`);
         }
     }
-    void updateBridgeHeartbeat();
 }
 
 export function getActiveDeviceId(): string | null {
@@ -1404,6 +1400,10 @@ export function useSensor() {
         const telegramBridgeTimer = window.setInterval(() => {
             void processPendingTelegramCommands();
         }, 2000);
+        const telegramBridgeHeartbeatTimer = window.setInterval(() => {
+            void updateBridgeHeartbeat();
+        }, 5000);
+        void updateBridgeHeartbeat();
 
         void refreshSchedules();
 
@@ -1443,6 +1443,7 @@ export function useSensor() {
             window.clearInterval(scheduleRefreshTimer);
             window.clearInterval(queueSyncTimer);
             window.clearInterval(telegramBridgeTimer);
+            window.clearInterval(telegramBridgeHeartbeatTimer);
             window.removeEventListener("schedule-updated", onScheduleUpdated);
         };
     }, []);

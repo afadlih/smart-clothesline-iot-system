@@ -2,8 +2,21 @@ import { SensorData } from "@/models/SensorData";
 import type { DailyStats } from "@/services/SensorAnalytics";
 
 export class DataExportService {
+  private static sanitizeRecords(data: SensorData[]): SensorData[] {
+    return data.filter((item) => {
+      const timestampMs = new Date(item.timestamp).getTime();
+      if (!Number.isFinite(timestampMs)) return false;
+      if (!Number.isFinite(item.temperature)) return false;
+      if (!Number.isFinite(item.humidity)) return false;
+      if (!Number.isFinite(item.light)) return false;
+      if (item.status !== "OPEN" && item.status !== "CLOSED") return false;
+      return true;
+    });
+  }
+
   static exportToCSV(data: SensorData[], filename = "sensor-data.csv"): void {
-    if (data.length === 0) {
+    const sanitized = this.sanitizeRecords(data);
+    if (sanitized.length === 0) {
       console.warn("[Export] No data to export");
       return;
     }
@@ -19,7 +32,7 @@ export class DataExportService {
       "Status",
     ];
 
-    const rows = data.map((item) => {
+    const rows = sanitized.map((item) => {
       const date = new Date(item.timestamp);
       return [
         item.timestamp,
@@ -44,7 +57,8 @@ export class DataExportService {
   }
 
   static exportToJSON(data: SensorData[], filename = "sensor-data.json"): void {
-    if (data.length === 0) {
+    const sanitized = this.sanitizeRecords(data);
+    if (sanitized.length === 0) {
       console.warn("[Export] No data to export");
       return;
     }
@@ -52,14 +66,15 @@ export class DataExportService {
     const jsonData = {
       metadata: {
         exportedAt: new Date().toISOString(),
-        totalRecords: data.length,
+        totalRecords: sanitized.length,
         dateRange: {
-          from: data[0].timestamp,
-          to: data[data.length - 1].timestamp,
+          from: sanitized[0].timestamp,
+          to: sanitized[sanitized.length - 1].timestamp,
         },
         device: "Smart Clothesline System",
       },
-      data: data.map((item) => ({
+      // Explicit allow-list export fields to avoid leaking any unexpected keys/secrets.
+      data: sanitized.map((item) => ({
         timestamp: item.timestamp,
         temperature: item.temperature,
         humidity: item.humidity,

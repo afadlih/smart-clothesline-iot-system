@@ -12,6 +12,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+import { FirebaseError } from "firebase/app";
 import { db } from "@/lib/firebase";
 
 const TELEGRAM_CONFIG_COLLECTION = "telegram_config";
@@ -133,18 +134,30 @@ export class TelegramOpsService {
     userId: number;
     username?: string;
   }): Promise<string> {
-    const now = Date.now();
-    const ref = await addDoc(collection(db, TELEGRAM_COMMAND_COLLECTION), {
-      command: input.command,
-      status: "pending",
-      source: "telegram",
-      chatId: typeof input.chatId === "number" ? input.chatId : null,
-      userId: input.userId,
-      username: input.username ?? null,
-      createdAt: now,
-      updatedAt: now,
-    });
-    return ref.id;
+    try {
+      const now = Date.now();
+      const ref = await addDoc(collection(db, TELEGRAM_COMMAND_COLLECTION), {
+        command: input.command,
+        status: "pending",
+        source: "telegram",
+        chatId: typeof input.chatId === "number" ? input.chatId : null,
+        userId: input.userId,
+        username: input.username ?? null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return ref.id;
+    } catch (error) {
+      if (error instanceof FirebaseError) {
+        if (error.code.includes("permission-denied")) {
+          throw new Error("Firestore permission denied");
+        }
+        if (error.code.includes("invalid-argument")) {
+          throw new Error("Command schema rejected");
+        }
+      }
+      throw new Error("Command queue unavailable");
+    }
   }
 
   static async fetchPendingCommands(maxItems: number = 5): Promise<TelegramCommandJob[]> {

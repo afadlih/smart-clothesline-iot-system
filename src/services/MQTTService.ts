@@ -3,6 +3,9 @@ import { SensorValidator, ValidationError } from "./ValidationService";
 import { logger } from "@/lib/logger";
 
 export const MQTT_BROKER_URL = process.env.NEXT_PUBLIC_MQTT_BROKER_URL ?? "wss://broker.hivemq.com:8884/mqtt";
+// SECURITY NOTE:
+// NEXT_PUBLIC MQTT credentials are visible in browser runtime.
+// Never use privileged broker credentials here.
 const MQTT_USER = process.env.NEXT_PUBLIC_MQTT_USERNAME;
 const MQTT_PASS = process.env.NEXT_PUBLIC_MQTT_PASSWORD;
 export const SENSOR_TOPIC = process.env.NEXT_PUBLIC_MQTT_TOPIC_SENSOR ?? "smart-clothesline/sensor";
@@ -11,6 +14,10 @@ export const COMMAND_TOPIC = process.env.NEXT_PUBLIC_MQTT_TOPIC_COMMAND ?? "smar
 export const CONFIG_TOPIC = "smart-clothesline/config";
 export const CONFIG_ACK_TOPIC = "smart-clothesline/config/ack";
 export const PAIRING_DISCOVERY_TOPIC = "smart-clothesline/pairing/discovery";
+
+if (typeof window !== "undefined" && (MQTT_USER || MQTT_PASS) && process.env.NODE_ENV !== "production") {
+  logger.warn("mqtt", "Using browser-exposed MQTT credentials. Ensure broker ACL is low privilege.");
+}
 
 type SubscribeCallback = (topic: string, payload: string) => void;
 type TopicCallback = (payload: string) => void;

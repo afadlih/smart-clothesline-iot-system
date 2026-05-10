@@ -19,17 +19,13 @@ type Diagnostics = {
   botConfigured: boolean;
   webhookEnabled: boolean;
   runtimeMode?: "polling" | "webhook" | "unconfigured";
-  latestPendingCommandsCount?: number;
-  bridge?: {
-    active: boolean;
-    alive: boolean;
-    ageMs: number | null;
-    queueBacklog: number | null;
-    mqttConnected: boolean | null;
-    streamState: string | null;
-    lastDispatchedCommandId: string | null;
-    lastError: string | null;
-  };
+  pendingCommandsCount?: number;
+  bridgeAlive?: boolean;
+  bridgeAgeMs?: number | null;
+  bridgeQueueBacklog?: number | null;
+  mqttConnectedFromBridge?: boolean | null;
+  bridgeStreamState?: string | null;
+  lastBridgeError?: string | null;
   warnings: string[];
 };
 
@@ -71,7 +67,7 @@ export default function TelegramBridgeStatus() {
   const lastSeenMs = status?.lastSeenAt?.toMillis ? status.lastSeenAt.toMillis() : null;
   const lastSeenStr = lastSeenMs ? new Date(lastSeenMs).toLocaleTimeString() : "-";
   const localBridgeAlive = lastSeenMs ? Date.now() - lastSeenMs < 10_000 : false;
-  const bridgeAlive = diagnostics?.bridge?.alive ?? localBridgeAlive;
+  const bridgeAlive = diagnostics?.bridgeAlive ?? localBridgeAlive;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -124,7 +120,7 @@ export default function TelegramBridgeStatus() {
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-500">Pending Queue</span>
-              <span className="font-medium text-slate-700 dark:text-slate-200">{diagnostics.latestPendingCommandsCount ?? 0}</span>
+              <span className="font-medium text-slate-700 dark:text-slate-200">{diagnostics.pendingCommandsCount ?? 0}</span>
             </div>
             {diagnostics.warnings.length > 0 ? (
               <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40">

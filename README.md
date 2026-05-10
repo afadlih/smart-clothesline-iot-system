@@ -99,6 +99,11 @@ NEXT_PUBLIC_MQTT_TOPIC_STATUS=smart-clothesline/status
 NEXT_PUBLIC_MQTT_TOPIC_COMMAND=smart-clothesline/command
 ```
 
+Security note:
+- `NEXT_PUBLIC_MQTT_USERNAME` and `NEXT_PUBLIC_MQTT_PASSWORD` are browser-visible.
+- Never use privileged/admin MQTT credentials in `NEXT_PUBLIC_*`.
+- Use low-privilege ACL credentials for browser MQTT access.
+
 Restart the dev server after changing environment variables.
 
 ## Branching and Delivery
