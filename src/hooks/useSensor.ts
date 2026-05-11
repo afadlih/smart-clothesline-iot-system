@@ -448,6 +448,20 @@ async function processPendingTelegramCommands(): Promise<void> {
 
     for (const commandJob of pending) {
         try {
+            const isMqttConnected = mqttService.isConnected();
+            logger.info("telegram", "Telegram bridge polling pending commands", {
+                count: pending.length,
+                commandId: commandJob.id,
+                command: commandJob.command,
+                mqttConnected: isMqttConnected
+            });
+
+            if (!isMqttConnected) {
+                lastBridgeError = "Dashboard bridge waiting for MQTT connection";
+                await TelegramOpsService.markCommandStatus(commandJob.id, "pending", lastBridgeError);
+                continue;
+            }
+
             await TelegramOpsService.markCommandStatus(commandJob.id, "processing", "Processing by dashboard bridge");
             let dispatched = false;
             
@@ -458,22 +472,23 @@ async function processPendingTelegramCommands(): Promise<void> {
             else if (commandJob.command === "/restart") dispatched = sendCommand("RESTART");
 
             if (!dispatched) {
-                lastBridgeError = "Dispatch delayed: waiting device/MQTT/rate window";
-                await TelegramOpsService.markCommandStatus(commandJob.id, "pending", "Dispatch delayed: waiting device/MQTT/rate window");
+                lastBridgeError = "Dashboard bridge publish skipped; MQTT not ready or rate limited";
+                await TelegramOpsService.markCommandStatus(commandJob.id, "pending", lastBridgeError);
                 await TelegramOpsService.addAuditLog({
                     userId: commandJob.userId,
                     username: commandJob.username,
                     command: commandJob.command,
                     result: "pending",
-                    detail: "Dispatch delayed by runtime state",
+                    detail: lastBridgeError,
                     source: "telegram-bridge",
                 });
                 
-                void notifyCommandResult(commandJob.id, "pending", "Dispatch delayed. Waiting for device or MQTT to be ready.");
+                void notifyCommandResult(commandJob.id, "pending", lastBridgeError);
                 continue;
             }
 
-            await TelegramOpsService.markCommandStatus(commandJob.id, "done", "Command dispatched to MQTT");
+            const successDetail = "MQTT publish attempted by dashboard bridge";
+            await TelegramOpsService.markCommandStatus(commandJob.id, "done", successDetail);
             lastBridgeDispatchedCommandId = commandJob.id;
             lastBridgeError = null;
             await TelegramOpsService.addAuditLog({
@@ -481,11 +496,11 @@ async function processPendingTelegramCommands(): Promise<void> {
                 username: commandJob.username,
                 command: commandJob.command,
                 result: "success",
-                detail: "Command dispatched from bridge",
+                detail: successDetail,
                 source: "telegram-bridge",
             });
 
-            void notifyCommandResult(commandJob.id, "done", "Command dispatched to MQTT successfully.");
+            void notifyCommandResult(commandJob.id, "done", successDetail);
 
             pushSystemEvent({
                 type: "COMMAND",

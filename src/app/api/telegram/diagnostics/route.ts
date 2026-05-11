@@ -12,6 +12,7 @@ import { TelegramOpsService } from "@/services/TelegramOpsService";
 import { logger } from "@/lib/logger";
 import { ensureTelegramPollingStarted, getTelegramPollingDiagnostics } from "@/lib/telegramSingleton";
 import { db } from "@/lib/firebase";
+import { getServerMqttCommandPublisherStatus } from "@/services/mqtt/ServerMqttCommandPublisher";
 
 export const dynamic = "force-dynamic";
 
@@ -76,6 +77,9 @@ export async function GET() {
     const bridgeAgeMs = bridgeLastSeenAt ? Math.max(0, Date.now() - bridgeLastSeenAt) : null;
     const bridgeAlive = bridgeAgeMs !== null && bridgeAgeMs <= 15_000;
     const webhookUrlMatch = Boolean(telegramWebhookUrl && telegramWebhookUrl === resolvedWebhookUrl);
+    const mqttPublisherStatus = getServerMqttCommandPublisherStatus();
+    const directMqttConfigured = mqttPublisherStatus.configured;
+    const telegramCommandMode = directMqttConfigured ? "server-direct-with-bridge-fallback" : "browser-bridge-only";
 
     const warnings: string[] = [];
     const unconfiguredReasons: string[] = [];
@@ -86,10 +90,22 @@ export async function GET() {
     if (webhookEnabled && telegramWebhookUrl && !webhookUrlMatch) unconfiguredReasons.push("webhook URL mismatch");
     if (allowedUserIds.length === 0) unconfiguredReasons.push("allowed user missing");
 
+    if (!directMqttConfigured) {
+      warnings.push("Server-side MQTT command publish is not configured. Telegram hardware commands will fall back to dashboard bridge.");
+    }
     if (vercelEnv === "preview" && !webhookEnabled) {
       warnings.push(
-        "Telegram webhook is disabled for this preview deployment. Commands will not be processed unless using a separate staging bot with webhook enabled.",
+        "Telegram webhook is not active for this deployment. Commands will not be processed unless using a separate staging bot with webhook enabled.",
       );
+    }
+    if (webhookEnabled && telegramWebhookUrl && !webhookUrlMatch) {
+      warnings.push("Telegram webhook URL does not match APP_BASE_URL.");
+    }
+    if (allowedUserIds.length === 0) {
+      warnings.push("No allowed Telegram users configured.");
+    }
+    if (!firestoreOk) {
+      warnings.push("Firestore is not reachable; queue fallback may fail.");
     }
     if (!defaultChatId) {
       warnings.push("TELEGRAM_CHAT_ID is missing. Direct notification target is not configured.");
@@ -111,6 +127,13 @@ export async function GET() {
       telegramWebhookUrl,
       webhookUrlMatch,
       botConfigured,
+      directMqttConfigured,
+      directMqttBrokerConfigured: Boolean(mqttPublisherStatus.brokerUrlMasked && mqttPublisherStatus.brokerUrlMasked !== "unconfigured"),
+      directMqttUsernameConfigured: mqttPublisherStatus.hasUsername,
+      directMqttPasswordConfigured: mqttPublisherStatus.hasPassword,
+      directMqttCommandTopic: mqttPublisherStatus.commandTopic,
+      directMqttTargetDeviceConfigured: mqttPublisherStatus.targetDeviceId !== null,
+      telegramCommandMode,
       allowedUserIdsCount: allowedUserIds.length,
       allowedGroupsCount: allowedGroupIds.length,
       groupModeEnabled,

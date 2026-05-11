@@ -23,6 +23,11 @@
 - `TELEGRAM_CHAT_ID`
 - `TELEGRAM_WEBHOOK_SECRET`
 - `TELEGRAM_ALLOWED_USER_IDS`
+- `MQTT_BROKER_URL`
+- `MQTT_USERNAME`
+- `MQTT_PASSWORD`
+- `MQTT_TOPIC_COMMAND`
+- `INTERNAL_COMMAND_SECRET`
 - `LOG_LEVEL`
 - `DEBUG_MODE` (set `false` in production)
 
@@ -103,33 +108,7 @@ Rules:
 - Use a **separate bot token** for staging to avoid conflicts with production.
 - The webhook URL is built automatically: `APP_BASE_URL + /api/telegram/webhook`.
 
-### ⚠ Firebase Environment Variables — Preview & Production Checklist
 
-All `NEXT_PUBLIC_FIREBASE_*` variables are **required** and must be added to
-**both** environments in Vercel → Project Settings → Environment Variables.
-
-| Variable | Preview | Production |
-|---|---|---|
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | ✅ required | ✅ required |
-| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | ✅ required | ✅ required |
-| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | ✅ required | ✅ required |
-| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | ✅ required | ✅ required |
-| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | ✅ required | ✅ required |
-| `NEXT_PUBLIC_FIREBASE_APP_ID` | ✅ required | ✅ required |
-
-> **After adding or changing env variables on Vercel you MUST redeploy without
-> build cache** — otherwise the old build artifact (which baked in the old env
-> at build time) will continue to be served.
->
-> How to force a clean redeploy:
-> 1. Vercel Dashboard → your project → **Deployments** tab
-> 2. Find the latest deployment → click **⋯** → **Redeploy**
-> 3. Uncheck **"Use existing build cache"**
-> 4. Click **Redeploy**
-
-Missing any of the above variables causes a startup crash with an error message
-that names the exact Vercel environment (`Preview` / `Production`) and links to
-this checklist.
 
 ## Firebase Setup
 

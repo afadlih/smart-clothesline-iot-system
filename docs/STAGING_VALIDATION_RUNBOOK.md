@@ -31,6 +31,11 @@ Ensure the following environment variables are set in Vercel for the `develop` b
 - `NEXT_PUBLIC_MQTT_BROKER_URL`: Match staging broker (e.g., HiveMQ Cloud)
 - `NEXT_PUBLIC_MQTT_USERNAME`: Low-privilege browser user
 - `NEXT_PUBLIC_MQTT_PASSWORD`: Low-privilege browser password
+- `MQTT_BROKER_URL`: Server-side MQTT URL
+- `MQTT_USERNAME`: Server-side MQTT user with publish permissions
+- `MQTT_PASSWORD`: Server-side MQTT password
+- `MQTT_TOPIC_COMMAND`: Server-side MQTT command topic
+- `INTERNAL_COMMAND_SECRET`: Secure string for diagnostic API
 - `APP_BASE_URL`: Stable staging domain (e.g., `smart-clothesline-staging.vercel.app`)
 - `TELEGRAM_BOT_TOKEN`: Staging bot token
 - `TELEGRAM_WEBHOOK_ENABLED`: `true`
@@ -49,6 +54,8 @@ Ensure the following environment variables are set in Vercel for the `develop` b
      - `webhookEnabled`: `true`
      - `webhookUrlMatch`: `true`
      - `botConfigured`: `true`
+     - `directMqttConfigured`: `true`
+     - `telegramCommandMode`: `server-direct-with-bridge-fallback`
      - `firestoreOk`: `true`
      - `bridgeAlive`: `true` (only if a dashboard tab is open)
 
@@ -76,15 +83,24 @@ Ensure the following environment variables are set in Vercel for the `develop` b
 
 ## F. Telegram Command E2E Validation
 
-1. Open Dashboard on a browser tab (this activates the command bridge).
+### F1. Server-Side Direct Execution (Primary)
+1. Close all Dashboard browser tabs (bridge offline).
 2. Send `/mode_manual` from Telegram.
 3. Verify:
-   - Command document appears in `telegram_commands` collection.
-   - Dashboard bridge picks up the command (check Firestore `updatedAt` or console logs).
-   - MQTT message is dispatched.
+   - Telegram replies almost instantly with "dispatched to device".
+   - Device responds and publishes status ACK.
+   - Command status becomes `done` in Firestore.
+   
+### F2. Dashboard Bridge Fallback
+1. Temporarily unset `MQTT_PASSWORD` in Vercel to break server-side publish, redeploy.
+2. Open Dashboard on a browser tab (this activates the command bridge).
+3. Send `/mode_manual` from Telegram.
+4. Verify:
+   - Command is queued in Firestore.
+   - Dashboard bridge picks up the command and logs "Dashboard bridge polling pending commands".
+   - MQTT message is dispatched by the browser.
    - Device responds and publishes status ACK.
    - Command status becomes `done`.
-   - Dashboard TopBar reflects the new mode.
 
 ## G. Analytics and Data Export
 

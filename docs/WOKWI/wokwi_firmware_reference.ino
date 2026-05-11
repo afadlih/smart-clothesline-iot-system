@@ -132,15 +132,26 @@ void moveServoClose() {
 void callback(char* topic, byte* payload, unsigned int length) {
   if (String(topic) != topic_command) return;
 
+  Serial.println("[CMD_RECEIVED_ON_TOPIC]");
+
   StaticJsonDocument<256> doc;
   DeserializationError error = deserializeJson(doc, payload, length);
   if (error) return;
 
   const char* incomingDeviceId = doc["deviceId"];
-  if (incomingDeviceId && strcmp(incomingDeviceId, device_id) != 0) return;
+  if (incomingDeviceId && strcmp(incomingDeviceId, device_id) != 0) {
+    Serial.print("[CMD_IGNORED_DEVICE] incoming=");
+    Serial.print(incomingDeviceId);
+    Serial.print(" expected=");
+    Serial.println(device_id);
+    return;
+  }
 
   const char* command = doc["command"];
   if (!command) return;
+
+  Serial.print("[CMD_RAW_COMMAND] ");
+  Serial.println(command);
 
   Serial.print("[CMD] ");
   Serial.println(command);

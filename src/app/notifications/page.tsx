@@ -21,50 +21,56 @@ const commandItems = [
 
 export default function NotificationsPage() {
   const { smartAlerts, events } = useSystemState();
-  const [botToken, setBotToken] = useState("");
-  const [chatId, setChatId] = useState("");
-  const [authorizedUser, setAuthorizedUser] = useState("");
-  const [authorizedGroups, setAuthorizedGroups] = useState("");
-  const [groupModeEnabled, setGroupModeEnabled] = useState(true);
   const [telegramState, setTelegramState] = useState<TelegramState>("Awaiting Setup");
   const [webhookStatus, setWebhookStatus] = useState("Unknown");
   const [commandRegistration, setCommandRegistration] = useState("Unknown");
-  const [integrationMode, setIntegrationMode] = useState<"polling" | "webhook">("webhook");
-  const [webhookSecret, setWebhookSecret] = useState("");
   const [pollingStatus, setPollingStatus] = useState("stopped");
-  const [pollingUptime, setPollingUptime] = useState(0);
   const [auditLogs, setAuditLogs] = useState<Array<{ id: string; command: string; result: string; detail: string; timestamp: number; username?: string }>>([]);
+  
+  // Diagnostic fields
+  const [runtimeMode, setRuntimeMode] = useState("Unknown");
+  const [webhookEnabled, setWebhookEnabled] = useState(false);
+  const [webhookUrlMatch, setWebhookUrlMatch] = useState(false);
+  const [botConfigured, setBotConfigured] = useState(false);
+  const [allowedUserIdsCount, setAllowedUserIdsCount] = useState(0);
+  const [directMqttConfigured, setDirectMqttConfigured] = useState(false);
+  const [telegramCommandMode, setTelegramCommandMode] = useState("");
+  const [pendingCommandsCount, setPendingCommandsCount] = useState(0);
+  const [bridgeAlive, setBridgeAlive] = useState(false);
+
   const notificationHistory = useMemo(() => events.slice(0, 12), [events]);
 
   const loadSetupState = async () => {
-    const setupResponse = await fetch("/api/telegram/setup");
-    if (setupResponse.ok) {
-      const data = (await setupResponse.json()) as {
-        configured?: boolean;
-        tokenValid?: boolean;
-        mode?: "polling" | "webhook";
-        hasWebhookSecret?: boolean;
-        polling?: { status?: string; uptimeMs?: number };
-        auditLogs?: Array<{ id: string; command: string; result: string; detail: string; timestamp: number; username?: string }>;
-        authorizedUsers?: Array<{ userId: number; username?: string; role: "Viewer" | "Operator" | "Admin" }>;
-        authorizedGroups?: Array<{ groupId: number; title?: string; type?: "group" | "supergroup" }>;
-        groupModeEnabled?: boolean;
-      };
-      setIntegrationMode(data.mode ?? "webhook");
-      setWebhookStatus(data.hasWebhookSecret ? "Configured" : "Awaiting Setup");
-      setCommandRegistration(data.configured && data.tokenValid ? "Registered" : "Pending");
-      setPollingStatus(data.polling?.status ?? "stopped");
-      setPollingUptime(data.polling?.uptimeMs ?? 0);
-      if (Array.isArray(data.authorizedUsers) && data.authorizedUsers[0]) {
-        const first = data.authorizedUsers[0];
-        setAuthorizedUser(first.username ? `${first.username} (${first.userId})` : String(first.userId));
+    try {
+      const diagResponse = await fetch("/api/telegram/diagnostics");
+      if (diagResponse.ok) {
+        const data = await diagResponse.json();
+        
+        setRuntimeMode(data.runtimeMode || "Unknown");
+        setWebhookEnabled(Boolean(data.webhookEnabled));
+        setWebhookUrlMatch(Boolean(data.webhookUrlMatch));
+        setBotConfigured(Boolean(data.botConfigured));
+        setAllowedUserIdsCount(data.allowedUserIdsCount || 0);
+        setDirectMqttConfigured(Boolean(data.directMqttConfigured));
+        setTelegramCommandMode(data.telegramCommandMode || "");
+        setPendingCommandsCount(data.pendingCommandsCount || 0);
+        setBridgeAlive(Boolean(data.bridgeAlive));
+        
+        setTelegramState(data.botConfigured ? "Connected" : "Awaiting Setup");
+        setWebhookStatus(data.webhookEnabled ? (data.webhookUrlMatch ? "Healthy" : "URL Mismatch") : "Disabled");
+        
+        setPollingStatus(data.polling?.status ?? "stopped");
+        
+        setCommandRegistration(data.botInfo ? "Registered" : "Pending");
       }
-      if (Array.isArray(data.authorizedGroups)) {
-        setAuthorizedGroups(data.authorizedGroups.map((group) => String(group.groupId)).join(","));
+
+      const setupResponse = await fetch("/api/telegram/setup");
+      if (setupResponse.ok) {
+        const setupData = await setupResponse.json();
+        setAuditLogs(Array.isArray(setupData.auditLogs) ? setupData.auditLogs : []);
       }
-      setGroupModeEnabled(Boolean(data.groupModeEnabled));
-      setTelegramState(data.tokenValid ? "Connected" : "Awaiting Setup");
-      setAuditLogs(Array.isArray(data.auditLogs) ? data.auditLogs : []);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -99,65 +105,44 @@ export default function NotificationsPage() {
           <div className="space-y-4 xl:col-span-7">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Telegram Integration</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Telegram Diagnostics</h2>
                 <span className={`rounded-full px-2 py-1 text-xs font-semibold ${stateClass}`}>{telegramState}</span>
               </div>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <label className="text-xs text-slate-500">Bot Token<input value={botToken} onChange={(e) => setBotToken(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
-                <label className="text-xs text-slate-500">Chat ID<input value={chatId} onChange={(e) => setChatId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
-                <label className="text-xs text-slate-500 md:col-span-2">Authorized User<input value={authorizedUser} onChange={(e) => setAuthorizedUser(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
-                <label className="text-xs text-slate-500 md:col-span-2">Authorized Groups (comma separated IDs)<input value={authorizedGroups} onChange={(e) => setAuthorizedGroups(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
-                <label className="text-xs text-slate-500">Integration Mode
-                  <select value={integrationMode} onChange={(e) => setIntegrationMode(e.target.value as "polling" | "webhook")} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">
-                    <option value="webhook">webhook</option>
-                    <option value="polling">polling</option>
-                  </select>
-                </label>
-                <label className="text-xs text-slate-500">Webhook Secret<input value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
-                <label className="flex items-center gap-2 text-xs text-slate-500 md:col-span-2">
-                  <input type="checkbox" checked={groupModeEnabled} onChange={(e) => setGroupModeEnabled(e.target.checked)} />
-                  Enable group mode (group/supergroup commands)
-                </label>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Bot Configured: <span className="font-semibold">{botConfigured ? "Yes" : "No"}</span></div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Runtime Mode: <span className="font-semibold">{runtimeMode}</span></div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Webhook Enabled: <span className="font-semibold">{webhookEnabled ? "Yes" : "No"}</span></div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Webhook URL Match: <span className="font-semibold">{webhookUrlMatch ? "Yes" : "No"}</span></div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Allowed Users: <span className="font-semibold">{allowedUserIdsCount}</span></div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Bridge Alive: <span className="font-semibold">{bridgeAlive ? "Yes" : "No"}</span></div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Direct MQTT Configured: <span className="font-semibold">{directMqttConfigured ? "Yes" : "No"}</span></div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Command Mode: <span className="font-semibold">{telegramCommandMode || "Unknown"}</span></div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={async () => {
+                  await loadSetupState();
+                }} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">Refresh Diagnostics</button>
                 <button onClick={async () => {
                   const response = await fetch("/api/telegram/setup", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                      botToken,
-                      chatId,
-                      webhookSecret,
-                      mode: integrationMode,
+                      mode: "webhook",
                       enabled: true,
-                      groupModeEnabled,
-                      webhookUrl: typeof window !== "undefined" ? `${window.location.origin}/api/telegram/webhook` : undefined,
-                      authorizedUsers: (() => {
-                        const parsed = Number(authorizedUser.replace(/[^\d]/g, ""));
-                        return Number.isFinite(parsed) && parsed > 0
-                          ? [{ userId: parsed, username: authorizedUser, role: "Admin" }]
-                          : [];
-                      })(),
-                      authorizedGroups: authorizedGroups
-                        .split(",")
-                        .map((item) => Number(item.trim()))
-                        .filter((value) => Number.isInteger(value) && value !== 0)
-                        .map((groupId) => ({ groupId })),
+                      groupModeEnabled: true,
                     }),
                   });
                   const data = (await response.json()) as { ok?: boolean; commandRegistered?: boolean; webhookRegistered?: boolean };
                   setTelegramState(data.ok ? "Connected" : "Invalid Token");
-                  setCommandRegistration(data.commandRegistered ? "Registered" : "Pending");
                   setWebhookStatus(data.webhookRegistered ? "Healthy" : "Failed");
                   await loadSetupState();
-                }} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Test Connection</button>
-                <button onClick={() => setTelegramState("Disabled")} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">Disable Integration</button>
+                }} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Setup Webhook from Env</button>
               </div>
               <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Webhook Status: <span className="font-semibold">{webhookStatus}</span></div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Command Registration: <span className="font-semibold">{commandRegistration}</span></div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Pending Commands: <span className="font-semibold">{pendingCommandsCount}</span></div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Polling Status: <span className="font-semibold">{pollingStatus}</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Polling Uptime: <span className="font-semibold">{Math.floor(pollingUptime / 1000)}s</span></div>
               </div>
             </div>
 

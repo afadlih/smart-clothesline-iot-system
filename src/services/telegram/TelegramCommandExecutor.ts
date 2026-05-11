@@ -17,6 +17,7 @@
 
 import { TelegramOpsService, type TelegramCommandJob } from "@/services/TelegramOpsService";
 import { logger } from "@/lib/logger";
+import { publishDeviceCommand, isServerMqttCommandPublisherConfigured, type ServerCommandInput } from "@/services/mqtt/ServerMqttCommandPublisher";
 
 export type CommandExecutionResult =
   | { result: "queued"; commandId: string; detail: string }
@@ -29,10 +30,8 @@ export type ExecutorCommand = TelegramCommandJob["command"];
 /**
  * Execute a Telegram operator command.
  *
- * Current implementation: enqueues to Firestore for browser-bridge execution.
- * Returns "queued" (= accepted) immediately so the Telegram reply is fast.
- *
- * Future: swap `enqueueOnly` for an HTTP MQTT publish when available.
+ * Tries server-side direct MQTT publish first if configured.
+ * Falls back to Firestore queue for dashboard bridge if direct publish fails.
  */
 export async function executeTelegramCommand(input: {
   command: ExecutorCommand;
@@ -40,8 +39,55 @@ export async function executeTelegramCommand(input: {
   userId: number;
   username?: string;
 }): Promise<CommandExecutionResult> {
+  const isDirectConfigured = isServerMqttCommandPublisherConfigured();
+
+  if (isDirectConfigured) {
+    let mqttCommand: ServerCommandInput["command"];
+    switch (input.command) {
+      case "/open": mqttCommand = "OPEN"; break;
+      case "/close": mqttCommand = "CLOSE"; break;
+      case "/mode_auto": mqttCommand = "AUTO"; break;
+      case "/mode_manual": mqttCommand = "MANUAL"; break;
+      case "/restart": mqttCommand = "RESTART"; break;
+    }
+
+    try {
+      const directResult = await publishDeviceCommand({
+        command: mqttCommand,
+        requestedBy: "telegram",
+        sourceCommand: input.command,
+        chatId: input.chatId,
+        userId: input.userId,
+        username: input.username,
+      });
+
+      if (directResult.ok) {
+        let commandId = "-";
+        try {
+           commandId = await TelegramOpsService.enqueueCommand({
+             command: input.command,
+             chatId: input.chatId,
+             userId: input.userId,
+             username: input.username,
+           });
+           await TelegramOpsService.markCommandStatus(commandId, "done", "Dispatched directly to MQTT from server");
+        } catch (e) {
+           logger.warn("telegram", "Failed to write done status to queue", e);
+        }
+
+        return {
+          result: "dispatched",
+          commandId,
+          detail: "Dispatched directly to MQTT from server.",
+        };
+      }
+    } catch (error) {
+      logger.error("telegram", "Direct MQTT publish threw error", error);
+    }
+  }
+
+  // Fallback to queue
   try {
-    // Primary path: enqueue to Firestore — reliable on serverless Vercel
     const commandId = await TelegramOpsService.enqueueCommand({
       command: input.command,
       chatId: input.chatId,
@@ -58,14 +104,15 @@ export async function executeTelegramCommand(input: {
     return {
       result: "queued",
       commandId,
-      detail: "Queued. Requires active dashboard bridge for MQTT dispatch.",
+      detail: isDirectConfigured 
+        ? "Direct MQTT failed. Queued for dashboard bridge fallback." 
+        : "Direct MQTT is not configured. Queued for dashboard bridge.",
     };
   } catch (error) {
     logger.error("telegram", "Command enqueue failed", { command: input.command, error });
-    const reason = error instanceof Error ? error.message : "Command queue unavailable";
     return {
       result: "failed",
-      detail: reason,
+      detail: "Command failed. Direct MQTT unavailable and queue fallback failed.",
     };
   }
 }
@@ -91,6 +138,7 @@ export function buildCommandReplyMessage(
       return [
         `Command accepted: ${command}`,
         `Execution: dispatched`,
+        `Detail: ${execResult.detail}`,
         `Reference: ${ref}`,
         `Time: ${timeStr}`,
       ].join("\n");
@@ -99,9 +147,9 @@ export function buildCommandReplyMessage(
       return [
         `Command accepted: ${command}`,
         `Execution: queued`,
+        `Detail: ${execResult.detail}`,
         `Reference: ${ref}`,
         `Time: ${timeStr}`,
-        "Queued. Requires active dashboard bridge for MQTT dispatch.",
       ].join("\n");
 
     case "delayed":
@@ -115,7 +163,7 @@ export function buildCommandReplyMessage(
     case "failed":
       return [
         `Command failed: ${command}`,
-        `Reason: ${execResult.detail}`,
+        `Detail: ${execResult.detail}`,
         `Time: ${timeStr}`,
       ].join("\n");
   }
