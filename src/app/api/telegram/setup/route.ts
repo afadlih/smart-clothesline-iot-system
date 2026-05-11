@@ -92,10 +92,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const setupAttemptedAt = Date.now();
   try {
     const body = (await request.json().catch(() => ({}))) as {
       mode?: "polling" | "webhook";
       repair?: boolean;
+      force?: boolean;
     };
 
     const token = TelegramEnvConfigService.getBotToken();
@@ -108,7 +110,8 @@ export async function POST(request: NextRequest) {
     const envDropOnSetup = TelegramEnvConfigService.shouldDropPendingUpdatesOnWebhookSetup();
     
     const repair = body.repair === true;
-    const dropPendingUpdates = repair || envDropOnSetup;
+    const force = body.force === true;
+    const dropPendingUpdates = repair || envDropOnSetup || force;
 
     const setupMode: "polling" | "webhook" =
       body.mode ?? (runtimeMode === "webhook" ? "webhook" : "polling");
@@ -167,18 +170,29 @@ export async function POST(request: NextRequest) {
 
     const commandRegistered = await TelegramBotApiService.setMyCommands(token, COMMANDS);
     let webhookRegistered = false;
-    let droppedPendingUpdates = false;
+    let setWebhookDescription: string | null = null;
+    let setWebhookOk = false;
 
     if (setupMode === "webhook") {
-      webhookRegistered = await TelegramBotApiService.setWebhook(token, resolvedWebhookUrl, {
+      // Phase 6: Force Repair mode
+      if (force) {
+        await TelegramBotApiService.deleteWebhook(token, { dropPendingUpdates: true });
+      }
+
+      const res = await TelegramBotApiService.setWebhookWithResult(token, resolvedWebhookUrl, {
         secretToken: webhookSecret || undefined,
         dropPendingUpdates,
       });
-      droppedPendingUpdates = dropPendingUpdates;
+
+      webhookRegistered = res.ok;
+      setWebhookOk = res.ok;
+      setWebhookDescription = res.description ?? null;
       TelegramBotApiService.stopPolling();
     } else {
-      await TelegramBotApiService.deleteWebhook(token, { dropPendingUpdates });
-      droppedPendingUpdates = dropPendingUpdates;
+      const res = await TelegramBotApiService.deleteWebhookWithResult(token, { dropPendingUpdates });
+      webhookRegistered = false; // Intentionally false for JSON clarity
+      setWebhookOk = res.ok;
+      setWebhookDescription = res.description ?? null;
       await ensureTelegramPollingStarted();
     }
 
@@ -190,23 +204,42 @@ export async function POST(request: NextRequest) {
     const webhookMatchesAppBaseUrl =
       setupMode !== "webhook" ? false : Boolean(actualTelegramWebhookUrl && actualTelegramWebhookUrl === resolvedWebhookUrl);
 
+    // Audit the setup attempt
+    await TelegramOpsService.addAuditLog({
+      command: "webhook_setup",
+      result: setWebhookOk ? "success" : "failed",
+      detail: setWebhookDescription || (setWebhookOk ? "Webhook registered" : "Setup failed"),
+      source: "telegram-setup",
+    });
+
     let nextAction = "Webhook setup completed successfully.";
-    if (setupMode === "webhook" && !webhookMatchesAppBaseUrl) {
-      nextAction = "WARNING: Webhook setup completed but Telegram still reports a different URL. Check for race conditions or bot token mismatch.";
+    if (setupMode === "webhook") {
+      if (!webhookRegistered || !webhookMatchesAppBaseUrl) {
+        if (!webhookRegistered) {
+          nextAction = `Telegram API Error: ${setWebhookDescription || "Unknown error"}. Check if your bot token is correct and not used by another deployment.`;
+        } else {
+          nextAction = "Webhook registration call succeeded, but Telegram info still shows a mismatch. This usually happens if multiple deployments are fighting for the same bot token.";
+        }
+      }
     }
 
+    const finalOk = setupMode === "polling" ? setWebhookOk : (webhookRegistered && webhookMatchesAppBaseUrl);
+
     return NextResponse.json({
-      ok: webhookMatchesAppBaseUrl || setupMode === "polling",
+      ok: finalOk,
+      setupAttemptedAt,
       setupMode,
       commandRegistered,
       webhookRegistered,
+      setWebhookOk,
+      setWebhookDescription,
       resolvedWebhookUrl,
       appBaseUrl,
       actualTelegramWebhookUrl,
       webhookMatchesAppBaseUrl,
-      droppedPendingUpdates,
+      droppedPendingUpdates: dropPendingUpdates,
       nextAction,
-    });
+    }, { status: finalOk ? 200 : (setWebhookOk ? 200 : 502) });
   } catch (error) {
     return NextResponse.json({ ok: false, error: String(error) }, { status: 500 });
   }

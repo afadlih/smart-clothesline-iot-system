@@ -103,12 +103,12 @@ export class TelegramBotApiService {
     });
   }
 
-  static async setWebhook(
+  static async setWebhookWithResult(
     token: string,
     webhookUrl: string,
     options?: { secretToken?: string; dropPendingUpdates?: boolean },
-  ): Promise<boolean> {
-    const data = await this.safeRequest<unknown>(endpoint(token, "setWebhook"), {
+  ): Promise<TelegramApiResponse<unknown>> {
+    return this.safeRequest<unknown>(endpoint(token, "setWebhook"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -117,16 +117,31 @@ export class TelegramBotApiService {
         drop_pending_updates: options?.dropPendingUpdates ?? false,
       }),
     });
-    return data.ok;
   }
 
-  static async deleteWebhook(token: string, options?: { dropPendingUpdates?: boolean }): Promise<boolean> {
-    const data = await this.safeRequest<unknown>(endpoint(token, "deleteWebhook"), {
+  static async setWebhook(
+    token: string,
+    webhookUrl: string,
+    options?: { secretToken?: string; dropPendingUpdates?: boolean },
+  ): Promise<boolean> {
+    const res = await this.setWebhookWithResult(token, webhookUrl, options);
+    return res.ok;
+  }
+
+  static async deleteWebhookWithResult(
+    token: string,
+    options?: { dropPendingUpdates?: boolean },
+  ): Promise<TelegramApiResponse<unknown>> {
+    return this.safeRequest<unknown>(endpoint(token, "deleteWebhook"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ drop_pending_updates: options?.dropPendingUpdates ?? false }),
     });
-    return data.ok;
+  }
+
+  static async deleteWebhook(token: string, options?: { dropPendingUpdates?: boolean }): Promise<boolean> {
+    const res = await this.deleteWebhookWithResult(token, options);
+    return res.ok;
   }
 
   static async setMyCommands(token: string, commands: BotCommand[]): Promise<boolean> {

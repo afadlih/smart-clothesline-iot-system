@@ -367,7 +367,7 @@ export class TelegramOpsService {
     command: string;
     result: "success" | "failed" | "blocked" | "pending";
     detail: string;
-    source: "telegram-webhook" | "telegram-bridge";
+    source: "telegram-webhook" | "telegram-bridge" | "telegram-setup";
   }): Promise<void> {
     await addDoc(collection(db, TELEGRAM_AUDIT_COLLECTION), {
       ...input,

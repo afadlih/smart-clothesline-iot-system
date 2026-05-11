@@ -39,7 +39,15 @@ export default function NotificationsPage() {
   const [actualTelegramWebhookUrl, setActualTelegramWebhookUrl] = useState("");
   const [appBaseUrl, setAppBaseUrl] = useState("");
   const [nextAction, setNextAction] = useState<string | null>(null);
+  const [webhookSelfTestUrl, setWebhookSelfTestUrl] = useState("");
   const [isRepairing, setIsRepairing] = useState(false);
+  const [repairResult, setRepairResult] = useState<{
+    ok: boolean;
+    msg: string;
+    description?: string;
+    actualUrl?: string;
+    nextAction?: string;
+  } | null>(null);
 
   const notificationHistory = useMemo(() => events.slice(0, 12), [events]);
 
@@ -62,6 +70,7 @@ export default function NotificationsPage() {
         setActualTelegramWebhookUrl(data.actualTelegramWebhookUrl || "");
         setAppBaseUrl(data.appBaseUrl || "");
         setNextAction(data.nextAction || null);
+        setWebhookSelfTestUrl(data.webhookSelfTestUrl || "");
         
         setWebhookStatus(data.webhookStatus || "Unknown");
         setPollingStatus(data.polling?.status ?? "stopped");
@@ -88,19 +97,45 @@ export default function NotificationsPage() {
     };
   }, []);
 
-  const handleRepair = async () => {
+  const handleRepair = async (force: boolean = false) => {
     setIsRepairing(true);
+    setRepairResult(null);
     try {
-      await fetch("/api/telegram/setup", {
+      const response = await fetch("/api/telegram/setup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "webhook",
-          repair: true
+          repair: true,
+          force
         }),
       });
+      
+      const data = await response.json();
+      if (data.ok) {
+        setRepairResult({
+          ok: true,
+          msg: "Webhook registered successfully",
+          actualUrl: data.actualTelegramWebhookUrl,
+          nextAction: data.nextAction
+        });
+      } else {
+        setRepairResult({
+          ok: false,
+          msg: data.error || "Repair failed",
+          description: data.setWebhookDescription,
+          actualUrl: data.actualTelegramWebhookUrl,
+          nextAction: data.nextAction
+        });
+      }
+      
       await loadSetupState();
     } catch (err) {
+      setRepairResult({
+        ok: false,
+        msg: "Network error during repair",
+        nextAction: "Check your internet connection and verify APP_BASE_URL is reachable."
+      });
       console.error(err);
     } finally {
       setIsRepairing(false);
@@ -152,6 +187,7 @@ export default function NotificationsPage() {
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Direct MQTT Configured: <span className="font-semibold">{directMqttConfigured ? "Yes" : "No"}</span></div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Command Mode: <span className="font-semibold">{telegramCommandMode || "Unknown"}</span></div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Command Test Endpoint: <span className="font-mono">POST /api/mqtt/command-test</span></div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Self-test URL: <a href={webhookSelfTestUrl} target="_blank" className="font-mono text-blue-600 dark:text-blue-400 hover:underline">{webhookSelfTestUrl || "Not set"}</a></div>
               </div>
 
               {nextAction && (
@@ -164,13 +200,36 @@ export default function NotificationsPage() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <button onClick={loadSetupState} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">Refresh Diagnostics</button>
                 <button 
-                  onClick={handleRepair} 
+                  onClick={() => handleRepair(false)} 
                   disabled={isRepairing}
                   className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                 >
                   {isRepairing ? "Repairing..." : "Repair Webhook from Env"}
                 </button>
+                {(webhookStatus === "mismatch" || webhookStatus === "missing") && (
+                  <button 
+                    onClick={() => handleRepair(true)} 
+                    disabled={isRepairing}
+                    className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-900/30 dark:bg-red-950/30 dark:text-red-300"
+                  >
+                    Force Repair
+                  </button>
+                )}
               </div>
+
+              <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-400 italic">
+                * APP_BASE_URL defines the expected URL. Click &quot;Repair&quot; to explicitly register it with Telegram via setWebhook.
+              </p>
+
+              {repairResult && (
+                <div className={`mt-3 rounded-lg border p-3 text-xs ${repairResult.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/30 dark:bg-emerald-950/30 dark:text-emerald-300" : "border-red-200 bg-red-50 text-red-800 dark:border-red-900/30 dark:bg-red-950/30 dark:text-red-300"}`}>
+                  <p className="font-bold">{repairResult.ok ? "Repair Succeeded" : "Repair Failed"}</p>
+                  <p>{repairResult.msg}</p>
+                  {repairResult.description && <p className="mt-1 font-mono text-[10px] opacity-80">Telegram says: {repairResult.description}</p>}
+                  {repairResult.nextAction && <p className="mt-2 font-bold underline">Action Required: {repairResult.nextAction}</p>}
+                </div>
+              )}
+
               <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Webhook Status: <span className="font-semibold uppercase">{webhookStatus}</span></div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Command Registration: <span className="font-semibold">{commandRegistration}</span></div>

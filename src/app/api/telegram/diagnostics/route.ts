@@ -151,9 +151,16 @@ export async function GET() {
       webhookStatus = "ok";
     }
 
+    const webhookStatusLabel = webhookStatus === "missing" ? "MISSING" : webhookStatus === "mismatch" ? "URL MISMATCH" : webhookStatus === "ok" ? "OK" : webhookStatus.toUpperCase();
+    const webhookSelfTestUrl = `${appBaseUrl}/api/telegram/webhook-self-test`;
+
     let nextAction: string | null = null;
-    if (webhookStatus === "mismatch" || webhookStatus === "missing") {
-      nextAction = "Run POST /api/telegram/setup with mode=webhook from the same APP_BASE_URL deployment.";
+    if (webhookStatus === "missing") {
+      nextAction = "Run 'Repair Webhook from Env' in the dashboard. Telegram has NO webhook registered for this bot. This deployment cannot receive commands until setWebhook is called.";
+    } else if (webhookStatus === "mismatch") {
+      nextAction = "Run 'Repair Webhook from Env' to replace the old URL. The registered URL differs from this deployment's APP_BASE_URL. Multiple deployments might be fighting for the bot token.";
+    } else if (webhookStatus === "ok") {
+      nextAction = "Webhook is healthy. Send /ping or /status from Telegram to verify end-to-end connectivity.";
     }
 
     return NextResponse.json({
@@ -166,6 +173,8 @@ export async function GET() {
       telegramWebhookUrl,
       webhookUrlMatch,
       webhookStatus,
+      webhookStatusLabel,
+      webhookSelfTestUrl,
       expectedWebhookUrl: resolvedWebhookUrl,
       actualTelegramWebhookUrl: telegramWebhookUrl,
       botConfigured,

@@ -110,11 +110,13 @@ Rules:
 
 ### How to Fix Webhook Mismatch
 
-If diagnostics show `Webhook URL Match: No`:
+**IMPORTANT:** Setting `APP_BASE_URL` does **NOT** automatically register the Telegram webhook. It only defines where the webhook *should* be. You must explicitly call the setup API to register the URL with Telegram's servers.
 
-1.  Ensure `APP_BASE_URL` is set to the stable domain.
+If diagnostics show `Webhook Status: MISSING` or `URL MISMATCH`:
+
+1.  Ensure `APP_BASE_URL` is set to the stable domain in Vercel.
 2.  Redeploy without cache if `APP_BASE_URL` was just changed.
-3.  Run the repair setup:
+3.  Run the repair setup via the dashboard ("Repair Webhook from Env") or curl:
 
 ```bash
 curl -X POST https://<APP_BASE_URL>/api/telegram/setup \
@@ -122,13 +124,22 @@ curl -X POST https://<APP_BASE_URL>/api/telegram/setup \
   -d '{"mode":"webhook","repair":true}'
 ```
 
-4.  Verify via `GET /api/telegram/diagnostics`.
+4.  If it still fails, use **Force Repair** (deletes then re-registers):
+
+```bash
+curl -X POST https://<APP_BASE_URL>/api/telegram/setup \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"webhook","repair":true,"force":true}'
+```
+
+5.  Verify end-to-end via `GET /api/telegram/diagnostics`.
 
 ## Health Diagnostics
 
 - Telegram diagnostics: `GET /api/telegram/diagnostics` (Actionable summary)
+- Webhook self-test: `GET /api/telegram/webhook-self-test` (Verify route reachability)
 - Telegram lightweight debug: `GET /api/telegram/webhook-debug`
-- Telegram setup: `GET /api/telegram/setup`
+- Telegram setup status: `GET /api/telegram/setup`
 - Command queue cleanup: `POST /api/telegram/commands/cleanup` (Requires `x-internal-command-secret`)
 - Direct MQTT test: `POST /api/mqtt/command-test` (Requires `x-internal-command-secret`)
 

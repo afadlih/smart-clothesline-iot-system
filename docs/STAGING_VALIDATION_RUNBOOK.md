@@ -74,8 +74,15 @@ Ensure the following environment variables are set in Vercel for the `develop` b
        -H "Content-Type: application/json" \
        -d '{"mode": "webhook", "repair": true}'
      ```
+   - If it still fails, use **Force Repair**:
+     ```bash
+     curl -X POST https://<staging-url>/api/telegram/setup \
+       -H "Content-Type: application/json" \
+       -d '{"mode": "webhook", "repair": true, "force": true}'
+     ```
    - Verify result shows `webhookMatchesAppBaseUrl: true`.
-   - Verify `droppedPendingUpdates: true` was executed to clear old command backlogs.
+   - Verify `droppedPendingUpdates: true` was executed.
+   - Run **Self-test**: Open `https://<staging-url>/api/telegram/webhook-self-test` to ensure the route is reachable.
    - Re-check `https://<staging-url>/api/telegram/diagnostics`.
 
 3. **Command Queue Cleanup**:
