@@ -45,7 +45,10 @@ type MqttSensorPayload = {
     temperature: number;
     humidity: number;
     light: number;
-    rainVal: number;
+    lightRaw?: number;
+    lightThreshold?: number;
+    rainVal?: number;
+    rainRaw?: number;
     rain: boolean;
     timestamp?: number;
     heartbeat?: number;
@@ -392,7 +395,10 @@ function parseSensorPayload(raw: string, receivedAt: number): MqttSensorPayload 
             temperature: normalized.value.temperature,
             humidity: normalized.value.humidity,
             light: normalized.value.light,
+            lightRaw: normalized.value.lightRaw,
+            lightThreshold: normalized.value.lightThreshold,
             rainVal: normalized.value.rainVal,
+            rainRaw: normalized.value.rainRaw,
             rain: normalized.value.rain,
             timestamp: normalized.value.timestamp,
             heartbeat: normalized.value.heartbeat,
@@ -711,7 +717,10 @@ function mapToSensorData(message: MqttSensorPayload): SensorData {
         temp: message.temperature,
         humidity: message.humidity,
         light: message.light,
+        lightRaw: message.lightRaw,
+        lightThreshold: message.lightThreshold,
         rainVal: message.rainVal,
+        rainRaw: message.rainRaw,
         rain: message.rain ? 1 : 0,
         status: statusFromSensor,
         timestamp: new Date(timestamp).toISOString(),
@@ -995,6 +1004,10 @@ function startStreamIfNeeded(): void {
                     temperature: payload.temperature,
                     humidity: payload.humidity,
                     light: payload.light,
+                    lightRaw: payload.lightRaw,
+                    lightThreshold: payload.lightThreshold,
+                    rainVal: payload.rainVal,
+                    rainRaw: payload.rainRaw,
                     rain: payload.rain,
                     status: toInternalStatus(sharedState.deviceState.status),
                     mode: sharedState.deviceState.mode ?? undefined,

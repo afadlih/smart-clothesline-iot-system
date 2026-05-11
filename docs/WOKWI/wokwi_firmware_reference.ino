@@ -308,6 +308,8 @@ void loop() {
     doc["lightRaw"] = ldrRaw;
     doc["lightThreshold"] = LIGHT_DARK_THRESHOLD;
     doc["rain"] = isRaining;
+    doc["rainVal"] = rainVal;
+    doc["rainRaw"] = rainVal;
     doc["status"] = currentStatus;
     doc["mode"] = controlMode;
     doc["lastCommand"] = lastCommand;
@@ -325,6 +327,11 @@ void loop() {
     Serial.print(lightNormalized);
     Serial.print(" dark=");
     Serial.println(isDark ? "true" : "false");
+
+    Serial.print("[RAIN] raw=");
+    Serial.print(rainVal);
+    Serial.print(" raining=");
+    Serial.println(isRaining ? "true" : "false");
 
     Serial.print("[SENSOR] ");
     Serial.println(buffer);

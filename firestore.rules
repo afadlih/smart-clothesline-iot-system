@@ -25,6 +25,10 @@ service cloud.firestore {
         && data.light >= 0
         && data.light <= 100000
         && isBoolean(data.rain)
+        && (data.rainVal == null || (isNumber(data.rainVal) && data.rainVal >= 0))
+        && (data.rainRaw == null || (isNumber(data.rainRaw) && data.rainRaw >= 0))
+        && (data.lightRaw == null || (isNumber(data.lightRaw) && data.lightRaw >= 0))
+        && (data.lightThreshold == null || (isNumber(data.lightThreshold) && data.lightThreshold >= 0))
         && (data.status == 'OPEN' || data.status == 'CLOSED' || data.status == 'RESTARTING')
         && (data.deviceId == null || (data.deviceId is string && data.deviceId.size() > 0))
         && (data.mode == null || data.mode == 'AUTO' || data.mode == 'MANUAL')

@@ -36,7 +36,10 @@ export type SensorMessage = {
   temperature: number;
   humidity: number;
   light: number;
-  rainVal: number;
+  lightRaw?: number;
+  lightThreshold?: number;
+  rainVal?: number;
+  rainRaw?: number;
   rain: boolean;
   status?: "OPEN" | "CLOSED";
   mode?: "AUTO" | "MANUAL";
@@ -151,6 +154,10 @@ class MqttService {
           temperature: validation.value.temperature,
           humidity: validation.value.humidity,
           light: validation.value.light,
+          lightRaw: validation.value.lightRaw,
+          lightThreshold: validation.value.lightThreshold,
+          rainVal: validation.value.rainVal,
+          rainRaw: validation.value.rainRaw,
           rain: validation.value.rain,
           status: validation.value.deviceState === "RESTARTING" ? undefined : validation.value.deviceState,
           mode: validation.value.mode,

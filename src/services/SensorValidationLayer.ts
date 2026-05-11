@@ -3,8 +3,11 @@ export type RawTelemetryPayload = {
   temperature?: unknown;
   humidity?: unknown;
   light?: unknown;
-  rainVal?: unknown;
+  lightRaw?: unknown;
+  lightThreshold?: unknown;
   rain?: unknown;
+  rainVal?: unknown;
+  rainRaw?: unknown;
   timestamp?: unknown;
   heartbeat?: unknown;
   mode?: unknown;
@@ -17,8 +20,11 @@ export type ValidTelemetryPayload = {
   temperature: number;
   humidity: number;
   light: number;
-  rainVal: number;
+  lightRaw?: number;
+  lightThreshold?: number;
   rain: boolean;
+  rainVal?: number;
+  rainRaw?: number;
   timestamp: number;
   heartbeat: number;
   deviceTimestamp?: number;
@@ -82,10 +88,9 @@ export class SensorValidationLayer {
     const temperature = toFiniteNumber(raw.temperature);
     const humidity = toFiniteNumber(raw.humidity);
     const light = toFiniteNumber(raw.light);
-    const rainVal = toFiniteNumber(raw.rainVal);
     const rawRain = raw.rain;
 
-    if (temperature === null || humidity === null || light === null || rainVal === null) {
+    if (temperature === null || humidity === null || light === null) {
       return { ok: false, reason: "Missing required numeric telemetry fields" };
     }
 
@@ -93,10 +98,23 @@ export class SensorValidationLayer {
       return { ok: false, reason: "Invalid rain flag" };
     }
 
+    const rainRawValue = toFiniteNumber(raw.rainVal ?? raw.rainRaw);
+    const lightRawValue = toFiniteNumber(raw.lightRaw);
+    const lightThresholdValue = toFiniteNumber(raw.lightThreshold);
+
     const sanitizedTemperature = Math.max(-50, Math.min(100, temperature));
     const sanitizedHumidity = Math.max(0, Math.min(100, humidity));
     const sanitizedLight = Math.max(0, Math.min(10000, light));
-    const sanitizedRainVal = Math.max(0, Math.min(10000, rainVal));
+
+    const sanitizedRainRaw =
+      rainRawValue === null ? undefined : Math.max(0, Math.min(4095, rainRawValue));
+
+    const sanitizedLightRaw =
+      lightRawValue === null ? undefined : Math.max(0, Math.min(4095, lightRawValue));
+
+    const sanitizedLightThreshold =
+      lightThresholdValue === null ? undefined : Math.max(0, Math.min(10000, lightThresholdValue));
+
     const timestampInfo = toTelemetryTime(raw.timestamp, receivedAt);
     const heartbeatInfo = toTelemetryTime(raw.heartbeat, timestampInfo.effectiveAt);
     const timestamp = toSafeTimestamp(timestampInfo.effectiveAt, receivedAt);
@@ -122,8 +140,11 @@ export class SensorValidationLayer {
       temperature: sanitizedTemperature,
       humidity: sanitizedHumidity,
       light: sanitizedLight,
-      rainVal: sanitizedRainVal,
+      lightRaw: sanitizedLightRaw,
+      lightThreshold: sanitizedLightThreshold,
       rain: rawRain,
+      rainVal: sanitizedRainRaw,
+      rainRaw: sanitizedRainRaw,
       timestamp,
       heartbeat,
       deviceTimestamp: timestampInfo.deviceTimestamp,
@@ -138,4 +159,3 @@ export class SensorValidationLayer {
     return { ok: true, value, incomplete };
   }
 }
-
