@@ -148,7 +148,7 @@ export default function AutomationPage() {
                 </label>
                 <label className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Light Threshold</p>
-                  <input type="range" min={500} max={4095} step={50} value={settings.lightThreshold} onChange={(e) => setSettings((p) => ({ ...p, lightThreshold: Number(e.target.value) }))} className="mt-2 w-full accent-emerald-600" />
+                  <input type="range" min={500} max={10000} step={50} value={settings.lightThreshold} onChange={(e) => setSettings((p) => ({ ...p, lightThreshold: Number(e.target.value) }))} className="mt-2 w-full accent-emerald-600" />
                   <p className="mt-1 text-xs text-slate-500">{settings.lightThreshold}</p>
                 </label>
               </div>

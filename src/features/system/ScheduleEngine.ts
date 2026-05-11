@@ -96,7 +96,7 @@ export function getFinalState({
 }): ScheduleDecision {
   const activeSchedule = schedules.find((s) => isWithinSchedule(s, currentHour)) ?? null;
   const scheduleActive = activeSchedule !== null;
-  const lightThreshold = safetyConfig?.lightThreshold ?? 200;
+  const lightThreshold = safetyConfig?.lightThreshold ?? 3000;
   const autoCloseOnRain = safetyConfig?.autoCloseOnRain ?? true;
   const autoCloseOnDark = safetyConfig?.autoCloseOnDark ?? true;
   const rainTriggered = sensor ? autoCloseOnRain && sensor.isRaining() : false;
