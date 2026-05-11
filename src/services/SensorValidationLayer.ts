@@ -3,6 +3,7 @@ export type RawTelemetryPayload = {
   temperature?: unknown;
   humidity?: unknown;
   light?: unknown;
+  rainVal?: unknown;
   rain?: unknown;
   timestamp?: unknown;
   heartbeat?: unknown;
@@ -16,6 +17,7 @@ export type ValidTelemetryPayload = {
   temperature: number;
   humidity: number;
   light: number;
+  rainVal: number;
   rain: boolean;
   timestamp: number;
   heartbeat: number;
@@ -80,9 +82,10 @@ export class SensorValidationLayer {
     const temperature = toFiniteNumber(raw.temperature);
     const humidity = toFiniteNumber(raw.humidity);
     const light = toFiniteNumber(raw.light);
+    const rainVal = toFiniteNumber(raw.rainVal);
     const rawRain = raw.rain;
 
-    if (temperature === null || humidity === null || light === null) {
+    if (temperature === null || humidity === null || light === null || rainVal === null) {
       return { ok: false, reason: "Missing required numeric telemetry fields" };
     }
 
@@ -93,6 +96,7 @@ export class SensorValidationLayer {
     const sanitizedTemperature = Math.max(-50, Math.min(100, temperature));
     const sanitizedHumidity = Math.max(0, Math.min(100, humidity));
     const sanitizedLight = Math.max(0, Math.min(10000, light));
+    const sanitizedRainVal = Math.max(0, Math.min(10000, rainVal));
     const timestampInfo = toTelemetryTime(raw.timestamp, receivedAt);
     const heartbeatInfo = toTelemetryTime(raw.heartbeat, timestampInfo.effectiveAt);
     const timestamp = toSafeTimestamp(timestampInfo.effectiveAt, receivedAt);
@@ -118,6 +122,7 @@ export class SensorValidationLayer {
       temperature: sanitizedTemperature,
       humidity: sanitizedHumidity,
       light: sanitizedLight,
+      rainVal: sanitizedRainVal,
       rain: rawRain,
       timestamp,
       heartbeat,

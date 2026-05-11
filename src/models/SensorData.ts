@@ -2,6 +2,7 @@ interface SensorDataInput {
     temp?: number;
     humidity?: number;
     light?: number;
+    rainVal?: number;
     rain?: number;
     status?: "OPEN" | "CLOSED" | "TERBUKA" | "TERTUTUP";
     timestamp?: string;
@@ -11,6 +12,7 @@ export class SensorData {
     temperature: number;
     humidity: number;
     light: number;
+    rainVal: number;
     rain: number;
     status: "OPEN" | "CLOSED";
     timestamp: string;
@@ -19,6 +21,7 @@ export class SensorData {
         this.temperature = data.temp ?? 0;
         this.humidity = data.humidity ?? 0;
         this.light = data.light ?? 0;
+        this.rainVal = data.rainVal ?? 0;
         this.rain = data.rain ?? 0;
         const normalized =
             data.status === "TERBUKA"

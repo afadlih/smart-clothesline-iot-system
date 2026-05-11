@@ -27,8 +27,20 @@ const defaults: AutomationSettings = {
   updateIntervalSec: 5,
 };
 
+const RAIN_THRESHOLD_OFFSET = 200;
+const LIGHT_THRESHOLD_OFFSET = 200;
+const MIN_RAIN_THRESHOLD = 0;
+const MAX_LIGHT_THRESHOLD = 4095;
+
+function calculateAutoThreshold(sensor: {rainVal: number, light: number}) {
+  return {
+    rainThreshold: Math.max(sensor.rainVal - RAIN_THRESHOLD_OFFSET, MIN_RAIN_THRESHOLD),
+    lightThreshold: Math.min(sensor.light + LIGHT_THRESHOLD_OFFSET, MAX_LIGHT_THRESHOLD)
+  };
+}
+
 export default function AutomationPage() {
-  const { decision, sendCommand, publishConfig, events } = useSystemState();
+  const { decision, sendCommand, publishConfig, events, sensorData } = useSystemState();
   const [settings, setSettings] = useState<AutomationSettings>(defaults);
 
   useEffect(() => {
@@ -64,6 +76,22 @@ export default function AutomationPage() {
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(next));
     }
     publishConfig(next);
+  };
+
+  const applyAutoThreshold = () => {
+    if (!sensorData) {
+      return;
+    }
+
+    const autoThreshold = calculateAutoThreshold(sensorData);
+
+    setSettings((previous) => ({
+      ...previous,
+      ...autoThreshold,
+      autoCloseOnDark: true,
+      autoCloseOnRain: true,
+      autoOpenWhenSafe: true,
+    }));
   };
 
   return (
@@ -117,7 +145,11 @@ export default function AutomationPage() {
                 <label className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700"><span>Auto close on dark</span><input type="checkbox" checked={settings.autoCloseOnDark} onChange={(e) => setSettings((p) => ({ ...p, autoCloseOnDark: e.target.checked }))} /></label>
                 <label className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700"><span>Auto open when safe</span><input type="checkbox" checked={settings.autoOpenWhenSafe} onChange={(e) => setSettings((p) => ({ ...p, autoOpenWhenSafe: e.target.checked }))} /></label>
               </div>
+              <div className="mt-4">
+                <button onClick={applyAutoThreshold} className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">Auto</button>
+              </div>
             </div>
+
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="mb-3 flex items-center justify-between">
