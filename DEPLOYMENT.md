@@ -117,3 +117,4 @@ App displays "Low light" if `isDark` is true.
   - use separate device credentials, never shared with browser dashboard
 - Local development:
   - use local/dev credentials separate from preview and production
+  - **⚠ Telegram Polling Warning**: When using `TELEGRAM_RUNTIME_MODE=polling` for local development, use a **separate dev bot token**. Do NOT use the same bot token as staging or production locally, as polling will steal updates and break the webhook connectivity for the deployed app.

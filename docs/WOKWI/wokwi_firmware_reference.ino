@@ -91,6 +91,24 @@ void updateLCD(float temp, float hum) {
   lcd.print((int)hum);
 }
 
+// ==============================
+// MQTT HELPERS
+// ==============================
+bool publishJson(const char* topic, const char* payload, bool retained = false) {
+  if (!client.connected()) {
+    Serial.print("[MQTT_SKIP] not connected, topic=");
+    Serial.println(topic);
+    return false;
+  }
+
+  bool ok = client.publish(topic, payload, retained);
+  if (!ok) {
+    Serial.print("[MQTT_FAIL] topic=");
+    Serial.println(topic);
+  }
+  return ok;
+}
+
 void publishPairingDiscovery() {
   StaticJsonDocument<256> doc;
   doc["deviceId"] = device_id;
@@ -103,7 +121,7 @@ void publishPairingDiscovery() {
 
   char buffer[256];
   serializeJson(doc, buffer);
-  client.publish(topic_discovery, buffer);
+  publishJson(topic_discovery, buffer);
 }
 
 void publishStatus(const char* source = "DEVICE") {
@@ -117,29 +135,31 @@ void publishStatus(const char* source = "DEVICE") {
 
   char buffer[192];
   serializeJson(doc, buffer);
-  client.publish(topic_status, buffer);
+  publishJson(topic_status, buffer);
 
-  Serial.print("[STATUS] ");
+  Serial.print("[STATUS] source=");
+  Serial.print(source);
+  Serial.print(" data=");
   Serial.println(buffer);
 }
 
-void moveServoOpen(bool forcePublish = false) {
+void moveServoOpen(const char* source = "DEVICE", bool forcePublish = false) {
   bool alreadyOpen = (currentStatus == "OPEN");
   myservo.write(SERVO_OPEN);
   currentPos = SERVO_OPEN;
   currentStatus = "OPEN";
   if (!alreadyOpen || forcePublish) {
-    publishStatus("DEVICE");
+    publishStatus(source);
   }
 }
 
-void moveServoClose(bool forcePublish = false) {
+void moveServoClose(const char* source = "DEVICE", bool forcePublish = false) {
   bool alreadyClosed = (currentStatus == "CLOSED");
   myservo.write(SERVO_CLOSE);
   currentPos = SERVO_CLOSE;
   currentStatus = "CLOSED";
   if (!alreadyClosed || forcePublish) {
-    publishStatus("DEVICE");
+    publishStatus(source);
   }
 }
 
@@ -148,9 +168,19 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   Serial.println("[CMD_RECEIVED_ON_TOPIC]");
 
+  // Safe copy for logging
+  char rawPayload[length + 1];
+  memcpy(rawPayload, payload, length);
+  rawPayload[length] = '\0';
+  Serial.print("[CMD_RAW] ");
+  Serial.println(rawPayload);
+
   StaticJsonDocument<256> doc;
   DeserializationError error = deserializeJson(doc, payload, length);
-  if (error) return;
+  if (error) {
+    Serial.println("[CMD_ERROR] JSON parse failed");
+    return;
+  }
 
   const char* incomingDeviceId = doc["deviceId"];
   if (incomingDeviceId && strcmp(incomingDeviceId, device_id) != 0) {
@@ -170,23 +200,23 @@ void callback(char* topic, byte* payload, unsigned int length) {
   if (strcmp(command, "OPEN") == 0) {
     controlMode = "MANUAL";
     lastCommand = "OPEN";
-    moveServoOpen(true); // Force ACK even if already open
+    moveServoOpen("COMMAND", true); // Force ACK with COMMAND source
   } else if (strcmp(command, "CLOSE") == 0) {
     controlMode = "MANUAL";
     lastCommand = "CLOSE";
-    moveServoClose(true); // Force ACK even if already closed
+    moveServoClose("COMMAND", true); // Force ACK with COMMAND source
   } else if (strcmp(command, "AUTO") == 0) {
     controlMode = "AUTO";
     lastCommand = "AUTO";
-    publishStatus("DEVICE");
+    publishStatus("COMMAND");
   } else if (strcmp(command, "MANUAL") == 0) {
     controlMode = "MANUAL";
     lastCommand = "MANUAL";
-    publishStatus("DEVICE");
+    publishStatus("COMMAND");
   } else if (strcmp(command, "RESTART") == 0) {
     currentStatus = "RESTARTING";
     lastCommand = "RESTART";
-    publishStatus("DEVICE");
+    publishStatus("COMMAND");
     delay(500);
     currentStatus = "OPEN";
     controlMode = "AUTO";
@@ -263,10 +293,10 @@ void loop() {
     if (controlMode == "AUTO") {
       if ((isRaining || isDark) && currentStatus != "CLOSED") {
         lastCommand = "AUTO";
-        moveServoClose();
+        moveServoClose("AUTO", false);
       } else if (!isRaining && !isDark && currentStatus != "OPEN") {
         lastCommand = "AUTO";
-        moveServoOpen();
+        moveServoOpen("AUTO", false);
       }
     }
 
@@ -287,7 +317,7 @@ void loop() {
 
     char buffer[320];
     serializeJson(doc, buffer);
-    client.publish(topic_sensor, buffer);
+    publishJson(topic_sensor, buffer);
 
     Serial.print("[LIGHT] raw=");
     Serial.print(ldrRaw);
