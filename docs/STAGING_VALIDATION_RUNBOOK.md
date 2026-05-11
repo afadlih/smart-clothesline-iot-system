@@ -68,8 +68,20 @@ Ensure the following environment variables are set in Vercel for the `develop` b
 
 2. **Command Queue Cleanup**:
    - Before activating a bridge or after a long downtime, clear the backlog.
-   - Run: `curl -X POST https://<staging-url>/api/telegram/commands/cleanup -H "X-Internal-Secret: <your-secret>" -d '{"mode": "stale"}'`
-   - Use `{"mode": "all"}` for a fresh start.
+   - Run Dry Run:
+     ```bash
+     curl -X POST https://<staging-url>/api/telegram/commands/cleanup \
+       -H "Content-Type: application/json" \
+       -H "x-internal-command-secret: <your-secret>" \
+       -d '{"maxAgeMs":300000,"dryRun":true,"mode":"stale"}'
+     ```
+   - Run Actual Cleanup:
+     ```bash
+     curl -X POST https://<staging-url>/api/telegram/commands/cleanup \
+       -H "Content-Type: application/json" \
+       -H "x-internal-command-secret: <your-secret>" \
+       -d '{"maxAgeMs":300000,"dryRun":false,"mode":"stale"}'
+     ```
    - Verify `commands.stalePendingCount` is 0 in diagnostics.
 
 3. **Setup**:
@@ -78,7 +90,7 @@ Ensure the following environment variables are set in Vercel for the `develop` b
      - `webhookRegistered`: `true`
      - `webhookMatchesAppBaseUrl`: `true`
 
-3. **Commands**:
+4. **Commands**:
    - Test `/start`, `/help`, `/status`, `/ping`
    - Verify responses are correct and authorization works.
 

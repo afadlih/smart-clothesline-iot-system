@@ -28,6 +28,7 @@
 - `MQTT_PASSWORD`
 - `MQTT_TOPIC_COMMAND`
 - `INTERNAL_COMMAND_SECRET`
+- `TELEGRAM_ALLOW_VERCEL_POLLING` (optional; set true for emergency server-side polling)
 - `LOG_LEVEL`
 - `DEBUG_MODE` (set `false` in production)
 
@@ -144,8 +145,9 @@ firebase deploy --only firestore:indexes
 
 ## Health Diagnostics
 
-- Telegram polling diagnostics: `GET /api/telegram/polling`
+- Telegram polling diagnostics: `GET /api/telegram/diagnostics`
 - Telegram setup status: `GET /api/telegram/setup`
+- Command queue cleanup: `POST /api/telegram/commands/cleanup` (Requires `x-internal-command-secret`)
 
 ## MQTT Credential Separation
 

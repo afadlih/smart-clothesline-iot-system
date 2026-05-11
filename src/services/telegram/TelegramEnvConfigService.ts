@@ -82,6 +82,16 @@ export const TelegramEnvConfigService = {
     }
 
     if (explicitMode === "polling") {
+      const vercelEnv = process.env.VERCEL_ENV;
+      const isVercel = vercelEnv === "production" || vercelEnv === "preview";
+      const allowVercelPolling = process.env.TELEGRAM_ALLOW_VERCEL_POLLING === "true";
+
+      // Polling on Vercel is highly discouraged as it triggers serverless timeouts
+      // and consumes excessive execution time. Use only for temporary emergency debugging.
+      if (isVercel && !allowVercelPolling) {
+        return "unconfigured";
+      }
+
       // Local polling requires explicit enablement even if mode is polling
       if (process.env.NODE_ENV !== "production" && !this.isLocalPollingEnabled()) {
         return "unconfigured";

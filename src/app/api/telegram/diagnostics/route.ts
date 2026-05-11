@@ -90,7 +90,7 @@ export async function GET() {
 
     const warnings: string[] = [];
     const unconfiguredReasons: string[] = [];
-    const pollingDiags = getPollingDiagnostics();
+    const pollingDiags = getTelegramPollingDiagnostics();
     const isLocalPollingEnabled = TelegramEnvConfigService.isLocalPollingEnabled();
 
     if (!botConfigured) unconfiguredReasons.push("missing TELEGRAM_BOT_TOKEN");

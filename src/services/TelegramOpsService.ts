@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { FirebaseError } from "firebase/app";
 import { db } from "@/lib/firebase";
+import { logger } from "@/lib/logger";
 
 const TELEGRAM_CONFIG_COLLECTION = "telegram_config";
 const TELEGRAM_CONFIG_DOC = "global";
@@ -294,6 +295,7 @@ export class TelegramOpsService {
       const isStaleByExpiry = expiresAt > 0 && expiresAt < now;
 
       if (isStaleByAge || isStaleByExpiry) {
+        if (expiredCount >= 100) break;
         await updateDoc(item.ref, {
           status: "failed",
           result: "Command expired before dispatch",
@@ -304,6 +306,46 @@ export class TelegramOpsService {
     }
 
     return expiredCount;
+  }
+
+  static async inspectStalePendingCommands(options?: { maxAgeMs?: number }): Promise<{
+    scannedCount: number;
+    expiredCount: number;
+    sampleIds: string[];
+  }> {
+    const now = Date.now();
+    const maxAge = options?.maxAgeMs ?? TELEGRAM_COMMAND_MAX_AGE_MS;
+    const minCreatedAt = now - maxAge;
+
+    const q = query(
+      collection(db, TELEGRAM_COMMAND_COLLECTION),
+      where("status", "==", "pending"),
+      limit(200),
+    );
+
+    const snapshot = await getDocs(q);
+    let expiredCount = 0;
+    const sampleIds: string[] = [];
+
+    for (const item of snapshot.docs) {
+      const value = item.data() as Partial<TelegramCommandJob>;
+      const createdAt = typeof value.createdAt === "number" ? value.createdAt : 0;
+      const expiresAt = typeof value.expiresAt === "number" ? value.expiresAt : 0;
+
+      const isStaleByAge = createdAt > 0 && createdAt < minCreatedAt;
+      const isStaleByExpiry = expiresAt > 0 && expiresAt < now;
+
+      if (isStaleByAge || isStaleByExpiry) {
+        expiredCount++;
+        if (sampleIds.length < 5) sampleIds.push(item.id);
+      }
+    }
+
+    return {
+      scannedCount: snapshot.size,
+      expiredCount,
+      sampleIds,
+    };
   }
 
   static async markCommandStatus(
