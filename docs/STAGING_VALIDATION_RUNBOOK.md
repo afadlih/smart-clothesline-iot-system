@@ -48,7 +48,8 @@ Ensure the following environment variables are set in Vercel for the `develop` b
 - `TELEGRAM_IGNORE_UPDATES_BEFORE_START`: `true`
 - `TELEGRAM_MAX_UPDATES_PER_POLL`: `10`
 - `TELEGRAM_COMMAND_TTL_MS`: `120000`
-- `TELEGRAM_COMMAND_MAX_AGE_MS`: `300000`
+- `TELEGRAM_DROP_PENDING_UPDATES_ON_WEBHOOK_SETUP`: `true`
+- `TELEGRAM_ALLOW_EPHEMERAL_WEBHOOK`: `false`
 
 **Important:** Redeploy without cache after environment variable changes.
 
@@ -59,14 +60,25 @@ Ensure the following environment variables are set in Vercel for the `develop` b
    - Verify:
      - `runtimeMode`: `webhook`
      - `webhookEnabled`: `true`
-     - `webhookUrlMatch`: `true`
+     - `webhookUrlMatch`: `true` (If `false`, run **Setup/Repair** below)
+     - `webhookStatus`: `ok`
      - `botConfigured`: `true`
      - `directMqttConfigured`: `true`
      - `telegramCommandMode`: `server-direct-with-bridge-fallback`
      - `firestoreOk`: `true`
-     - `bridgeAlive`: `true` (only if a dashboard tab is open)
 
-2. **Command Queue Cleanup**:
+2. **Setup and Repair**:
+   - If `webhookUrlMatch` is `false`, run the repair setup:
+     ```bash
+     curl -X POST https://<staging-url>/api/telegram/setup \
+       -H "Content-Type: application/json" \
+       -d '{"mode": "webhook", "repair": true}'
+     ```
+   - Verify result shows `webhookMatchesAppBaseUrl: true`.
+   - Verify `droppedPendingUpdates: true` was executed to clear old command backlogs.
+   - Re-check `https://<staging-url>/api/telegram/diagnostics`.
+
+3. **Command Queue Cleanup**:
    - Before activating a bridge or after a long downtime, clear the backlog.
    - Run Dry Run:
      ```bash

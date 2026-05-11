@@ -27,6 +27,7 @@ type HandleResult = {
   blocked?: boolean;
   queued?: boolean;
   detail: string;
+  error?: string;
 };
 
 type LatestTelemetry = {
@@ -280,7 +281,7 @@ export class TelegramCommandRouter {
         source: "telegram-webhook",
       }).catch(() => undefined);
 
-      return { ok: false, detail: String(error) };
+      return { ok: false, detail: String(error), error: String(error) };
     }
   }
 }

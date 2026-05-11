@@ -138,6 +138,24 @@ export async function GET() {
       warnings.push(`Bridge error: ${bridgeRaw.lastError}`);
     }
 
+    let webhookStatus: "ok" | "missing" | "mismatch" | "disabled" | "unconfigured" = "unconfigured";
+    if (!botConfigured) {
+      webhookStatus = "unconfigured";
+    } else if (!webhookEnabled) {
+      webhookStatus = "disabled";
+    } else if (!telegramWebhookUrl) {
+      webhookStatus = "missing";
+    } else if (!webhookUrlMatch) {
+      webhookStatus = "mismatch";
+    } else {
+      webhookStatus = "ok";
+    }
+
+    let nextAction: string | null = null;
+    if (webhookStatus === "mismatch" || webhookStatus === "missing") {
+      nextAction = "Run POST /api/telegram/setup with mode=webhook from the same APP_BASE_URL deployment.";
+    }
+
     return NextResponse.json({
       ok: true,
       runtimeMode,
@@ -147,6 +165,9 @@ export async function GET() {
       resolvedWebhookUrl,
       telegramWebhookUrl,
       webhookUrlMatch,
+      webhookStatus,
+      expectedWebhookUrl: resolvedWebhookUrl,
+      actualTelegramWebhookUrl: telegramWebhookUrl,
       botConfigured,
       directMqttConfigured,
       directMqttBrokerConfigured: Boolean(mqttPublisherStatus.brokerUrlMasked && mqttPublisherStatus.brokerUrlMasked !== "unconfigured"),
@@ -159,6 +180,7 @@ export async function GET() {
       allowedGroupsCount: allowedGroupIds.length,
       groupModeEnabled,
       pendingCommandsCount: pendingCommands.length,
+      pollingStatus: pollingDiags.status,
       bridgeActive: Boolean(bridgeRaw?.bridgeActive),
       bridgeAlive,
       bridgeLastSeenAt,
@@ -180,6 +202,7 @@ export async function GET() {
       pollingBoot,
       unconfiguredReasons: runtimeMode === "unconfigured" ? unconfiguredReasons : [],
       warnings,
+      nextAction,
       botInfo,
       webhookInfo,
     });

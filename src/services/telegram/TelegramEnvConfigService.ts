@@ -121,6 +121,14 @@ export const TelegramEnvConfigService = {
     return this.isLocalPollingEnabled() ? "polling" : "unconfigured";
   },
 
+  shouldAllowEphemeralWebhook(): boolean {
+    return process.env.TELEGRAM_ALLOW_EPHEMERAL_WEBHOOK === "true";
+  },
+  
+  shouldDropPendingUpdatesOnWebhookSetup(): boolean {
+    return process.env.TELEGRAM_DROP_PENDING_UPDATES_ON_WEBHOOK_SETUP === "true";
+  },
+
   isConfigured(): boolean {
     return Boolean(process.env.TELEGRAM_BOT_TOKEN);
   },

@@ -89,10 +89,11 @@ this checklist.
 
 ### ⚠ Telegram Webhook URL Strategy
 
+Telegram can have only **one** active webhook per bot token.
+
 Vercel generates a unique URL per deployment (e.g. `smart-clothesline-xxxx.vercel.app`).
 **Never use a unique per-deploy URL as your Telegram webhook** — it changes every deploy
-and Telegram only supports one active webhook per bot token, so preview branches
-would silently steal the production webhook.
+and will break the webhook registration for other deployments using the same bot.
 
 **Correct approach:**
 
@@ -105,49 +106,31 @@ would silently steal the production webhook.
 Rules:
 - `APP_BASE_URL` must be a **stable** domain (custom domain or Vercel production alias).
 - `TELEGRAM_WEBHOOK_ENABLED=true` must only be set for production or stable staging.
-- Preview and `fix/*` branches **must not** enable the webhook.
-- Use a **separate bot token** for staging to avoid conflicts with production.
 - The webhook URL is built automatically: `APP_BASE_URL + /api/telegram/webhook`.
 
+### How to Fix Webhook Mismatch
 
+If diagnostics show `Webhook URL Match: No`:
 
-## Firebase Setup
-
-Apply rules and indexes:
+1.  Ensure `APP_BASE_URL` is set to the stable domain.
+2.  Redeploy without cache if `APP_BASE_URL` was just changed.
+3.  Run the repair setup:
 
 ```bash
-firebase deploy --only firestore:rules
-firebase deploy --only firestore:indexes
+curl -X POST https://<APP_BASE_URL>/api/telegram/setup \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"webhook","repair":true}'
 ```
 
-## Telegram Setup
-
-### Development
-
-- Use polling mode.
-- Polling runs as singleton service.
-
-### Production
-
-- Use webhook mode.
-- Point webhook to: `/api/telegram/webhook`.
-- Set `TELEGRAM_WEBHOOK_SECRET`.
-
-## Realtime Flow
-
-`ESP32 -> MQTT -> Next.js listener -> Firestore -> Dashboard -> Telegram`
-
-## CI/CD Flow
-
-- GitHub Actions validates lint/typecheck/build.
-- PRs produce Vercel previews.
-- Merge to `main` triggers production deployment.
+4.  Verify via `GET /api/telegram/diagnostics`.
 
 ## Health Diagnostics
 
-- Telegram polling diagnostics: `GET /api/telegram/diagnostics`
-- Telegram setup status: `GET /api/telegram/setup`
+- Telegram diagnostics: `GET /api/telegram/diagnostics` (Actionable summary)
+- Telegram lightweight debug: `GET /api/telegram/webhook-debug`
+- Telegram setup: `GET /api/telegram/setup`
 - Command queue cleanup: `POST /api/telegram/commands/cleanup` (Requires `x-internal-command-secret`)
+- Direct MQTT test: `POST /api/mqtt/command-test` (Requires `x-internal-command-secret`)
 
 ## MQTT Credential Separation
 

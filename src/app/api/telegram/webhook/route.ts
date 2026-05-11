@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TelegramEnvConfigService } from "@/services/telegram/TelegramEnvConfigService";
 import { TelegramCommandRouter } from "@/services/telegram/TelegramCommandRouter";
+import { TelegramOpsService } from "@/services/TelegramOpsService";
 import { logger } from "@/lib/logger";
 
 type TelegramUpdate = {
+  update_id: number;
   message?: {
     text?: string;
     chat?: { id: number; type?: "private" | "group" | "supergroup"; title?: string };
@@ -17,16 +19,6 @@ type TelegramUpdate = {
   channel_post?: unknown;
 };
 
-/**
- * POST /api/telegram/webhook
- *
- * Receives Telegram updates and routes commands.
- *
- * - Reads TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET from env (never Firestore).
- * - Validates X-Telegram-Bot-Api-Secret-Token header when TELEGRAM_WEBHOOK_SECRET is set.
- * - Ignores channel_post and edited_message safely.
- * - Malformed updates do not crash.
- */
 export async function POST(request: NextRequest) {
   try {
     const botToken = TelegramEnvConfigService.getBotToken();
@@ -36,23 +28,43 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, skipped: "Telegram integration not configured" });
     }
 
+    const payload = (await request.json().catch(() => null)) as TelegramUpdate | null;
+    if (!payload) {
+      return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
+    }
+
     // Validate webhook secret when configured
     if (webhookSecret) {
       const secretHeader = request.headers.get("x-telegram-bot-api-secret-token");
       if (secretHeader !== webhookSecret) {
+        await TelegramOpsService.addAuditLog({
+          command: "webhook",
+          result: "blocked",
+          detail: `Webhook secret verification failed for update ${payload.update_id}`,
+          source: "telegram-webhook"
+        });
         return NextResponse.json({ ok: false, error: "Invalid webhook secret" }, { status: 401 });
       }
     }
 
-    const payload = (await request.json()) as TelegramUpdate;
+    // Write receive audit
+    const msg = payload.message;
+    const command = msg?.text?.split(" ")[0] || "unknown";
+    
+    await TelegramOpsService.addAuditLog({
+      userId: msg?.from?.id,
+      username: msg?.from?.username,
+      command: command,
+      result: "pending",
+      detail: `Webhook received update ${payload.update_id}`,
+      source: "telegram-webhook"
+    });
 
     // Ignore channel_post entirely
     if (payload.channel_post) {
       return NextResponse.json({ ok: true, skipped: "channel_post ignored" });
     }
 
-    // Use message (edited_message is intentionally ignored — no re-processing of edits)
-    const msg = payload.message;
     if (!msg) {
       return NextResponse.json({ ok: true, skipped: "No message to process" });
     }
@@ -64,6 +76,16 @@ export async function POST(request: NextRequest) {
       chatTitle: msg.chat?.title,
       userId: msg.from?.id,
       username: msg.from?.username,
+    });
+
+    // Write result audit
+    await TelegramOpsService.addAuditLog({
+      userId: msg.from?.id,
+      username: msg.from?.username,
+      command: command,
+      result: result.ok ? "success" : "failed",
+      detail: result.error || "Processed via webhook",
+      source: "telegram-webhook"
     });
 
     return NextResponse.json(result);

@@ -103,13 +103,18 @@ export class TelegramBotApiService {
     });
   }
 
-  static async setWebhook(token: string, webhookUrl: string, secret: string): Promise<boolean> {
+  static async setWebhook(
+    token: string,
+    webhookUrl: string,
+    options?: { secretToken?: string; dropPendingUpdates?: boolean },
+  ): Promise<boolean> {
     const data = await this.safeRequest<unknown>(endpoint(token, "setWebhook"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url: webhookUrl,
-        secret_token: secret,
+        secret_token: options?.secretToken || undefined,
+        drop_pending_updates: options?.dropPendingUpdates ?? false,
       }),
     });
     return data.ok;

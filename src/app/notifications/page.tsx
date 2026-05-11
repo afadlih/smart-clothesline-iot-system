@@ -6,7 +6,6 @@ import PageContainer from "@/components/layout/PageContainer";
 import { useSystemState } from "@/hooks/useSystemState";
 import { formatDateTime } from "@/utils/timeFormat";
 
-type TelegramState = "Connected" | "Invalid Token" | "Awaiting Setup" | "Disabled";
 
 const commandItems = [
   { cmd: "/status", purpose: "Get current clothesline status", permission: "Operator" },
@@ -21,7 +20,6 @@ const commandItems = [
 
 export default function NotificationsPage() {
   const { smartAlerts, events } = useSystemState();
-  const [telegramState, setTelegramState] = useState<TelegramState>("Awaiting Setup");
   const [webhookStatus, setWebhookStatus] = useState("Unknown");
   const [commandRegistration, setCommandRegistration] = useState("Unknown");
   const [pollingStatus, setPollingStatus] = useState("stopped");
@@ -37,6 +35,11 @@ export default function NotificationsPage() {
   const [telegramCommandMode, setTelegramCommandMode] = useState("");
   const [pendingCommandsCount, setPendingCommandsCount] = useState(0);
   const [bridgeAlive, setBridgeAlive] = useState(false);
+  const [expectedWebhookUrl, setExpectedWebhookUrl] = useState("");
+  const [actualTelegramWebhookUrl, setActualTelegramWebhookUrl] = useState("");
+  const [appBaseUrl, setAppBaseUrl] = useState("");
+  const [nextAction, setNextAction] = useState<string | null>(null);
+  const [isRepairing, setIsRepairing] = useState(false);
 
   const notificationHistory = useMemo(() => events.slice(0, 12), [events]);
 
@@ -55,12 +58,13 @@ export default function NotificationsPage() {
         setTelegramCommandMode(data.telegramCommandMode || "");
         setPendingCommandsCount(data.pendingCommandsCount || 0);
         setBridgeAlive(Boolean(data.bridgeAlive));
+        setExpectedWebhookUrl(data.expectedWebhookUrl || "");
+        setActualTelegramWebhookUrl(data.actualTelegramWebhookUrl || "");
+        setAppBaseUrl(data.appBaseUrl || "");
+        setNextAction(data.nextAction || null);
         
-        setTelegramState(data.botConfigured ? "Connected" : "Awaiting Setup");
-        setWebhookStatus(data.webhookEnabled ? (data.webhookUrlMatch ? "Healthy" : "URL Mismatch") : "Disabled");
-        
+        setWebhookStatus(data.webhookStatus || "Unknown");
         setPollingStatus(data.polling?.status ?? "stopped");
-        
         setCommandRegistration(data.botInfo ? "Registered" : "Pending");
       }
 
@@ -84,10 +88,37 @@ export default function NotificationsPage() {
     };
   }, []);
 
+  const handleRepair = async () => {
+    setIsRepairing(true);
+    try {
+      await fetch("/api/telegram/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "webhook",
+          repair: true
+        }),
+      });
+      await loadSetupState();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsRepairing(false);
+    }
+  };
+
+  const telegramState = !botConfigured 
+    ? "Awaiting Setup" 
+    : !webhookEnabled 
+      ? "Disabled" 
+      : !webhookUrlMatch 
+        ? "Webhook Mismatch" 
+        : "Connected";
+
   const stateClass =
     telegramState === "Connected"
       ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-      : telegramState === "Invalid Token"
+      : telegramState === "Webhook Mismatch"
         ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
         : telegramState === "Disabled"
           ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
@@ -112,34 +143,36 @@ export default function NotificationsPage() {
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Bot Configured: <span className="font-semibold">{botConfigured ? "Yes" : "No"}</span></div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Runtime Mode: <span className="font-semibold">{runtimeMode}</span></div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Webhook Enabled: <span className="font-semibold">{webhookEnabled ? "Yes" : "No"}</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Webhook URL Match: <span className="font-semibold">{webhookUrlMatch ? "Yes" : "No"}</span></div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Webhook Match: <span className={`font-semibold ${webhookUrlMatch ? "text-emerald-600" : "text-red-600"}`}>{webhookUrlMatch ? "Yes" : "No"}</span></div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Allowed Users: <span className="font-semibold">{allowedUserIdsCount}</span></div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Bridge Alive: <span className="font-semibold">{bridgeAlive ? "Yes" : "No"}</span></div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">APP_BASE_URL: <span className="font-mono font-semibold">{appBaseUrl || "Not set"}</span></div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Expected Webhook URL: <span className="font-mono text-[10px]">{expectedWebhookUrl || "None"}</span></div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Telegram Registered URL: <span className="font-mono text-[10px]">{actualTelegramWebhookUrl || "None"}</span></div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Direct MQTT Configured: <span className="font-semibold">{directMqttConfigured ? "Yes" : "No"}</span></div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Command Mode: <span className="font-semibold">{telegramCommandMode || "Unknown"}</span></div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Command Test Endpoint: <span className="font-mono">POST /api/mqtt/command-test</span></div>
               </div>
+
+              {nextAction && (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/30 dark:bg-amber-950/30 dark:text-amber-300">
+                  <p className="font-bold">Next Action:</p>
+                  <p>{nextAction}</p>
+                </div>
+              )}
+
               <div className="mt-3 flex flex-wrap gap-2">
-                <button onClick={async () => {
-                  await loadSetupState();
-                }} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">Refresh Diagnostics</button>
-                <button onClick={async () => {
-                  const response = await fetch("/api/telegram/setup", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      mode: "webhook",
-                      enabled: true,
-                      groupModeEnabled: true,
-                    }),
-                  });
-                  const data = (await response.json()) as { ok?: boolean; commandRegistered?: boolean; webhookRegistered?: boolean };
-                  setTelegramState(data.ok ? "Connected" : "Invalid Token");
-                  setWebhookStatus(data.webhookRegistered ? "Healthy" : "Failed");
-                  await loadSetupState();
-                }} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">Setup Webhook from Env</button>
+                <button onClick={loadSetupState} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">Refresh Diagnostics</button>
+                <button 
+                  onClick={handleRepair} 
+                  disabled={isRepairing}
+                  className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {isRepairing ? "Repairing..." : "Repair Webhook from Env"}
+                </button>
               </div>
               <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Webhook Status: <span className="font-semibold">{webhookStatus}</span></div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Webhook Status: <span className="font-semibold uppercase">{webhookStatus}</span></div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Command Registration: <span className="font-semibold">{commandRegistration}</span></div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Pending Commands: <span className="font-semibold">{pendingCommandsCount}</span></div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Polling Status: <span className="font-semibold">{pollingStatus}</span></div>
