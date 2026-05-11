@@ -36,7 +36,7 @@ export class SensorData {
         return this.rain > 0;
     }
 
-    isDark(threshold: number = 200): boolean {
+    isDark(threshold: number = 3000): boolean {
         return this.light < threshold;
     }
 

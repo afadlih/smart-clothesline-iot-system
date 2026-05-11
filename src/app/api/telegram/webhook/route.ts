@@ -38,9 +38,9 @@ export async function POST(request: NextRequest) {
       const secretHeader = request.headers.get("x-telegram-bot-api-secret-token");
       if (secretHeader !== webhookSecret) {
         await TelegramOpsService.addAuditLog({
-          command: "webhook",
+          command: "webhook_secret_failed",
           result: "blocked",
-          detail: `Webhook secret verification failed for update ${payload.update_id}`,
+          detail: `Secret mismatch for update ${payload.update_id}`,
           source: "telegram-webhook"
         });
         return NextResponse.json({ ok: false, error: "Invalid webhook secret" }, { status: 401 });
@@ -49,14 +49,14 @@ export async function POST(request: NextRequest) {
 
     // Write receive audit
     const msg = payload.message;
-    const command = msg?.text?.split(" ")[0] || "unknown";
+    const command = msg?.text?.split(" ")[0] || "n/a";
     
     await TelegramOpsService.addAuditLog({
       userId: msg?.from?.id,
       username: msg?.from?.username,
-      command: command,
-      result: "pending",
-      detail: `Webhook received update ${payload.update_id}`,
+      command: "webhook_received",
+      result: "success",
+      detail: `Update ${payload.update_id} from chat ${msg?.chat?.id}. Command: ${command}`,
       source: "telegram-webhook"
     });
 
@@ -82,9 +82,9 @@ export async function POST(request: NextRequest) {
     await TelegramOpsService.addAuditLog({
       userId: msg.from?.id,
       username: msg.from?.username,
-      command: command,
+      command: "command_processed",
       result: result.ok ? "success" : "failed",
-      detail: result.error || "Processed via webhook",
+      detail: `Command: ${command}. Result: ${result.ok ? (result.dispatched ? "dispatched" : "queued") : (result.error || "failed")}`,
       source: "telegram-webhook"
     });
 

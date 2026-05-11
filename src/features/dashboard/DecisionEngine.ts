@@ -5,7 +5,7 @@ export class DecisionEngine {
     sensor: SensorData,
     config?: { lightThreshold?: number; autoCloseOnRain?: boolean; autoCloseOnDark?: boolean },
   ): string {
-    const lightThreshold = config?.lightThreshold ?? 200;
+    const lightThreshold = config?.lightThreshold ?? 3000;
     const closeOnRain = config?.autoCloseOnRain ?? true;
     const closeOnDark = config?.autoCloseOnDark ?? true;
 
@@ -19,7 +19,7 @@ export class DecisionEngine {
     sensor: SensorData,
     config?: { lightThreshold?: number; autoCloseOnRain?: boolean; autoCloseOnDark?: boolean },
   ): string {
-    const lightThreshold = config?.lightThreshold ?? 200;
+    const lightThreshold = config?.lightThreshold ?? 3000;
     const closeOnRain = config?.autoCloseOnRain ?? true;
     const closeOnDark = config?.autoCloseOnDark ?? true;
 

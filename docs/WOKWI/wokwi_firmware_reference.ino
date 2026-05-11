@@ -35,10 +35,13 @@ const int ldrPin = 35;
 const int servoPin = 18;
 
 // ==============================
-// SERVO CONFIG
+// SERVO & LIGHT CONFIG
 // ==============================
 #define SERVO_OPEN 90
 #define SERVO_CLOSE 0
+const int LIGHT_NORMALIZED_MIN = 0;
+const int LIGHT_NORMALIZED_MAX = 10000;
+const int LIGHT_DARK_THRESHOLD = 3000;
 
 WiFiClientSecure espClient;
 PubSubClient client(espClient);
@@ -55,6 +58,13 @@ unsigned long lastSensorPublish = 0;
 unsigned long lastDiscoveryPublish = 0;
 const long sensorInterval = 3000;
 const long discoveryInterval = 5000;
+
+int normalizeLightFromRaw(int rawAdc) {
+  // Wokwi LDR: bright -> low ADC, dark -> high ADC
+  // We want: higher light = brighter
+  long normalized = map(rawAdc, 4095, 0, LIGHT_NORMALIZED_MIN, LIGHT_NORMALIZED_MAX);
+  return constrain((int)normalized, LIGHT_NORMALIZED_MIN, LIGHT_NORMALIZED_MAX);
+}
 
 void setup_wifi() {
   WiFi.begin(ssid, password);
@@ -113,20 +123,24 @@ void publishStatus(const char* source = "DEVICE") {
   Serial.println(buffer);
 }
 
-void moveServoOpen() {
-  if (currentStatus == "OPEN") return;
+void moveServoOpen(bool forcePublish = false) {
+  bool alreadyOpen = (currentStatus == "OPEN");
   myservo.write(SERVO_OPEN);
   currentPos = SERVO_OPEN;
   currentStatus = "OPEN";
-  publishStatus("DEVICE");
+  if (!alreadyOpen || forcePublish) {
+    publishStatus("DEVICE");
+  }
 }
 
-void moveServoClose() {
-  if (currentStatus == "CLOSED") return;
+void moveServoClose(bool forcePublish = false) {
+  bool alreadyClosed = (currentStatus == "CLOSED");
   myservo.write(SERVO_CLOSE);
   currentPos = SERVO_CLOSE;
   currentStatus = "CLOSED";
-  publishStatus("DEVICE");
+  if (!alreadyClosed || forcePublish) {
+    publishStatus("DEVICE");
+  }
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -150,20 +164,17 @@ void callback(char* topic, byte* payload, unsigned int length) {
   const char* command = doc["command"];
   if (!command) return;
 
-  Serial.print("[CMD_RAW_COMMAND] ");
-  Serial.println(command);
-
   Serial.print("[CMD] ");
   Serial.println(command);
 
   if (strcmp(command, "OPEN") == 0) {
     controlMode = "MANUAL";
     lastCommand = "OPEN";
-    moveServoOpen();
+    moveServoOpen(true); // Force ACK even if already open
   } else if (strcmp(command, "CLOSE") == 0) {
     controlMode = "MANUAL";
     lastCommand = "CLOSE";
-    moveServoClose();
+    moveServoClose(true); // Force ACK even if already closed
   } else if (strcmp(command, "AUTO") == 0) {
     controlMode = "AUTO";
     lastCommand = "AUTO";
@@ -212,6 +223,9 @@ void setup() {
   espClient.setInsecure();
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
+  client.setBufferSize(768);
+  client.setKeepAlive(30);
+  client.setSocketTimeout(10);
 
   currentStatus = "OPEN";
   controlMode = "AUTO";
@@ -234,13 +248,17 @@ void loop() {
     lastSensorPublish = now;
 
     int rainVal = analogRead(rainPin);
-    int ldrVal = analogRead(ldrPin);
+    int ldrRaw = analogRead(ldrPin);
+    int lightNormalized = normalizeLightFromRaw(ldrRaw);
     float temp = dht.readTemperature();
     float hum = dht.readHumidity();
-    if (isnan(temp) || isnan(hum)) return;
-
+    
     bool isRaining = rainVal < 2000;
-    bool isDark = ldrVal > 3000;
+    bool isDark = lightNormalized < LIGHT_DARK_THRESHOLD;
+
+    if (isnan(temp) || isnan(hum)) {
+       temp = 0; hum = 0;
+    }
 
     if (controlMode == "AUTO") {
       if ((isRaining || isDark) && currentStatus != "CLOSED") {
@@ -256,7 +274,9 @@ void loop() {
     doc["deviceId"] = device_id;
     doc["temperature"] = temp;
     doc["humidity"] = hum;
-    doc["light"] = ldrVal;
+    doc["light"] = lightNormalized;
+    doc["lightRaw"] = ldrRaw;
+    doc["lightThreshold"] = LIGHT_DARK_THRESHOLD;
     doc["rain"] = isRaining;
     doc["status"] = currentStatus;
     doc["mode"] = controlMode;
@@ -268,6 +288,13 @@ void loop() {
     char buffer[320];
     serializeJson(doc, buffer);
     client.publish(topic_sensor, buffer);
+
+    Serial.print("[LIGHT] raw=");
+    Serial.print(ldrRaw);
+    Serial.print(" normalized=");
+    Serial.print(lightNormalized);
+    Serial.print(" dark=");
+    Serial.println(isDark ? "true" : "false");
 
     Serial.print("[SENSOR] ");
     Serial.println(buffer);

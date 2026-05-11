@@ -144,18 +144,22 @@ export default function NotificationsPage() {
 
   const telegramState = !botConfigured 
     ? "Awaiting Setup" 
-    : !webhookEnabled 
-      ? "Disabled" 
-      : !webhookUrlMatch 
-        ? "Webhook Mismatch" 
-        : "Connected";
+    : runtimeMode === "polling"
+      ? "Polling Active"
+      : !webhookEnabled 
+        ? "Webhook Disabled" 
+        : webhookStatus === "missing"
+          ? "Webhook Missing"
+          : !webhookUrlMatch 
+            ? "Webhook Mismatch" 
+            : "Connected";
 
   const stateClass =
-    telegramState === "Connected"
+    telegramState === "Connected" || telegramState === "Polling Active"
       ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-      : telegramState === "Webhook Mismatch"
+      : telegramState === "Webhook Mismatch" || telegramState === "Webhook Missing"
         ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
-        : telegramState === "Disabled"
+        : telegramState === "Webhook Disabled"
           ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
           : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300";
 
@@ -190,6 +194,14 @@ export default function NotificationsPage() {
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Self-test URL: <a href={webhookSelfTestUrl} target="_blank" className="font-mono text-blue-600 dark:text-blue-400 hover:underline">{webhookSelfTestUrl || "Not set"}</a></div>
               </div>
 
+              <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/50 p-4 dark:border-blue-900/30 dark:bg-blue-950/20">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-blue-800 dark:text-blue-300">Architecture Note</h3>
+                <p className="mt-1 text-xs text-blue-700 dark:text-blue-400">
+                  Outbound bot notifications (sendMessage) can work even when inbound commands fail. 
+                  Commands (/open, /status) require a <b>registered webhook</b> or active polling to reach this deployment.
+                </p>
+              </div>
+
               {nextAction && (
                 <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/30 dark:bg-amber-950/30 dark:text-amber-300">
                   <p className="font-bold">Next Action:</p>
@@ -207,23 +219,40 @@ export default function NotificationsPage() {
                   {isRepairing ? "Repairing..." : "Repair Webhook from Env"}
                 </button>
                 {(webhookStatus === "mismatch" || webhookStatus === "missing") && (
-                  <button 
-                    onClick={() => handleRepair(true)} 
-                    disabled={isRepairing}
-                    className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-900/30 dark:bg-red-950/30 dark:text-red-300"
-                  >
-                    Force Repair
-                  </button>
+                  <div className="flex flex-col gap-1">
+                    <button 
+                      onClick={() => {
+                        if (confirm("Force repair will delete existing webhook and drop all pending Telegram updates to prevent replay storm. Continue?")) {
+                          handleRepair(true);
+                        }
+                      }} 
+                      disabled={isRepairing}
+                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-900/30 dark:bg-red-950/30 dark:text-red-300"
+                    >
+                      Force Repair
+                    </button>
+                    <span className="text-[9px] text-red-500 italic">* Drops pending updates</span>
+                  </div>
                 )}
               </div>
 
-              <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-400 italic">
-                * APP_BASE_URL defines the expected URL. Click &quot;Repair&quot; to explicitly register it with Telegram via setWebhook.
-              </p>
+              <div className="mt-4 space-y-2">
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 italic">
+                  * APP_BASE_URL defines the expected URL. Registration with Telegram is explicit.
+                </p>
+                <div className="rounded-lg bg-slate-900 p-3 text-[10px] text-slate-300">
+                  <p className="mb-1 font-mono text-slate-500"># Post-deploy sync (requires secret)</p>
+                  <code className="break-all font-mono">
+                    curl -X POST {appBaseUrl}/api/telegram/webhook-sync \<br/>
+                    &nbsp;&nbsp;-H &quot;x-internal-command-secret: &lt;secret&gt;&quot; \<br/>
+                    &nbsp;&nbsp;-d &#39;{"{"}&quot;repair&quot;:true,&quot;force&quot;:false{"}"}&#39;
+                  </code>
+                </div>
+              </div>
 
               {repairResult && (
-                <div className={`mt-3 rounded-lg border p-3 text-xs ${repairResult.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/30 dark:bg-emerald-950/30 dark:text-emerald-300" : "border-red-200 bg-red-50 text-red-800 dark:border-red-900/30 dark:bg-red-950/30 dark:text-red-300"}`}>
-                  <p className="font-bold">{repairResult.ok ? "Repair Succeeded" : "Repair Failed"}</p>
+                <div className={`mt-3 rounded-lg border p-3 text-xs ${repairResult.ok && webhookUrlMatch ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/30 dark:bg-emerald-950/30 dark:text-emerald-300" : "border-red-200 bg-red-50 text-red-800 dark:border-red-900/30 dark:bg-red-950/30 dark:text-red-300"}`}>
+                  <p className="font-bold">{repairResult.ok && webhookUrlMatch ? "Repair Succeeded" : "Repair Incomplete"}</p>
                   <p>{repairResult.msg}</p>
                   {repairResult.description && <p className="mt-1 font-mono text-[10px] opacity-80">Telegram says: {repairResult.description}</p>}
                   {repairResult.nextAction && <p className="mt-2 font-bold underline">Action Required: {repairResult.nextAction}</p>}

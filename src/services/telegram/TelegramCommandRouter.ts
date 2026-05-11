@@ -26,6 +26,7 @@ type HandleResult = {
   ok: boolean;
   blocked?: boolean;
   queued?: boolean;
+  dispatched?: boolean;
   detail: string;
   error?: string;
 };
@@ -249,6 +250,12 @@ export class TelegramCommandRouter {
           context.chatId,
           buildCommandReplyMessage(command as ExecutorCommand, execution, Date.now()),
         );
+        return { 
+          ok: execution.result !== "failed", 
+          detail: execution.detail, 
+          dispatched: execution.result === "dispatched",
+          queued: execution.result === "queued"
+        };
       } else {
         await sendReply(botToken, context.chatId, "Unknown command. Use /help.");
       }
