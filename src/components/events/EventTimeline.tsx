@@ -1,5 +1,6 @@
 "use client";
 
+import { Clock } from "lucide-react";
 import type { SystemEvent } from "@/models/SystemEvent";
 import { formatTimelineTimestamp } from "@/utils/timeFormat";
 
@@ -51,9 +52,12 @@ export default function EventTimeline({ events }: { events: SystemEvent[] }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Timeline & Event Log
-        </h3>
+        <div className="flex items-center gap-2">
+          <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Timeline & Event Log
+          </h3>
+        </div>
         <span className="text-xs text-slate-500 dark:text-slate-400">Latest 30 events</span>
       </div>
 
