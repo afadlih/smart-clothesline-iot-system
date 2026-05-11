@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
  * POST /api/telegram/commands/cleanup
  * 
  * Securely clear the pending command queue.
- * Requires X-Internal-Secret header matching INTERNAL_COMMAND_SECRET.
+ * Requires x-internal-command-secret (preferred) or X-Internal-Secret header.
  */
 export async function POST(request: NextRequest) {
   try {

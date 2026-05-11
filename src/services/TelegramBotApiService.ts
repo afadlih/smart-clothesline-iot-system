@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logger";
-import { processTelegramCommand } from "@/services/telegramCommandService";
+import { TelegramCommandRouter } from "@/services/telegram/TelegramCommandRouter";
 
 type TelegramApiResponse<T> = {
   ok: boolean;
@@ -227,7 +227,7 @@ export class TelegramBotApiService {
         continue;
       }
 
-      await processTelegramCommand({
+      await TelegramCommandRouter.handle({
         text,
         chatId,
         chatType,

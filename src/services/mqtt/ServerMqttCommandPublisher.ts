@@ -33,12 +33,16 @@ function maskBrokerUrl(url: string | undefined): string {
   if (!url) return "unconfigured";
   try {
     const parsed = new URL(url);
+    if (parsed.username) {
+      parsed.username = "masked";
+    }
     if (parsed.password) {
       parsed.password = "***";
     }
     return parsed.toString();
   } catch {
-    return url;
+    // Basic masking if URL parsing fails but credentials exist in string
+    return url.replace(/\/\/([^:]+):([^@]+)@/, "//masked:***@");
   }
 }
 

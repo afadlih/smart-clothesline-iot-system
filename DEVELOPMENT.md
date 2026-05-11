@@ -1,75 +1,48 @@
-# Development Guide
+# Development & Contribution Guide
 
-## Prerequisites
+This guide covers everything needed to set up, develop, and contribute to the Smart Clothesline system.
+
+## 1. Prerequisites
 
 - Node.js 20+
 - npm
 
-## Setup
+## 2. Quick Start
 
-1. Install dependencies:
+1.  **Install dependencies:** `npm install`
+2.  **Environment Setup:** `cp .env.local.example .env.local`
+3.  **Configuration:** Fill in the required Firebase, MQTT, and Telegram values in `.env.local`.
+4.  **Launch:** `npm run dev`
 
+## 3. Contribution Scope
+
+We welcome contributions focused on:
+- UI/UX improvements for the dashboard.
+- Realtime stability and MQTT data-flow performance.
+- Telegram bot command hardening and security.
+- Documentation updates and developer experience.
+
+## 4. Engineering Standards
+
+- **TypeScript:** Use explicit types for domain models and service interfaces.
+- **Architecture:** Keep Telegram polling and heavy MQTT logic in server-side singletons (`lib/` and `services/`).
+- **State Management:** Use Zustand for global UI state; avoid prop-drilling.
+- **Localization:** Use English for all user-facing text and console logging.
+- **Safety:** Never start long-running tasks or polling inside React components or hooks.
+
+## 5. Quality Assurance
+
+Run the following validation suite before pushing or opening a PR:
 ```bash
-npm install
+npm run lint       # Code style and best practices
+npm run typecheck  # TypeScript integrity
+npm run build      # Production build validation
 ```
 
-2. Create the local environment file:
+## 6. Project Roadmap
 
-```bash
-cp .env.local.example .env.local
-```
+- **Analytics:** Integration of historical trend analysis using Firestore partitions.
+- **Security:** Decoupling sensitive command paths from browser logic via server-side direct MQTT.
+- **Big Data:** Preparation for Hadoop/Spark telemetry archival (see [BIG_DATA_GUIDE.md](./docs/BIG_DATA_GUIDE.md)).
 
-3. Fill the required Firebase, MQTT, and Telegram values in `.env.local`.
-
-4. Start the dev server:
-
-```bash
-npm run dev
-```
-
-## Project Structure
-
-```text
-smart-clothesline-iot-system/
-├── src/
-│   ├── app/           # App Router pages and API routes
-│   ├── components/    # Shared UI and layout pieces
-│   ├── features/      # Feature modules
-│   ├── hooks/         # Reusable hooks
-│   ├── lib/           # Core libraries and singletons
-│   ├── models/        # Domain models
-│   ├── services/      # Business logic and integrations
-│   ├── stores/        # Zustand stores
-│   ├── types/         # Shared type declarations
-│   └── utils/         # Utility helpers
-├── public/
-├── firestore.rules
-├── firestore.indexes.json
-├── firebase.json
-├── .github/workflows/
-└── .env.local.example
-```
-
-## Working Rules
-
-- Keep Telegram polling in the server-side singleton only.
-- Do not start polling in React components or hooks.
-- Use Firestore as the source of truth for schedules and Telegram command/audit data.
-- Keep all user-facing labels and messages in English.
-
-## Quality Checks
-
-Run these before committing:
-
-```bash
-npm run lint
-npm run typecheck
-npm run build
-```
-
-## Notes
-
-- Restart the dev server after changing environment values.
-- If Firestore index errors appear, update `firestore.indexes.json` and sync it to Firebase.
-- Follow branch and release flow in `DEVELOPMENT_WORKFLOW.md`.
-- Use `DEPLOYMENT.md` as the production release checklist.
+Follow the [DEVELOPMENT_WORKFLOW.md](./DEVELOPMENT_WORKFLOW.md) for branch and release management.

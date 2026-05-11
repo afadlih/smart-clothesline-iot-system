@@ -108,18 +108,18 @@ Restart the dev server after changing environment variables.
 
 ## Branching and Delivery
 
-- See `DEVELOPMENT_WORKFLOW.md` for branch strategy (`main`, `develop`, `feature/*`, `fix/*`, `hotfix/*`).
-- See `BRANCHING_STRATEGY.md` for merge rules and release branch flow (`release/*`).
-- See `DEPLOYMENT.md` for production deployment checklist and Vercel setup.
+- See [DEVELOPMENT_WORKFLOW.md](./DEVELOPMENT_WORKFLOW.md) for branch strategy, merge rules, and release flow.
+- See [DEPLOYMENT.md](./DEPLOYMENT.md) for production deployment checklist and Vercel setup.
 
 ## Telegram Integration
 
 - Polling runs through a server-side singleton to avoid duplicate instances during Next.js hot reload.
 - API routes:
-  - `GET /api/telegram/polling`
+  - `GET /api/telegram/diagnostics`
   - `GET /api/telegram/setup`
   - `POST /api/telegram/setup`
   - `POST /api/telegram/webhook`
+  - `POST /api/telegram/commands/cleanup`
 - Supported commands:
   - `/start`, `/status`, `/open`, `/close`, `/mode_auto`, `/mode_manual`, `/latest`, `/health`, `/alerts`, `/help`, `/restart`, `/override`, `/debug`
 

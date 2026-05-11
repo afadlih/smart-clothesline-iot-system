@@ -15,14 +15,15 @@ import {
 import { FirebaseError } from "firebase/app";
 import { db } from "@/lib/firebase";
 import { logger } from "@/lib/logger";
+import { TelegramEnvConfigService } from "@/services/telegram/TelegramEnvConfigService";
 
 const TELEGRAM_CONFIG_COLLECTION = "telegram_config";
 const TELEGRAM_CONFIG_DOC = "global";
 const TELEGRAM_COMMAND_COLLECTION = "telegram_commands";
 const TELEGRAM_AUDIT_COLLECTION = "telegram_audit";
 
-export const TELEGRAM_COMMAND_TTL_MS = 2 * 60 * 1000;
-export const TELEGRAM_COMMAND_MAX_AGE_MS = 5 * 60 * 1000;
+export const DEFAULT_TELEGRAM_COMMAND_TTL_MS = 2 * 60 * 1000;
+export const DEFAULT_TELEGRAM_COMMAND_MAX_AGE_MS = 5 * 60 * 1000;
 export const TELEGRAM_BRIDGE_MAX_COMMANDS_PER_TICK = 2;
 
 export type TelegramRole = "Viewer" | "Operator" | "Admin";
@@ -187,7 +188,7 @@ export class TelegramOpsService {
         username: input.username ?? null,
         createdAt: now,
         updatedAt: now,
-        expiresAt: now + TELEGRAM_COMMAND_TTL_MS,
+        expiresAt: now + TelegramEnvConfigService.getCommandTtlMs(),
         dispatchMode: "bridge-fallback",
         attemptCount: 0,
       });
@@ -208,7 +209,7 @@ export class TelegramOpsService {
   static async fetchPendingCommands(maxItems: number = 5): Promise<TelegramCommandJob[]> {
     const safeMax = Math.min(maxItems, 5);
     const now = Date.now();
-    const minCreatedAt = now - TELEGRAM_COMMAND_MAX_AGE_MS;
+    const minCreatedAt = now - TelegramEnvConfigService.getCommandMaxAgeMs();
 
     let snapshot;
     try {
@@ -274,7 +275,7 @@ export class TelegramOpsService {
 
   static async expireStalePendingCommands(options?: { maxAgeMs?: number }): Promise<number> {
     const now = Date.now();
-    const maxAge = options?.maxAgeMs ?? TELEGRAM_COMMAND_MAX_AGE_MS;
+    const maxAge = options?.maxAgeMs ?? TelegramEnvConfigService.getCommandMaxAgeMs();
     const minCreatedAt = now - maxAge;
 
     const q = query(
@@ -314,7 +315,7 @@ export class TelegramOpsService {
     sampleIds: string[];
   }> {
     const now = Date.now();
-    const maxAge = options?.maxAgeMs ?? TELEGRAM_COMMAND_MAX_AGE_MS;
+    const maxAge = options?.maxAgeMs ?? TelegramEnvConfigService.getCommandMaxAgeMs();
     const minCreatedAt = now - maxAge;
 
     const q = query(
@@ -401,7 +402,7 @@ export class TelegramOpsService {
 
   static async getDiagnosticsSnapshot() {
     const now = Date.now();
-    const minCreatedAt = now - TELEGRAM_COMMAND_MAX_AGE_MS;
+    const minCreatedAt = now - TelegramEnvConfigService.getCommandMaxAgeMs();
 
     const allPending = await getDocs(query(
       collection(db, TELEGRAM_COMMAND_COLLECTION),
@@ -426,8 +427,8 @@ export class TelegramOpsService {
       pendingCount: allPending.size,
       stalePendingCount: staleCount,
       oldestPendingAgeMs: oldestAgeMs,
-      commandTtlMs: TELEGRAM_COMMAND_TTL_MS,
-      commandMaxAgeMs: TELEGRAM_COMMAND_MAX_AGE_MS,
+      commandTtlMs: TelegramEnvConfigService.getCommandTtlMs(),
+      commandMaxAgeMs: TelegramEnvConfigService.getCommandMaxAgeMs(),
     };
   }
 
