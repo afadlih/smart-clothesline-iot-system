@@ -12,7 +12,6 @@ import {
   History,
   ChevronDown,
   ChevronUp,
-  Gauge,
   Terminal,
   Bug,
 } from "lucide-react";
@@ -89,15 +88,16 @@ export default function DashboardScreen() {
     events: timelineEvents,
   } = useNotificationEngine();
   const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
-  const [isTimelineExpanded, setIsTimelineExpanded] = useState(false);
-  const [isEventLogsExpanded, setIsEventLogsExpanded] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [isTimelineExpanded, _setIsTimelineExpanded] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [isEventLogsExpanded, _setIsEventLogsExpanded] = useState(false);
   const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
 
   useEffect(() => {
     setActiveDeviceId(localStorage.getItem(ACTIVE_DEVICE_STORAGE_KEY));
   }, []);
 
-  const deviceStatusLabel = runtime.deviceConnectivity.toUpperCase();
   const deviceStatusClass =
     runtime.deviceConnectivity === "OFFLINE" ||
     runtime.deviceConnectivity === "UNKNOWN"
@@ -115,10 +115,6 @@ export default function DashboardScreen() {
 
   const deviceModeLabel = runtime.actualDeviceMode.toUpperCase();
   const safetyLabel = runtime.safetyLabel;
-  const safetyClass =
-    runtime.decisionSource === "SAFETY"
-      ? badgeClassByState("danger")
-      : badgeClassByState("good");
 
   const displayedStatus = runtime.actualDeviceStatus ?? "--";
   const lastUpdated = formatClock(lastUpdate);
@@ -796,7 +792,7 @@ export default function DashboardScreen() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsEventLogsExpanded(!isEventLogsExpanded)}
+                  onClick={() => _setIsEventLogsExpanded(!isEventLogsExpanded)}
                   className="flex items-center gap-1 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition"
                 >
                   <span className="text-xs font-semibold uppercase tracking-wide">

@@ -5,16 +5,13 @@ import { useRouter } from "next/navigation";
 import {
   Menu,
   Bell,
-  Gift,
   Moon,
   Sun,
   ChevronDown,
   User,
   RefreshCcw,
   Cpu,
-  ShieldCheck,
   Clock,
-  MonitorSmartphone,
   Monitor,
   Shield,
 } from "lucide-react";
