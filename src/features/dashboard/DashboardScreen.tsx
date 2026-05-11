@@ -43,12 +43,12 @@ function formatHourFloat(value: number): string {
 
 function badgeClassByState(state: "good" | "warn" | "danger" | "info"): string {
   if (state === "good")
-    return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300";
+    return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-500";
   if (state === "warn")
-    return "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300";
+    return "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-500";
   if (state === "danger")
-    return "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300";
-  return "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300";
+    return "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-500";
+  return "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-500";
 }
 
 function sanitizeBrokerUrl(url: string): string {
@@ -227,9 +227,9 @@ export default function DashboardScreen() {
                 value={deviceModeLabel}
                 valueClass="text-slate-900 dark:text-slate-100"
                 dotClass={
-                  deviceStatusClass.includes("danger")
+                  deviceStatusClass.includes("red")
                     ? "bg-red-500"
-                    : deviceStatusClass.includes("warn")
+                    : deviceStatusClass.includes("amber")
                       ? "bg-amber-500"
                       : "bg-emerald-500"
                 }

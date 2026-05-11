@@ -123,7 +123,7 @@ export function getFinalState({
   if (safetyTriggered) {
     const safetyReason = rainTriggered
       ? "Rain detected (auto close on rain enabled)"
-      : `Low light detected (light < ${lightThreshold})`;
+      : `Low light detected (light > ${lightThreshold})`;
 
     return {
       activeSchedule,

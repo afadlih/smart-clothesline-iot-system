@@ -68,7 +68,11 @@ export class RuntimeStatePresenter {
     // B. Connectivity State
     let deviceConnectivity: ConnectivityState = "OFFLINE";
     if (uiState.connection === "CONNECTED") {
-      if (freshnessSeconds !== null && freshnessSeconds > 15) {
+      if(freshnessSeconds === null) {
+        deviceConnectivity = "UNKNOWN";
+      } else if(freshnessSeconds > 30) {
+        deviceConnectivity = "OFFLINE";
+      } else if (freshnessSeconds > 15) {
         deviceConnectivity = "DELAYED";
       } else {
         deviceConnectivity = "ONLINE";

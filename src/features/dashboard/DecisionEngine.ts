@@ -28,7 +28,7 @@ export class DecisionEngine {
     }
 
     if (closeOnDark && sensor.isDark(lightThreshold)) {
-      return `Low light (< ${lightThreshold}) -> clothesline closed`;
+      return `Low light (> ${lightThreshold}) -> clothesline closed`;
     }
 
     return "Clear weather -> clothesline open";
