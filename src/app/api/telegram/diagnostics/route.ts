@@ -60,8 +60,15 @@ export async function GET() {
       }
     }
 
-    const pendingCommands = await TelegramOpsService.fetchPendingCommands(10).catch(() => []);
+    const pendingCommands = await TelegramOpsService.fetchPendingCommands(5).catch(() => []);
     const recentAuditLogs = await TelegramOpsService.getRecentAuditLogs(10).catch(() => []);
+    const commandDiags = await TelegramOpsService.getDiagnosticsSnapshot().catch(() => ({
+      pendingCount: 0,
+      stalePendingCount: 0,
+      oldestPendingAgeMs: 0,
+      commandTtlMs: 0,
+      commandMaxAgeMs: 0,
+    }));
 
     let firestoreOk = false;
     try {
@@ -83,12 +90,23 @@ export async function GET() {
 
     const warnings: string[] = [];
     const unconfiguredReasons: string[] = [];
+    const pollingDiags = getPollingDiagnostics();
+    const isLocalPollingEnabled = TelegramEnvConfigService.isLocalPollingEnabled();
 
     if (!botConfigured) unconfiguredReasons.push("missing TELEGRAM_BOT_TOKEN");
     if (webhookEnabled && !process.env.APP_BASE_URL) unconfiguredReasons.push("APP_BASE_URL missing");
     if (vercelEnv !== "development" && !webhookEnabled) unconfiguredReasons.push("webhook disabled on Vercel");
     if (webhookEnabled && telegramWebhookUrl && !webhookUrlMatch) unconfiguredReasons.push("webhook URL mismatch");
     if (allowedUserIds.length === 0) unconfiguredReasons.push("allowed user missing");
+
+    if (runtimeMode === "unconfigured") {
+      if (botConfigured && vercelEnv === "development" && !isLocalPollingEnabled) {
+        unconfiguredReasons.push("local polling disabled (TELEGRAM_LOCAL_POLLING_ENABLED=false)");
+      }
+      if (unconfiguredReasons.length === 0) {
+        unconfiguredReasons.push("missing critical configuration");
+      }
+    }
 
     if (!directMqttConfigured) {
       warnings.push("Server-side MQTT command publish is not configured. Telegram hardware commands will fall back to dashboard bridge.");
@@ -112,6 +130,9 @@ export async function GET() {
     }
     if (pendingCommands.length > 0 && !bridgeAlive) {
       warnings.push("Command queue has pending items while dashboard bridge is inactive.");
+    }
+    if (commandDiags.stalePendingCount > 0) {
+      warnings.push(`Detected ${commandDiags.stalePendingCount} stale pending commands. Run cleanup before opening dashboard bridge.`);
     }
     if (typeof bridgeRaw?.lastError === "string" && bridgeRaw.lastError.length > 0) {
       warnings.push(`Bridge error: ${bridgeRaw.lastError}`);
@@ -148,7 +169,14 @@ export async function GET() {
       bridgeStreamState: typeof bridgeRaw?.streamState === "string" ? bridgeRaw.streamState : null,
       latestAuditLogsCount: recentAuditLogs.length,
       firestoreOk,
-      polling: getTelegramPollingDiagnostics(),
+      commands: commandDiags,
+      polling: {
+        ...pollingDiags,
+        isLocalPollingEnabled,
+        dropPendingUpdatesOnStart: TelegramEnvConfigService.shouldDropPendingUpdatesOnStart(),
+        ignoreUpdatesBeforeStart: TelegramEnvConfigService.shouldIgnoreUpdatesBeforeStart(),
+        maxUpdatesPerPoll: TelegramEnvConfigService.getMaxUpdatesPerPoll(),
+      },
       pollingBoot,
       unconfiguredReasons: runtimeMode === "unconfigured" ? unconfiguredReasons : [],
       warnings,

@@ -42,6 +42,13 @@ Ensure the following environment variables are set in Vercel for the `develop` b
 - `TELEGRAM_WEBHOOK_SECRET`: Secure random string
 - `TELEGRAM_ALLOWED_USER_IDS`: IDs of staging testers
 - `TELEGRAM_ALLOWED_GROUPS`: IDs of staging groups
+- `TELEGRAM_ENABLE_GROUP_MODE`: `false`
+- `TELEGRAM_LOCAL_POLLING_ENABLED`: `false` (default)
+- `TELEGRAM_DROP_PENDING_UPDATES_ON_POLLING_START`: `true`
+- `TELEGRAM_IGNORE_UPDATES_BEFORE_START`: `true`
+- `TELEGRAM_MAX_UPDATES_PER_POLL`: `10`
+- `TELEGRAM_COMMAND_TTL_MS`: `120000`
+- `TELEGRAM_COMMAND_MAX_AGE_MS`: `300000`
 
 **Important:** Redeploy without cache after environment variable changes.
 
@@ -59,7 +66,13 @@ Ensure the following environment variables are set in Vercel for the `develop` b
      - `firestoreOk`: `true`
      - `bridgeAlive`: `true` (only if a dashboard tab is open)
 
-2. **Setup**:
+2. **Command Queue Cleanup**:
+   - Before activating a bridge or after a long downtime, clear the backlog.
+   - Run: `curl -X POST https://<staging-url>/api/telegram/commands/cleanup -H "X-Internal-Secret: <your-secret>" -d '{"mode": "stale"}'`
+   - Use `{"mode": "all"}` for a fresh start.
+   - Verify `commands.stalePendingCount` is 0 in diagnostics.
+
+3. **Setup**:
    - Run `POST /api/telegram/setup` with `{"mode": "webhook"}`
    - Verify:
      - `webhookRegistered`: `true`

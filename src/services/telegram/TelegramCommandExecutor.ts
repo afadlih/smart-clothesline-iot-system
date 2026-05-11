@@ -64,15 +64,17 @@ export async function executeTelegramCommand(input: {
       if (directResult.ok) {
         let commandId = "-";
         try {
-           commandId = await TelegramOpsService.enqueueCommand({
+           commandId = await TelegramOpsService.recordCommandResult({
              command: input.command,
+             status: "done",
              chatId: input.chatId,
              userId: input.userId,
              username: input.username,
+             result: "Dispatched directly to MQTT from server",
+             dispatchMode: "server-direct",
            });
-           await TelegramOpsService.markCommandStatus(commandId, "done", "Dispatched directly to MQTT from server");
         } catch (e) {
-           logger.warn("telegram", "Failed to write done status to queue", e);
+           logger.warn("telegram", "Failed to record done status for direct command", e);
         }
 
         return {

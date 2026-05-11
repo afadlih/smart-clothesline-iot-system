@@ -443,24 +443,40 @@ async function updateBridgeHeartbeat(): Promise<void> {
 }
 
 async function processPendingTelegramCommands(): Promise<void> {
-    const pending = await TelegramOpsService.fetchPendingCommands(5);
+    try {
+        await TelegramOpsService.expireStalePendingCommands();
+    } catch {
+        // Continue even if cleanup fails
+    }
+
+    const pending = await TelegramOpsService.fetchPendingCommands(2);
     if (pending.length === 0) return;
 
     for (const commandJob of pending) {
         try {
-            const isMqttConnected = mqttService.isConnected();
-            logger.info("telegram", "Telegram bridge polling pending commands", {
-                count: pending.length,
-                commandId: commandJob.id,
-                command: commandJob.command,
-                mqttConnected: isMqttConnected
-            });
+            const now = Date.now();
+            const minCreatedAt = now - 5 * 60 * 1000;
+            const isStale = (commandJob.createdAt < minCreatedAt) || (commandJob.expiresAt && commandJob.expiresAt < now);
 
-            if (!isMqttConnected) {
-                lastBridgeError = "Dashboard bridge waiting for MQTT connection";
-                await TelegramOpsService.markCommandStatus(commandJob.id, "pending", lastBridgeError);
+            if (isStale) {
+                await TelegramOpsService.markCommandStatus(commandJob.id, "failed", "Command expired before bridge dispatch");
                 continue;
             }
+
+            const isMqttConnected = mqttService.isConnected();
+            if (!isMqttConnected) {
+                lastBridgeError = "Dashboard bridge waiting for MQTT connection";
+                // Do not update doc if we already updated it recently to avoid write spam
+                if (commandJob.updatedAt < now - 5000) {
+                   await TelegramOpsService.markCommandStatus(commandJob.id, "pending", lastBridgeError);
+                }
+                continue;
+            }
+
+            logger.info("telegram", "Telegram bridge processing command", {
+                commandId: commandJob.id,
+                command: commandJob.command
+            });
 
             await TelegramOpsService.markCommandStatus(commandJob.id, "processing", "Processing by dashboard bridge");
             let dispatched = false;

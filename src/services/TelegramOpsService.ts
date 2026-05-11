@@ -20,6 +20,10 @@ const TELEGRAM_CONFIG_DOC = "global";
 const TELEGRAM_COMMAND_COLLECTION = "telegram_commands";
 const TELEGRAM_AUDIT_COLLECTION = "telegram_audit";
 
+export const TELEGRAM_COMMAND_TTL_MS = 2 * 60 * 1000;
+export const TELEGRAM_COMMAND_MAX_AGE_MS = 5 * 60 * 1000;
+export const TELEGRAM_BRIDGE_MAX_COMMANDS_PER_TICK = 2;
+
 export type TelegramRole = "Viewer" | "Operator" | "Admin";
 
 export type TelegramAuthorizedUser = {
@@ -61,6 +65,11 @@ export type TelegramCommandJob = {
   username?: string;
   createdAt: number;
   updatedAt: number;
+  expiresAt?: number;
+  dispatchMode?: "bridge-fallback" | "server-direct";
+  attemptCount?: number;
+  directDispatchAt?: number;
+  directDispatchResult?: string;
   result?: string;
 };
 
@@ -128,6 +137,38 @@ export class TelegramOpsService {
     );
   }
 
+  static async recordCommandResult(input: {
+    command: TelegramCommandJob["command"];
+    status: "done" | "failed";
+    chatId?: number;
+    userId: number;
+    username?: string;
+    result: string;
+    dispatchMode: "server-direct" | "bridge-fallback";
+  }): Promise<string> {
+    try {
+      const now = Date.now();
+      const ref = await addDoc(collection(db, TELEGRAM_COMMAND_COLLECTION), {
+        command: input.command,
+        status: input.status,
+        source: "telegram",
+        chatId: typeof input.chatId === "number" ? input.chatId : null,
+        userId: input.userId,
+        username: input.username ?? null,
+        createdAt: now,
+        updatedAt: now,
+        result: input.result,
+        dispatchMode: input.dispatchMode,
+        directDispatchAt: input.dispatchMode === "server-direct" ? now : null,
+        directDispatchResult: input.dispatchMode === "server-direct" ? input.result : null,
+      });
+      return ref.id;
+    } catch (error) {
+      logger.error("telegram", "Failed to record command result", error);
+      throw error;
+    }
+  }
+
   static async enqueueCommand(input: {
     command: TelegramCommandJob["command"];
     chatId?: number;
@@ -145,6 +186,9 @@ export class TelegramOpsService {
         username: input.username ?? null,
         createdAt: now,
         updatedAt: now,
+        expiresAt: now + TELEGRAM_COMMAND_TTL_MS,
+        dispatchMode: "bridge-fallback",
+        attemptCount: 0,
       });
       return ref.id;
     } catch (error) {
@@ -161,29 +205,45 @@ export class TelegramOpsService {
   }
 
   static async fetchPendingCommands(maxItems: number = 5): Promise<TelegramCommandJob[]> {
+    const safeMax = Math.min(maxItems, 5);
+    const now = Date.now();
+    const minCreatedAt = now - TELEGRAM_COMMAND_MAX_AGE_MS;
+
     let snapshot;
     try {
       const q = query(
         collection(db, TELEGRAM_COMMAND_COLLECTION),
         where("status", "==", "pending"),
+        where("createdAt", ">=", minCreatedAt),
         orderBy("createdAt", "asc"),
-        limit(maxItems),
+        limit(safeMax),
       );
       snapshot = await getDocs(q);
     } catch {
+      // Fallback if index missing or other error
       const fallbackQuery = query(
         collection(db, TELEGRAM_COMMAND_COLLECTION),
         where("status", "==", "pending"),
-        limit(Math.max(maxItems * 3, 20)),
+        limit(20),
       );
       snapshot = await getDocs(fallbackQuery);
     }
+
     const items: TelegramCommandJob[] = [];
     for (const item of snapshot.docs) {
       const value = item.data() as Partial<TelegramCommandJob>;
+      
+      // Client side filter to be sure
+      const createdAt = typeof value.createdAt === "number" ? value.createdAt : 0;
+      if (createdAt < minCreatedAt) continue;
+      
+      const expiresAt = typeof value.expiresAt === "number" ? value.expiresAt : 0;
+      if (expiresAt > 0 && expiresAt < now) continue;
+
       if (!isCommandJobCommand(value.command)) {
         continue;
       }
+
       items.push({
         id: item.id,
         command: value.command,
@@ -198,14 +258,52 @@ export class TelegramOpsService {
         chatId: typeof value.chatId === "number" ? value.chatId : undefined,
         userId: typeof value.userId === "number" ? value.userId : 0,
         username: typeof value.username === "string" ? value.username : undefined,
-        createdAt: typeof value.createdAt === "number" ? value.createdAt : Date.now(),
+        createdAt: createdAt || Date.now(),
         updatedAt: typeof value.updatedAt === "number" ? value.updatedAt : Date.now(),
+        expiresAt: value.expiresAt,
+        dispatchMode: value.dispatchMode,
+        attemptCount: value.attemptCount,
         result: typeof value.result === "string" ? value.result : undefined,
       });
     }
     return items
       .sort((a, b) => a.createdAt - b.createdAt)
-      .slice(0, maxItems);
+      .slice(0, safeMax);
+  }
+
+  static async expireStalePendingCommands(options?: { maxAgeMs?: number }): Promise<number> {
+    const now = Date.now();
+    const maxAge = options?.maxAgeMs ?? TELEGRAM_COMMAND_MAX_AGE_MS;
+    const minCreatedAt = now - maxAge;
+
+    const q = query(
+      collection(db, TELEGRAM_COMMAND_COLLECTION),
+      where("status", "==", "pending"),
+      limit(50),
+    );
+
+    const snapshot = await getDocs(q);
+    let expiredCount = 0;
+
+    for (const item of snapshot.docs) {
+      const value = item.data() as Partial<TelegramCommandJob>;
+      const createdAt = typeof value.createdAt === "number" ? value.createdAt : 0;
+      const expiresAt = typeof value.expiresAt === "number" ? value.expiresAt : 0;
+
+      const isStaleByAge = createdAt > 0 && createdAt < minCreatedAt;
+      const isStaleByExpiry = expiresAt > 0 && expiresAt < now;
+
+      if (isStaleByAge || isStaleByExpiry) {
+        await updateDoc(item.ref, {
+          status: "failed",
+          result: "Command expired before dispatch",
+          updatedAt: now,
+        });
+        expiredCount++;
+      }
+    }
+
+    return expiredCount;
   }
 
   static async markCommandStatus(
@@ -257,5 +355,62 @@ export class TelegramOpsService {
         username: typeof value.username === "string" ? value.username : undefined,
       };
     });
+  }
+
+  static async getDiagnosticsSnapshot() {
+    const now = Date.now();
+    const minCreatedAt = now - TELEGRAM_COMMAND_MAX_AGE_MS;
+
+    const allPending = await getDocs(query(
+      collection(db, TELEGRAM_COMMAND_COLLECTION),
+      where("status", "==", "pending"),
+      limit(100)
+    ));
+
+    let staleCount = 0;
+    let oldestAgeMs = 0;
+
+    for (const d of allPending.docs) {
+      const data = d.data() as Partial<TelegramCommandJob>;
+      const createdAt = data.createdAt ?? 0;
+      if (createdAt > 0) {
+        if (createdAt < minCreatedAt) staleCount++;
+        const age = now - createdAt;
+        if (age > oldestAgeMs) oldestAgeMs = age;
+      }
+    }
+
+    return {
+      pendingCount: allPending.size,
+      stalePendingCount: staleCount,
+      oldestPendingAgeMs: oldestAgeMs,
+      commandTtlMs: TELEGRAM_COMMAND_TTL_MS,
+      commandMaxAgeMs: TELEGRAM_COMMAND_MAX_AGE_MS,
+    };
+  }
+
+  static async cleanupAllPending(options?: { reason?: string }): Promise<number> {
+    const now = Date.now();
+    const reason = options?.reason ?? "Manual cleanup triggered";
+
+    const q = query(
+      collection(db, TELEGRAM_COMMAND_COLLECTION),
+      where("status", "==", "pending"),
+      limit(200)
+    );
+
+    const snapshot = await getDocs(q);
+    let count = 0;
+
+    for (const d of snapshot.docs) {
+      await updateDoc(d.ref, {
+        status: "failed",
+        result: reason,
+        updatedAt: now,
+      });
+      count++;
+    }
+
+    return count;
   }
 }

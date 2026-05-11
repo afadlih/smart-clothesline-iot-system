@@ -40,7 +40,10 @@ service cloud.firestore {
         && data.status in ['pending', 'processing', 'done', 'failed']
         && isNumber(data.userId)
         && isValidTimestampMs(data.createdAt)
-        && isValidTimestampMs(data.updatedAt);
+        && isValidTimestampMs(data.updatedAt)
+        && (data.expiresAt == null || isValidTimestampMs(data.expiresAt))
+        && (data.dispatchMode == null || data.dispatchMode in ['bridge-fallback', 'server-direct'])
+        && (data.attemptCount == null || isNumber(data.attemptCount));
     }
 
     match /sensor_data/{docId} {
