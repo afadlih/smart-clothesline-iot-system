@@ -36,6 +36,7 @@ export type SensorMessage = {
   temperature: number;
   humidity: number;
   light: number;
+  rainVal: number;
   rain: boolean;
   status?: "OPEN" | "CLOSED";
   mode?: "AUTO" | "MANUAL";

@@ -1,5 +1,6 @@
 "use client";
 
+import { Activity } from "lucide-react";
 import type { OperationalHealth } from "@/services/DeviceHealthService";
 
 type Props = {
@@ -75,9 +76,12 @@ export default function OperationalHealthPanel({ health, compact = false }: Prop
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
-          Operational Health
-        </h3>
+        <div className="flex items-center gap-2">
+          <Activity className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">
+            Operational Health
+          </h3>
+        </div>
         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${badgeClassForStream(health.streamState)}`}>
           {health.streamState}
         </span>

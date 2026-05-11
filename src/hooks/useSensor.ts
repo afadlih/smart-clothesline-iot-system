@@ -45,6 +45,7 @@ type MqttSensorPayload = {
     temperature: number;
     humidity: number;
     light: number;
+    rainVal: number;
     rain: boolean;
     timestamp?: number;
     heartbeat?: number;
@@ -391,6 +392,7 @@ function parseSensorPayload(raw: string, receivedAt: number): MqttSensorPayload 
             temperature: normalized.value.temperature,
             humidity: normalized.value.humidity,
             light: normalized.value.light,
+            rainVal: normalized.value.rainVal,
             rain: normalized.value.rain,
             timestamp: normalized.value.timestamp,
             heartbeat: normalized.value.heartbeat,
@@ -709,6 +711,7 @@ function mapToSensorData(message: MqttSensorPayload): SensorData {
         temp: message.temperature,
         humidity: message.humidity,
         light: message.light,
+        rainVal: message.rainVal,
         rain: message.rain ? 1 : 0,
         status: statusFromSensor,
         timestamp: new Date(timestamp).toISOString(),
@@ -1049,6 +1052,7 @@ function startStreamIfNeeded(): void {
                     temperature: payload.temperature,
                     humidity: payload.humidity,
                     light: payload.light,
+                    rainVal: payload.rainVal,
                     rain: payload.rain,
                 },
             });

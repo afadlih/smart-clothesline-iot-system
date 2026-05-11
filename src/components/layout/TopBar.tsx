@@ -5,15 +5,15 @@ import { useRouter } from "next/navigation";
 import {
   Menu,
   Bell,
-  Gift,
   Moon,
   Sun,
   ChevronDown,
   User,
   RefreshCcw,
   Cpu,
-  ShieldCheck,
   Clock,
+  Monitor,
+  Shield,
 } from "lucide-react";
 import StatusBadge from "@/components/layout/StatusBadge";
 import { useSystemState } from "@/hooks/useSystemState";
@@ -198,10 +198,10 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
   }
 
   return (
-    <header className={`sticky top-0 z-40 bg-[#eff0f3] dark:bg-[#0a1123] px-2 py-3 md:px-4 lg:px-6 transition-all duration-300 ${
+    <header className={`sticky top-0 z-40 bg-white dark:bg-slate-900 transition-all duration-300 ${
       isMobileMenuOpen ? 'md:hidden blur-sm' : ''
     }`}>
-      <div className="flex items-center justify-between gap-2 md:gap-4 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 md:px-4 shadow-sm backdrop-blur transition-colors duration-300 dark:border-slate-800 dark:bg-slate-900/90">
+      <div className="flex items-center justify-between gap-2 md:gap-4 px-4 py-3 md:px-6 lg:px-8 transition-colors duration-300 border-b border-slate-200 dark:border-slate-800">
         {/* Left Section */}
         <div className="flex flex-shrink-0 items-center gap-1 sm:gap-2">
           <button
@@ -214,7 +214,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
 
           <div className="flex min-w-0 items-center gap-2">
             <div className="flex h-9 w-9 md:h-10 md:w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 shadow-sm dark:bg-indigo-500/10 dark:text-indigo-200">
-              <Gift className="h-4 w-4 md:h-5 md:w-5" aria-hidden="true" />
+              <Cpu className="h-4 w-4 md:h-5 md:w-5" aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <p className="truncate text-xs md:text-sm font-semibold text-gray-900 dark:text-slate-100">
@@ -230,7 +230,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
         {/* Center Section */}
         <div className="hidden flex-1 items-center justify-center gap-16 lg:flex">
           <StatusBadge
-            icon={<Cpu className="h-5 w-5" aria-hidden="true" />}
+            icon={<Monitor className="h-5 w-5" aria-hidden="true" />}
             label="Device"
             value={deviceStatus}
             valueClass={deviceValueClass}
@@ -258,7 +258,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
           <div className="h-8 border-l border-slate-200 dark:border-slate-700" />
 
           <StatusBadge
-            icon={<ShieldCheck className="h-5 w-5" aria-hidden="true" />}
+            icon={<Shield className="h-5 w-5" aria-hidden="true" />}
             label="System"
             value={systemState}
             valueClass={systemValueClass}
