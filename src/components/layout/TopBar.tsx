@@ -14,11 +14,13 @@ import {
   Clock,
   Monitor,
   Shield,
+  LogOut,
 } from "lucide-react";
 import StatusBadge from "@/components/layout/StatusBadge";
 import { useSystemState } from "@/hooks/useSystemState";
 import { useNotificationEngine } from "@/hooks/useNotificationEngine";
 import { useThemeStore } from "@/stores/themeStore";
+import { useAuth } from "@/hooks/useAuth";
 
 interface TopBarProps {
   onHamburgerClick: () => void;
@@ -40,6 +42,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [profileName, setProfileName] = useState("Operator");
+  const { user, signOutUser, loading: authLoading } = useAuth();
 
   const notificationRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -66,6 +69,15 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
       setProfileName("Operator");
     }
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    const resolvedName = user.displayName || user.email || "Operator";
+    setProfileName(resolvedName);
+  }, [user]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -129,6 +141,12 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
     setIsUserMenuOpen(false);
     setIsNotificationOpen(false);
     router.push("/settings?tab=profile");
+  };
+
+  const handleSignOut = async () => {
+    setIsUserMenuOpen(false);
+    await signOutUser();
+    router.replace("/auth/login");
   };
 
   const profileInitials =
@@ -381,6 +399,16 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
                 >
                   <RefreshCcw className="h-4 w-4" />
                   Reset Local Preferences
+                </button>
+                <hr className="my-1 border-gray-200 dark:border-slate-800" />
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  disabled={authLoading}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-300 dark:hover:bg-red-900/20"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sign Out
                 </button>
               </div>
             )}
