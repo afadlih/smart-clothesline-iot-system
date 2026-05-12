@@ -28,14 +28,26 @@ const defaults: AutomationSettings = {
 };
 
 const RAIN_THRESHOLD_OFFSET = 200;
-const LIGHT_THRESHOLD_OFFSET = 200;
+const LIGHT_THRESHOLD_OFFSET = 500;
 const MIN_RAIN_THRESHOLD = 0;
-const MAX_LIGHT_THRESHOLD = 4095;
+const MAX_RAIN_THRESHOLD = 4095;
+const MIN_LIGHT_THRESHOLD = 0;
+const MAX_LIGHT_THRESHOLD = 10000;
 
-function calculateAutoThreshold(sensor: {rainVal: number, light: number}) {
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function calculateAutoThreshold(sensor: {
+  rainVal?: number;
+  rainRaw?: number;
+  light: number;
+}) {
+  const rainRaw = sensor.rainVal ?? sensor.rainRaw ?? 4095;
+
   return {
-    rainThreshold: Math.max(sensor.rainVal - RAIN_THRESHOLD_OFFSET, MIN_RAIN_THRESHOLD),
-    lightThreshold: Math.min(sensor.light + LIGHT_THRESHOLD_OFFSET, MAX_LIGHT_THRESHOLD)
+    rainThreshold: clamp(rainRaw - RAIN_THRESHOLD_OFFSET, MIN_RAIN_THRESHOLD, MAX_RAIN_THRESHOLD),
+    lightThreshold: clamp(sensor.light - LIGHT_THRESHOLD_OFFSET, MIN_LIGHT_THRESHOLD, MAX_LIGHT_THRESHOLD),
   };
 }
 
@@ -136,7 +148,7 @@ export default function AutomationPage() {
                 </label>
                 <label className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Light Threshold</p>
-                  <input type="range" min={500} max={4095} step={50} value={settings.lightThreshold} onChange={(e) => setSettings((p) => ({ ...p, lightThreshold: Number(e.target.value) }))} className="mt-2 w-full accent-emerald-600" />
+                  <input type="range" min={500} max={10000} step={50} value={settings.lightThreshold} onChange={(e) => setSettings((p) => ({ ...p, lightThreshold: Number(e.target.value) }))} className="mt-2 w-full accent-emerald-600" />
                   <p className="mt-1 text-xs text-slate-500">{settings.lightThreshold}</p>
                 </label>
               </div>
@@ -147,6 +159,7 @@ export default function AutomationPage() {
               </div>
               <div className="mt-4">
                 <button onClick={applyAutoThreshold} className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">Auto</button>
+                <p className="mt-2 text-xs text-slate-500">Auto threshold uses current sensor values. Light uses normalized 0..10000 scale.</p>
               </div>
             </div>
 

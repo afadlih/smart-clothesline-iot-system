@@ -1,17 +1,17 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { doc, getDoc } from "firebase/firestore";
 import { TelegramEnvConfigService } from "@/services/telegram/TelegramEnvConfigService";
 import {
   getWebhookEnvironmentLabel,
   isTelegramWebhookEnabled,
-  resolveAppBaseUrl,
-  resolveTelegramWebhookUrl,
 } from "@/services/telegram/TelegramWebhookUrlResolver";
 import { TelegramBotApiService } from "@/services/TelegramBotApiService";
 import { TelegramOpsService } from "@/services/TelegramOpsService";
 import { logger } from "@/lib/logger";
 import { ensureTelegramPollingStarted, getTelegramPollingDiagnostics } from "@/lib/telegramSingleton";
 import { db } from "@/lib/firebase";
+import { getServerMqttCommandPublisherStatus } from "@/services/mqtt/ServerMqttCommandPublisher";
+import { TelegramWebhookSyncService } from "@/services/telegram/TelegramWebhookSyncService";
 
 export const dynamic = "force-dynamic";
 
@@ -22,45 +22,39 @@ function safeMillis(value: unknown): number | null {
   return null;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const syncStatus = await TelegramWebhookSyncService.getStatus(request);
+    
     const botToken = TelegramEnvConfigService.getBotToken();
-    const defaultChatId = TelegramEnvConfigService.getDefaultChatId();
     const allowedUserIds = TelegramEnvConfigService.getAllowedUserIds();
     const allowedGroupIds = TelegramEnvConfigService.getAllowedGroupIds();
     const groupModeEnabled = TelegramEnvConfigService.isGroupModeEnabled();
     const runtimeMode = TelegramEnvConfigService.getRuntimeMode();
     const webhookEnabled = isTelegramWebhookEnabled();
     const vercelEnv = getWebhookEnvironmentLabel();
-    const appBaseUrl = resolveAppBaseUrl();
-    const resolvedWebhookUrl = resolveTelegramWebhookUrl();
-    const botConfigured = TelegramEnvConfigService.isConfigured();
+    const appBaseUrl = syncStatus.appBaseUrl;
+    const botConfigured = syncStatus.botConfigured;
 
     let botInfo: unknown = null;
-    let webhookInfo: unknown = null;
-    let telegramWebhookUrl: string | null = null;
     let pollingBoot: { ok: boolean; started: boolean; reason: string } | null = null;
 
     if (botToken) {
       botInfo = await TelegramBotApiService.getMe(botToken).catch((err: unknown) => ({ error: String(err) }));
-      webhookInfo = await TelegramBotApiService.getWebhookInfo(botToken).catch((err: unknown) => ({ error: String(err) }));
       if (runtimeMode === "polling") {
         pollingBoot = await ensureTelegramPollingStarted().catch(() => null);
       }
-      if (
-        webhookInfo &&
-        typeof webhookInfo === "object" &&
-        "ok" in webhookInfo &&
-        (webhookInfo as { ok?: boolean }).ok &&
-        "result" in webhookInfo
-      ) {
-        const result = (webhookInfo as { result?: { url?: string } }).result;
-        telegramWebhookUrl = typeof result?.url === "string" ? result.url : null;
-      }
     }
 
-    const pendingCommands = await TelegramOpsService.fetchPendingCommands(10).catch(() => []);
+    const pendingCommands = await TelegramOpsService.fetchPendingCommands(5).catch(() => []);
     const recentAuditLogs = await TelegramOpsService.getRecentAuditLogs(10).catch(() => []);
+    const commandDiags = await TelegramOpsService.getDiagnosticsSnapshot().catch(() => ({
+      pendingCount: 0,
+      stalePendingCount: 0,
+      oldestPendingAgeMs: 0,
+      commandTtlMs: 0,
+      commandMaxAgeMs: 0,
+    }));
 
     let firestoreOk = false;
     try {
@@ -75,46 +69,61 @@ export async function GET() {
     const bridgeLastSeenAt = safeMillis(bridgeRaw?.lastSeenAt);
     const bridgeAgeMs = bridgeLastSeenAt ? Math.max(0, Date.now() - bridgeLastSeenAt) : null;
     const bridgeAlive = bridgeAgeMs !== null && bridgeAgeMs <= 15_000;
-    const webhookUrlMatch = Boolean(telegramWebhookUrl && telegramWebhookUrl === resolvedWebhookUrl);
+    const mqttPublisherStatus = getServerMqttCommandPublisherStatus();
+    const directMqttConfigured = mqttPublisherStatus.configured;
+    const telegramCommandMode = directMqttConfigured ? "server-direct-with-bridge-fallback" : "browser-bridge-only";
 
-    const warnings: string[] = [];
+    const warnings = [...syncStatus.warnings];
     const unconfiguredReasons: string[] = [];
+    const pollingDiags = getTelegramPollingDiagnostics();
+    const isLocalPollingEnabled = TelegramEnvConfigService.isLocalPollingEnabled();
 
     if (!botConfigured) unconfiguredReasons.push("missing TELEGRAM_BOT_TOKEN");
     if (webhookEnabled && !process.env.APP_BASE_URL) unconfiguredReasons.push("APP_BASE_URL missing");
     if (vercelEnv !== "development" && !webhookEnabled) unconfiguredReasons.push("webhook disabled on Vercel");
-    if (webhookEnabled && telegramWebhookUrl && !webhookUrlMatch) unconfiguredReasons.push("webhook URL mismatch");
-    if (allowedUserIds.length === 0) unconfiguredReasons.push("allowed user missing");
+    if (webhookEnabled && !syncStatus.webhookUrlMatch) unconfiguredReasons.push("webhook URL mismatch");
+    
+    if (!directMqttConfigured) {
+      warnings.push("Server-side MQTT command publish is not configured. Telegram hardware commands will fall back to dashboard bridge.");
+    }
 
-    if (vercelEnv === "preview" && !webhookEnabled) {
-      warnings.push(
-        "Telegram webhook is disabled for this preview deployment. Commands will not be processed unless using a separate staging bot with webhook enabled.",
-      );
+    const outboundTelegramCanWork = botConfigured;
+    const inboundCommandsCanWork = botConfigured && (runtimeMode === "webhook" ? (webhookEnabled && syncStatus.webhookUrlMatch) : true);
+
+    let commandBlockerReason: string | null = null;
+    if (botConfigured && !inboundCommandsCanWork) {
+      if (runtimeMode === "webhook" && !syncStatus.webhookUrlMatch) {
+        commandBlockerReason = "Bot can send notifications, but commands cannot reach this deployment because Telegram has no webhook registered OR the URL mismatch.";
+      }
     }
-    if (!defaultChatId) {
-      warnings.push("TELEGRAM_CHAT_ID is missing. Direct notification target is not configured.");
-    }
-    if (pendingCommands.length > 0 && !bridgeAlive) {
-      warnings.push("Command queue has pending items while dashboard bridge is inactive.");
-    }
-    if (typeof bridgeRaw?.lastError === "string" && bridgeRaw.lastError.length > 0) {
-      warnings.push(`Bridge error: ${bridgeRaw.lastError}`);
-    }
+
+    const webhookSelfTestUrl = `${appBaseUrl}/api/telegram/webhook-self-test`;
+    const webhookSyncEndpoint = `${appBaseUrl}/api/telegram/webhook-sync`;
 
     return NextResponse.json({
+      ...syncStatus,
       ok: true,
       runtimeMode,
       vercelEnv,
-      webhookEnabled,
-      appBaseUrl,
-      resolvedWebhookUrl,
-      telegramWebhookUrl,
-      webhookUrlMatch,
+      webhookSelfTestUrl,
+      webhookSyncEndpoint,
+      outboundTelegramCanWork,
+      inboundCommandsCanWork,
+      commandReceivePath: "telegram-webhook -> server-direct-mqtt -> device",
+      commandBlockerReason,
       botConfigured,
+      directMqttConfigured,
+      directMqttBrokerConfigured: Boolean(mqttPublisherStatus.brokerUrlMasked && mqttPublisherStatus.brokerUrlMasked !== "unconfigured"),
+      directMqttUsernameConfigured: mqttPublisherStatus.hasUsername,
+      directMqttPasswordConfigured: mqttPublisherStatus.hasPassword,
+      directMqttCommandTopic: mqttPublisherStatus.commandTopic,
+      directMqttTargetDeviceConfigured: mqttPublisherStatus.targetDeviceId !== null,
+      telegramCommandMode,
       allowedUserIdsCount: allowedUserIds.length,
       allowedGroupsCount: allowedGroupIds.length,
       groupModeEnabled,
       pendingCommandsCount: pendingCommands.length,
+      pollingStatus: pollingDiags.status,
       bridgeActive: Boolean(bridgeRaw?.bridgeActive),
       bridgeAlive,
       bridgeLastSeenAt,
@@ -125,12 +134,18 @@ export async function GET() {
       bridgeStreamState: typeof bridgeRaw?.streamState === "string" ? bridgeRaw.streamState : null,
       latestAuditLogsCount: recentAuditLogs.length,
       firestoreOk,
-      polling: getTelegramPollingDiagnostics(),
+      commands: commandDiags,
+      polling: {
+        ...pollingDiags,
+        isLocalPollingEnabled,
+        dropPendingUpdatesOnStart: TelegramEnvConfigService.shouldDropPendingUpdatesOnStart(),
+        ignoreUpdatesBeforeStart: TelegramEnvConfigService.shouldIgnoreUpdatesBeforeStart(),
+        maxUpdatesPerPoll: TelegramEnvConfigService.getMaxUpdatesPerPoll(),
+      },
       pollingBoot,
       unconfiguredReasons: runtimeMode === "unconfigured" ? unconfiguredReasons : [],
       warnings,
       botInfo,
-      webhookInfo,
     });
   } catch (error) {
     logger.error("telegram", "Diagnostics failed", error);

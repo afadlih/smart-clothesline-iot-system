@@ -10,7 +10,8 @@ Run this checklist before release promotion.
 
 ## Broker access control
 
-- Verify broker ACL for browser credentials is low privilege.
+- Verify broker ACL for browser credentials is low privilege (subscribe-only or specific limited publish).
+- Verify server-side credentials have appropriate publish access to the command topic.
 - Verify device credentials are separate from browser credentials.
 - Verify no wildcard ACL (`smart-clothesline/#`) for browser identities.
 
@@ -29,5 +30,6 @@ Run this checklist before release promotion.
 ## Logging and diagnostics
 
 - Verify Telegram token is never printed in logs.
-- Verify MQTT credentials are never printed in logs.
+- Verify MQTT credentials (both browser and server-side) are never printed in logs.
 - Verify diagnostics endpoints never expose secrets.
+- Verify INTERNAL_COMMAND_SECRET is strong and rotated if exposed.

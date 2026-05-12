@@ -59,12 +59,21 @@ export async function ensureTelegramPollingStarted(): Promise<{
     state.started = false;
   }
 
-  const webhookDeleted = await TelegramBotApiService.deleteWebhook(token);
-  logger.info("telegram", "Webhook deleted before polling", { webhookDeleted });
+  const webhookDeleted = await TelegramBotApiService.deleteWebhook(token, {
+    dropPendingUpdates: TelegramEnvConfigService.shouldDropPendingUpdatesOnStart(),
+  });
+  logger.info("telegram", "Webhook deleted before polling", { 
+    webhookDeleted,
+    dropPendingUpdates: TelegramEnvConfigService.shouldDropPendingUpdatesOnStart() 
+  });
 
   state.started = true;
   state.tokenFingerprint = fp;
-  void TelegramBotApiService.startPolling(token);
+  
+  void TelegramBotApiService.startPolling(token, {
+    ignoreBeforeStart: TelegramEnvConfigService.shouldIgnoreUpdatesBeforeStart(),
+    maxUpdates: TelegramEnvConfigService.getMaxUpdatesPerPoll(),
+  });
 
   return { ok: true, started: true, reason: "Polling started" };
 }

@@ -1,5 +1,5 @@
 import mqtt, { type MqttClient } from "mqtt";
-import { SensorValidator, ValidationError } from "./ValidationService";
+import { SensorValidationLayer, type RawTelemetryPayload } from "./SensorValidationLayer";
 import { logger } from "@/lib/logger";
 
 export const MQTT_BROKER_URL = process.env.NEXT_PUBLIC_MQTT_BROKER_URL ?? "wss://broker.hivemq.com:8884/mqtt";
@@ -36,7 +36,10 @@ export type SensorMessage = {
   temperature: number;
   humidity: number;
   light: number;
-  rainVal: number;
+  lightRaw?: number;
+  lightThreshold?: number;
+  rainVal?: number;
+  rainRaw?: number;
   rain: boolean;
   status?: "OPEN" | "CLOSED";
   mode?: "AUTO" | "MANUAL";
@@ -143,16 +146,25 @@ class MqttService {
         return null;
       }
 
-      // Validate using Zod schema
-      try {
-        const validated = SensorValidator.validate(data);
-        return validated as SensorMessage;
-      } catch (validationError) {
-        if (validationError instanceof ValidationError) {
-          SensorValidator.logValidationError(validationError);
-        } else {
-          logger.warn("mqtt", "Validation error", validationError);
-        }
+      // Validate using SensorValidationLayer
+      const validation = SensorValidationLayer.validate(data as RawTelemetryPayload, Date.now());
+      if (validation.ok) {
+        return {
+          deviceId: validation.value.deviceId,
+          temperature: validation.value.temperature,
+          humidity: validation.value.humidity,
+          light: validation.value.light,
+          lightRaw: validation.value.lightRaw,
+          lightThreshold: validation.value.lightThreshold,
+          rainVal: validation.value.rainVal,
+          rainRaw: validation.value.rainRaw,
+          rain: validation.value.rain,
+          status: validation.value.deviceState === "RESTARTING" ? undefined : validation.value.deviceState,
+          mode: validation.value.mode,
+          timestamp: validation.value.timestamp,
+        };
+      } else {
+        logger.warn("mqtt", "Validation error", validation.reason);
         return null;
       }
     } catch (error) {

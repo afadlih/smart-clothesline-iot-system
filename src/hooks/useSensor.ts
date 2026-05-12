@@ -45,7 +45,10 @@ type MqttSensorPayload = {
     temperature: number;
     humidity: number;
     light: number;
-    rainVal: number;
+    lightRaw?: number;
+    lightThreshold?: number;
+    rainVal?: number;
+    rainRaw?: number;
     rain: boolean;
     timestamp?: number;
     heartbeat?: number;
@@ -392,7 +395,10 @@ function parseSensorPayload(raw: string, receivedAt: number): MqttSensorPayload 
             temperature: normalized.value.temperature,
             humidity: normalized.value.humidity,
             light: normalized.value.light,
+            lightRaw: normalized.value.lightRaw,
+            lightThreshold: normalized.value.lightThreshold,
             rainVal: normalized.value.rainVal,
+            rainRaw: normalized.value.rainRaw,
             rain: normalized.value.rain,
             timestamp: normalized.value.timestamp,
             heartbeat: normalized.value.heartbeat,
@@ -445,11 +451,41 @@ async function updateBridgeHeartbeat(): Promise<void> {
 }
 
 async function processPendingTelegramCommands(): Promise<void> {
-    const pending = await TelegramOpsService.fetchPendingCommands(5);
+    try {
+        await TelegramOpsService.expireStalePendingCommands();
+    } catch {
+        // Continue even if cleanup fails
+    }
+
+    const pending = await TelegramOpsService.fetchPendingCommands(2);
     if (pending.length === 0) return;
 
     for (const commandJob of pending) {
         try {
+            const now = Date.now();
+            const minCreatedAt = now - 5 * 60 * 1000;
+            const isStale = (commandJob.createdAt < minCreatedAt) || (commandJob.expiresAt && commandJob.expiresAt < now);
+
+            if (isStale) {
+                await TelegramOpsService.markCommandStatus(commandJob.id, "failed", "Command expired before bridge dispatch");
+                continue;
+            }
+
+            const isMqttConnected = mqttService.isConnected();
+            if (!isMqttConnected) {
+                lastBridgeError = "Dashboard bridge waiting for MQTT connection";
+                // Do not update doc if we already updated it recently to avoid write spam
+                if (commandJob.updatedAt < now - 5000) {
+                   await TelegramOpsService.markCommandStatus(commandJob.id, "pending", lastBridgeError);
+                }
+                continue;
+            }
+
+            logger.info("telegram", "Telegram bridge processing command", {
+                commandId: commandJob.id,
+                command: commandJob.command
+            });
+
             await TelegramOpsService.markCommandStatus(commandJob.id, "processing", "Processing by dashboard bridge");
             let dispatched = false;
             
@@ -460,22 +496,23 @@ async function processPendingTelegramCommands(): Promise<void> {
             else if (commandJob.command === "/restart") dispatched = sendCommand("RESTART");
 
             if (!dispatched) {
-                lastBridgeError = "Dispatch delayed: waiting device/MQTT/rate window";
-                await TelegramOpsService.markCommandStatus(commandJob.id, "pending", "Dispatch delayed: waiting device/MQTT/rate window");
+                lastBridgeError = "Dashboard bridge publish skipped; MQTT not ready or rate limited";
+                await TelegramOpsService.markCommandStatus(commandJob.id, "pending", lastBridgeError);
                 await TelegramOpsService.addAuditLog({
                     userId: commandJob.userId,
                     username: commandJob.username,
                     command: commandJob.command,
                     result: "pending",
-                    detail: "Dispatch delayed by runtime state",
+                    detail: lastBridgeError,
                     source: "telegram-bridge",
                 });
                 
-                void notifyCommandResult(commandJob.id, "pending", "Dispatch delayed. Waiting for device or MQTT to be ready.");
+                void notifyCommandResult(commandJob.id, "pending", lastBridgeError);
                 continue;
             }
 
-            await TelegramOpsService.markCommandStatus(commandJob.id, "done", "Command dispatched to MQTT");
+            const successDetail = "MQTT publish attempted by dashboard bridge";
+            await TelegramOpsService.markCommandStatus(commandJob.id, "done", successDetail);
             lastBridgeDispatchedCommandId = commandJob.id;
             lastBridgeError = null;
             await TelegramOpsService.addAuditLog({
@@ -483,11 +520,11 @@ async function processPendingTelegramCommands(): Promise<void> {
                 username: commandJob.username,
                 command: commandJob.command,
                 result: "success",
-                detail: "Command dispatched from bridge",
+                detail: successDetail,
                 source: "telegram-bridge",
             });
 
-            void notifyCommandResult(commandJob.id, "done", "Command dispatched to MQTT successfully.");
+            void notifyCommandResult(commandJob.id, "done", successDetail);
 
             pushSystemEvent({
                 type: "COMMAND",
@@ -680,7 +717,10 @@ function mapToSensorData(message: MqttSensorPayload): SensorData {
         temp: message.temperature,
         humidity: message.humidity,
         light: message.light,
+        lightRaw: message.lightRaw,
+        lightThreshold: message.lightThreshold,
         rainVal: message.rainVal,
+        rainRaw: message.rainRaw,
         rain: message.rain ? 1 : 0,
         status: statusFromSensor,
         timestamp: new Date(timestamp).toISOString(),
@@ -964,6 +1004,10 @@ function startStreamIfNeeded(): void {
                     temperature: payload.temperature,
                     humidity: payload.humidity,
                     light: payload.light,
+                    lightRaw: payload.lightRaw,
+                    lightThreshold: payload.lightThreshold,
+                    rainVal: payload.rainVal,
+                    rainRaw: payload.rainRaw,
                     rain: payload.rain,
                     status: toInternalStatus(sharedState.deviceState.status),
                     mode: sharedState.deviceState.mode ?? undefined,

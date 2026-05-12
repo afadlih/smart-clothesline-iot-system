@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logger";
-import { processTelegramCommand } from "@/services/telegramCommandService";
+import { TelegramCommandRouter } from "@/services/telegram/TelegramCommandRouter";
 
 type TelegramApiResponse<T> = {
   ok: boolean;
@@ -13,6 +13,7 @@ type TelegramUpdate = {
   update_id: number;
   message?: {
     text?: string;
+    date: number;
     chat?: { id?: number; type?: "private" | "group" | "supergroup"; title?: string };
     from?: { id?: number; username?: string };
   };
@@ -43,6 +44,9 @@ export class TelegramBotApiService {
   private static offset = 0;
   private static processed = 0;
   private static startedAt: number | null = null;
+  private static pollingStartedAtSec = 0;
+  private static ignoredStaleUpdates = 0;
+  private static lastIgnoredUpdateAt: number | null = null;
   private static lastUpdateAt: number | null = null;
   private static lastError: string | null = null;
   private static stopRequested = false;
@@ -99,25 +103,45 @@ export class TelegramBotApiService {
     });
   }
 
-  static async setWebhook(token: string, webhookUrl: string, secret: string): Promise<boolean> {
-    const data = await this.safeRequest<unknown>(endpoint(token, "setWebhook"), {
+  static async setWebhookWithResult(
+    token: string,
+    webhookUrl: string,
+    options?: { secretToken?: string; dropPendingUpdates?: boolean },
+  ): Promise<TelegramApiResponse<unknown>> {
+    return this.safeRequest<unknown>(endpoint(token, "setWebhook"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url: webhookUrl,
-        secret_token: secret,
+        secret_token: options?.secretToken || undefined,
+        drop_pending_updates: options?.dropPendingUpdates ?? false,
       }),
     });
-    return data.ok;
   }
 
-  static async deleteWebhook(token: string): Promise<boolean> {
-    const data = await this.safeRequest<unknown>(endpoint(token, "deleteWebhook"), {
+  static async setWebhook(
+    token: string,
+    webhookUrl: string,
+    options?: { secretToken?: string; dropPendingUpdates?: boolean },
+  ): Promise<boolean> {
+    const res = await this.setWebhookWithResult(token, webhookUrl, options);
+    return res.ok;
+  }
+
+  static async deleteWebhookWithResult(
+    token: string,
+    options?: { dropPendingUpdates?: boolean },
+  ): Promise<TelegramApiResponse<unknown>> {
+    return this.safeRequest<unknown>(endpoint(token, "deleteWebhook"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ drop_pending_updates: false }),
+      body: JSON.stringify({ drop_pending_updates: options?.dropPendingUpdates ?? false }),
     });
-    return data.ok;
+  }
+
+  static async deleteWebhook(token: string, options?: { dropPendingUpdates?: boolean }): Promise<boolean> {
+    const res = await this.deleteWebhookWithResult(token, options);
+    return res.ok;
   }
 
   static async setMyCommands(token: string, commands: BotCommand[]): Promise<boolean> {
@@ -136,6 +160,8 @@ export class TelegramBotApiService {
       offset: this.offset,
       lastUpdateAt: this.lastUpdateAt,
       updatesProcessed: this.processed,
+      ignoredStaleUpdates: this.ignoredStaleUpdates,
+      lastIgnoredUpdateAt: this.lastIgnoredUpdateAt,
       uptimeMs: this.startedAt ? Date.now() - this.startedAt : 0,
       lastError: this.lastError,
     };
@@ -174,13 +200,14 @@ export class TelegramBotApiService {
     };
   }
 
-  private static async pollOnce(token: string): Promise<void> {
+  private static async pollOnce(token: string, config: { ignoreBeforeStart: boolean; maxUpdates: number }): Promise<void> {
     const data = await this.safeRequest<TelegramUpdate[]>(endpoint(token, "getUpdates"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         timeout: 25,
         offset: this.offset,
+        limit: config.maxUpdates,
         allowed_updates: ["message"],
       }),
     });
@@ -192,6 +219,19 @@ export class TelegramBotApiService {
     const updates = Array.isArray(data.result) ? data.result : [];
     for (const update of updates) {
       this.offset = Math.max(this.offset, update.update_id + 1);
+      
+      const messageDate = update.message?.date ?? 0;
+      if (config.ignoreBeforeStart && messageDate > 0 && messageDate < this.pollingStartedAtSec - 30) {
+        this.ignoredStaleUpdates += 1;
+        this.lastIgnoredUpdateAt = Date.now();
+        logger.info("polling", "Ignored stale Telegram update", { 
+          updateId: update.update_id,
+          messageDate,
+          pollingStartedAtSec: this.pollingStartedAtSec
+        });
+        continue;
+      }
+
       this.lastUpdateAt = Date.now();
       this.processed += 1;
       logger.info("polling", "Update received", { updateId: update.update_id });
@@ -207,7 +247,7 @@ export class TelegramBotApiService {
         continue;
       }
 
-      await processTelegramCommand({
+      await TelegramCommandRouter.handle({
         text,
         chatId,
         chatType,
@@ -219,20 +259,23 @@ export class TelegramBotApiService {
     }
   }
 
-  static async startPolling(token: string): Promise<void> {
+  static async startPolling(token: string, config: { ignoreBeforeStart: boolean; maxUpdates: number }): Promise<void> {
     if (this.polling) return;
     this.polling = true;
     this.stopRequested = false;
     this.pollingStatus = "running";
     this.startedAt = Date.now();
+    this.pollingStartedAtSec = Math.floor(this.startedAt / 1000);
+    this.ignoredStaleUpdates = 0;
+    this.lastIgnoredUpdateAt = null;
     this.lastError = null;
 
     logger.info("telegram", "Service initialized");
-    logger.info("polling", "Polling started");
+    logger.info("polling", "Polling started", { config });
 
     while (!this.stopRequested) {
       try {
-        await this.pollOnce(token);
+        await this.pollOnce(token, config);
         this.pollingStatus = "running";
       } catch (error) {
         this.lastError = String(error);

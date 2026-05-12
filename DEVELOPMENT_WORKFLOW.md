@@ -1,69 +1,48 @@
-# Development Workflow
+# Development Workflow & Branching Strategy
 
-## Branch Model
+This document defines the process for developing, testing, and releasing changes in the Smart Clothesline system.
 
-| Branch | Purpose |
-|---|---|
-| `main` | Production — deployed automatically to Vercel production |
-| `develop` | Staging / integration — deployed to Vercel preview |
-| `feature/*` | New features — branch from `develop` |
-| `fix/*` | Bug fixes — branch from `develop` |
-| `hotfix/*` | Urgent production fixes — branch from `main` |
-| `release/*` | Release candidates — branch from `develop` |
+## 1. Branch Model
 
-## PR Flow
+| Branch | Purpose | Source |
+|---|---|---|
+| `main` | Production (stable) | - |
+| `develop` | Staging / Integration | `main` |
+| `feature/*` | New features | `develop` |
+| `fix/*` | Bug fixes | `develop` |
+| `hotfix/*` | Urgent production fixes | `main` |
+| `release/*` | Release candidates | `develop` |
 
-1. Branch from `develop` (or `main` for hotfixes).
-2. Run local checks before pushing:
+## 2. Naming Conventions
+
+- **Feature:** `feature/<scope>-<description>` (e.g., `feature/telegram-alerts`)
+- **Fix:** `fix/<scope>-<description>` (e.g., `fix/chart-timezone`)
+- **Release:** `release/v<version>` (e.g., `release/v1.0.0`)
+
+## 3. PR & Merge Process
+
+1. **Branch** from the appropriate source.
+2. **Commit** using conventional prefixes: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`.
+3. **Validate** locally before pushing:
    ```bash
-   npm run lint
-   npm run typecheck
-   npm run build
+   npm run lint && npm run typecheck && npm run build
    ```
-3. Open PR targeting `develop` (or `main` for hotfixes).
-4. CI must pass before merge.
-5. Use squash merge for `feature/*` and `fix/*`.
-6. Use merge commit for `hotfix/*` → `main` and `release/*` → `main`.
+4. **Open PR** targeting `develop` (or `main` for hotfixes).
+5. **Merge Strategy:**
+   - `feature/*` / `fix/*` -> `develop`: **Squash merge**
+   - `release/*` -> `main`: **Merge commit**
+   - `hotfix/*` -> `main`: **Merge commit**, then back-merge to `develop`.
 
-## Merge Strategy
+## 4. Release Flow
 
-- `feature/*` / `fix/*` → `develop`: squash merge
-- `hotfix/*` → `main`: merge commit, then back-merge to `develop`
-- `release/*` → `main`: merge commit per release window
-- `develop` → `main`: via `release/*` or direct merge commit
+1. Create `release/vX.Y.Z` from `develop`.
+2. Follow the [STAGING_VALIDATION_RUNBOOK.md](./docs/STAGING_VALIDATION_RUNBOOK.md).
+3. Merge `release/*` into `main` and tag the release.
+4. Back-merge `main` into `develop`.
 
-## CI Flow
+## 5. Vercel & Webhook Safety
 
-GitHub Actions (`ci.yml`) runs on:
-- Push to `main`, `develop`, `fix/**`, `feature/**`, `release/**`, `hotfix/**`
-- Pull requests targeting `main` or `develop`
+- **Webhook Protection:** Preview branches (`feature/*`, `fix/*`) MUST set `TELEGRAM_WEBHOOK_ENABLED=false` to avoid stealing the production webhook.
+- **Environment Separation:** Use separate Telegram bots for local, staging (`develop`), and production (`main`).
 
-Validates: lint → typecheck → build
-
-## Vercel Preview Flow
-
-- Every PR and push to a branch produces a **Vercel Preview URL**.
-- Preview URLs are unique per deploy (e.g. `smart-clothesline-xxxx.vercel.app`).
-- **Do NOT use preview URLs as TELEGRAM_WEBHOOK_URL** — they change per deploy
-  and would steal the production webhook (Telegram allows only one webhook per bot).
-- Set `TELEGRAM_WEBHOOK_ENABLED=false` on all `fix/*` and `feature/*` branches.
-
-## Release Flow
-
-1. Freeze `develop`.
-2. Create `release/<version>` from `develop`.
-3. Run final validation (lint / typecheck / build).
-4. Merge `release/<version>` → `main`.
-5. Tag release on `main`.
-6. Vercel auto-deploys `main` to production.
-7. Back-merge `main` → `develop`.
-
-## Telegram Webhook Strategy
-
-| Environment | Setting |
-|---|---|
-| Production (`main`) | `APP_BASE_URL=https://stable.vercel.app` `TELEGRAM_WEBHOOK_ENABLED=true` |
-| Staging (`develop`) | `APP_BASE_URL=https://staging.vercel.app` `TELEGRAM_WEBHOOK_ENABLED=true` (use separate bot token) |
-| Preview / fix branches | `TELEGRAM_WEBHOOK_ENABLED=false` (default) |
-
-See `DEPLOYMENT.md` for the Vercel environment variables checklist.
+For production environment setup, refer to [DEPLOYMENT.md](./DEPLOYMENT.md).

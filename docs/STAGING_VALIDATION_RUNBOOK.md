@@ -31,12 +31,25 @@ Ensure the following environment variables are set in Vercel for the `develop` b
 - `NEXT_PUBLIC_MQTT_BROKER_URL`: Match staging broker (e.g., HiveMQ Cloud)
 - `NEXT_PUBLIC_MQTT_USERNAME`: Low-privilege browser user
 - `NEXT_PUBLIC_MQTT_PASSWORD`: Low-privilege browser password
+- `MQTT_BROKER_URL`: Server-side MQTT URL
+- `MQTT_USERNAME`: Server-side MQTT user with publish permissions
+- `MQTT_PASSWORD`: Server-side MQTT password
+- `MQTT_TOPIC_COMMAND`: Server-side MQTT command topic
+- `INTERNAL_COMMAND_SECRET`: Secure string for diagnostic API
 - `APP_BASE_URL`: Stable staging domain (e.g., `smart-clothesline-staging.vercel.app`)
 - `TELEGRAM_BOT_TOKEN`: Staging bot token
 - `TELEGRAM_WEBHOOK_ENABLED`: `true`
 - `TELEGRAM_WEBHOOK_SECRET`: Secure random string
 - `TELEGRAM_ALLOWED_USER_IDS`: IDs of staging testers
 - `TELEGRAM_ALLOWED_GROUPS`: IDs of staging groups
+- `TELEGRAM_ENABLE_GROUP_MODE`: `false`
+- `TELEGRAM_LOCAL_POLLING_ENABLED`: `false` (default)
+- `TELEGRAM_DROP_PENDING_UPDATES_ON_POLLING_START`: `true`
+- `TELEGRAM_IGNORE_UPDATES_BEFORE_START`: `true`
+- `TELEGRAM_MAX_UPDATES_PER_POLL`: `10`
+- `TELEGRAM_COMMAND_TTL_MS`: `120000`
+- `TELEGRAM_DROP_PENDING_UPDATES_ON_WEBHOOK_SETUP`: `true`
+- `TELEGRAM_ALLOW_EPHEMERAL_WEBHOOK`: `false`
 
 **Important:** Redeploy without cache after environment variable changes.
 
@@ -47,18 +60,56 @@ Ensure the following environment variables are set in Vercel for the `develop` b
    - Verify:
      - `runtimeMode`: `webhook`
      - `webhookEnabled`: `true`
-     - `webhookUrlMatch`: `true`
+     - `webhookUrlMatch`: `true` (If `false`, run **Setup/Repair** below)
+     - `webhookStatus`: `ok`
      - `botConfigured`: `true`
+     - `directMqttConfigured`: `true`
+     - `telegramCommandMode`: `server-direct-with-bridge-fallback`
      - `firestoreOk`: `true`
-     - `bridgeAlive`: `true` (only if a dashboard tab is open)
 
-2. **Setup**:
+2. **Setup and Repair**:
+   - If `webhookUrlMatch` is `false`, run the repair setup:
+     ```bash
+     curl -X POST https://<staging-url>/api/telegram/setup \
+       -H "Content-Type: application/json" \
+       -d '{"mode": "webhook", "repair": true}'
+     ```
+   - If it still fails, use **Force Repair**:
+     ```bash
+     curl -X POST https://<staging-url>/api/telegram/setup \
+       -H "Content-Type: application/json" \
+       -d '{"mode": "webhook", "repair": true, "force": true}'
+     ```
+   - Verify result shows `webhookMatchesAppBaseUrl: true`.
+   - Verify `droppedPendingUpdates: true` was executed.
+   - Run **Self-test**: Open `https://<staging-url>/api/telegram/webhook-self-test` to ensure the route is reachable.
+   - Re-check `https://<staging-url>/api/telegram/diagnostics`.
+
+3. **Command Queue Cleanup**:
+   - Before activating a bridge or after a long downtime, clear the backlog.
+   - Run Dry Run:
+     ```bash
+     curl -X POST https://<staging-url>/api/telegram/commands/cleanup \
+       -H "Content-Type: application/json" \
+       -H "x-internal-command-secret: <your-secret>" \
+       -d '{"maxAgeMs":300000,"dryRun":true,"mode":"stale"}'
+     ```
+   - Run Actual Cleanup:
+     ```bash
+     curl -X POST https://<staging-url>/api/telegram/commands/cleanup \
+       -H "Content-Type: application/json" \
+       -H "x-internal-command-secret: <your-secret>" \
+       -d '{"maxAgeMs":300000,"dryRun":false,"mode":"stale"}'
+     ```
+   - Verify `commands.stalePendingCount` is 0 in diagnostics.
+
+3. **Setup**:
    - Run `POST /api/telegram/setup` with `{"mode": "webhook"}`
    - Verify:
      - `webhookRegistered`: `true`
      - `webhookMatchesAppBaseUrl`: `true`
 
-3. **Commands**:
+4. **Commands**:
    - Test `/start`, `/help`, `/status`, `/ping`
    - Verify responses are correct and authorization works.
 
@@ -76,15 +127,24 @@ Ensure the following environment variables are set in Vercel for the `develop` b
 
 ## F. Telegram Command E2E Validation
 
-1. Open Dashboard on a browser tab (this activates the command bridge).
+### F1. Server-Side Direct Execution (Primary)
+1. Close all Dashboard browser tabs (bridge offline).
 2. Send `/mode_manual` from Telegram.
 3. Verify:
-   - Command document appears in `telegram_commands` collection.
-   - Dashboard bridge picks up the command (check Firestore `updatedAt` or console logs).
-   - MQTT message is dispatched.
+   - Telegram replies almost instantly with "dispatched to device".
+   - Device responds and publishes status ACK.
+   - Command status becomes `done` in Firestore.
+   
+### F2. Dashboard Bridge Fallback
+1. Temporarily unset `MQTT_PASSWORD` in Vercel to break server-side publish, redeploy.
+2. Open Dashboard on a browser tab (this activates the command bridge).
+3. Send `/mode_manual` from Telegram.
+4. Verify:
+   - Command is queued in Firestore.
+   - Dashboard bridge picks up the command and logs "Dashboard bridge polling pending commands".
+   - MQTT message is dispatched by the browser.
    - Device responds and publishes status ACK.
    - Command status becomes `done`.
-   - Dashboard TopBar reflects the new mode.
 
 ## G. Analytics and Data Export
 

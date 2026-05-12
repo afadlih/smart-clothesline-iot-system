@@ -21,8 +21,11 @@ For full details, refer to:
   "deviceId": "wokwi-default",
   "temperature": 29.4,
   "humidity": 61.2,
-  "light": 1234,
+  "light": 3500,
+  "lightRaw": 1024,
+  "lightThreshold": 3000,
   "rain": false,
+  "rainVal": 4095,
   "status": "OPEN",
   "mode": "AUTO",
   "lastCommand": "AUTO",
@@ -43,3 +46,10 @@ For full details, refer to:
   "timestamp": 1234567
 }
 ```
+
+## Light Contract
+- `light`: Normalized value `0..10000`.
+- **Brighter = Higher value**.
+- **Darker = Lower value**.
+- Threshold (default 3000): `light < 3000` means dark.
+
