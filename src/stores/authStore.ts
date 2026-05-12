@@ -73,6 +73,9 @@ const mapAuthError = (error: unknown): string => {
     if (message.includes("auth/cancelled-popup-request")) {
       return "Another sign-in window is already open.";
     }
+    if (message.includes("auth/operation-not-allowed")) {
+      return "Google Sign-In is not enabled in the Firebase Console. Go to Authentication -> Sign-in method and enable Google.";
+    }
     return message;
   }
 

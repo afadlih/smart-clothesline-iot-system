@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Wind } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
-export default function RegisterPage() {
+function RegisterContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -284,5 +284,19 @@ export default function RegisterPage() {
 
       </div>
     </div>
+  );
+}
+
+import { Suspense } from "react";
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-teal-50">
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-teal-500 border-t-transparent" />
+      </div>
+    }>
+      <RegisterContent />
+    </Suspense>
   );
 }
