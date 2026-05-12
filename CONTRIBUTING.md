@@ -64,6 +64,6 @@ npm run build
 
 ## Notes
 
-- Telegram polling must remain server-side and singleton-based.
-- Do not move polling into React components or hooks.
-- Do not change MQTT payload structure unless the task explicitly requires it.
+- Telegram operations must prefer **Webhook** mode in production/staging.
+- Polling is only used for local development and must remain server-side.
+- Do not change MQTT payload structure or light normalization (0-10000) unless explicitly required.

@@ -1,6 +1,7 @@
-# Big Data Integration Guide (Pre-Hadoop)
+# Big Data Integration Guide (Future Readiness)
 
-This document outlines the telemetry baseline and security constraints required before integrating with Big Data ecosystems (Hadoop, Spark, etc.).
+> [!NOTE]
+> **Status: Future Readiness.** This document outlines the roadmap for Big Data integration. The current v1.0.0 release focuses on stable realtime operations and Firestore persistence.
 
 ## 1. Telemetry Baseline
 

@@ -1,6 +1,7 @@
-# Big Data Security Readiness
+# Big Data Security Readiness (Future Readiness)
 
-This document defines security constraints before Hadoop/Spark ingestion.
+> [!NOTE]
+> **Status: Future Readiness.** This document defines security constraints for future Hadoop/Spark ingestion.
 
 ## Never export secrets
 

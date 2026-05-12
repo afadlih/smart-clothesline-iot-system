@@ -77,10 +77,13 @@ Secret server-side values:
 
 ```env
 TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_ID=
-TELEGRAM_ALLOWED_USER_IDS=6393706909
 TELEGRAM_WEBHOOK_SECRET=
+TELEGRAM_ALLOWED_USER_IDS=
+APP_BASE_URL=https://your-app.vercel.app
+INTERNAL_COMMAND_SECRET=
 ```
+
+Note: `APP_BASE_URL` is required for Telegram Webhook and must be a stable URL. `INTERNAL_COMMAND_SECRET` protects administrative and diagnostic endpoints.
 
 Public client-safe values:
 
@@ -113,21 +116,28 @@ Restart the dev server after changing environment variables.
 
 ## Telegram Integration
 
-- Polling runs through a server-side singleton to avoid duplicate instances during Next.js hot reload.
+- Runtime mode: **Webhook** (Production/Staging) or Polling (Development).
+- Use `POST /api/telegram/webhook-sync` to register the webhook after deployment.
 - API routes:
-  - `GET /api/telegram/diagnostics`
-  - `GET /api/telegram/setup`
-  - `POST /api/telegram/setup`
-  - `POST /api/telegram/webhook`
-  - `POST /api/telegram/commands/cleanup`
+  - `GET /api/telegram/diagnostics` - Check system health and webhook status.
+  - `POST /api/telegram/webhook-sync` - Synchronize webhook registration with Telegram.
+  - `POST /api/telegram/webhook` - Inbound Telegram updates.
+  - `POST /api/mqtt/command-test` - Direct MQTT command publishing.
+  - `POST /api/telegram/commands/cleanup` - Purge stale command queue.
 - Supported commands:
-  - `/start`, `/status`, `/open`, `/close`, `/mode_auto`, `/mode_manual`, `/latest`, `/health`, `/alerts`, `/help`, `/restart`, `/override`, `/debug`
+  - `/start`, `/status`, `/open`, `/close`, `/mode_auto`, `/mode_manual`, `/health`, `/alerts`, `/help`
 
 ## Firestore Notes
 
 - Schedules are stored in Firestore as the source of truth.
 - Telegram command and audit data use Firestore-backed collections.
 - Composite indexes are defined in `firestore.indexes.json`.
+
+## Telemetry Contract
+
+- `light`: Normalized **0..10000** (higher = brighter, 3000 = threshold).
+- `rain`: Authoritative boolean state.
+- `lightRaw`, `rainVal`, `rainRaw`: Optional debug/ADC fields.
 
 ## Production Checks
 

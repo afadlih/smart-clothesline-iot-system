@@ -13,10 +13,28 @@ Required payload:
   "humidity": 61.2,
   "light": 1234,
   "rain": false,
+  "lightRaw": 3500,
+  "rainVal": 800,
+  "rainRaw": 800,
   "timestamp": 1710000000000,
   "heartbeat": 1710000000000
 }
 ```
+
+### Telemetry Normalization
+
+- **`light`**: 0 to 10000.
+  - `0`: Total darkness.
+  - `10000`: Maximum brightness.
+  - `light < 3000`: System considers it "Dark".
+  - Formula (Wokwi/ADC): `map(adc, 4095, 0, 0, 10000)`
+- **`rain`**: Boolean.
+  - `true`: Raining (authorized state).
+  - `false`: No rain.
+- **`lightRaw`, `rainVal`, `rainRaw`**: Optional debug fields.
+  - `lightRaw`: Raw ADC value for light.
+  - `rainVal`: Raw ADC value for rain.
+  - `rainRaw`: Unprocessed ADC value for rain.
 
 Optional fallback fields:
 

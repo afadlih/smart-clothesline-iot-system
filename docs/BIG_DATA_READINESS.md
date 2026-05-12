@@ -1,6 +1,7 @@
-# Big Data Readiness (Pre-Hadoop)
+# Big Data Readiness (Future Readiness)
 
-This document defines the current telemetry baseline before Hadoop/Spark work begins.
+> [!NOTE]
+> **Status: Future Readiness.** This document defines the telemetry baseline for future Hadoop/Spark integration.
 
 ## Current source collections
 

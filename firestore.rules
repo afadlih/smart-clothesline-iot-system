@@ -47,7 +47,9 @@ service cloud.firestore {
         && isValidTimestampMs(data.updatedAt)
         && (data.expiresAt == null || isValidTimestampMs(data.expiresAt))
         && (data.dispatchMode == null || data.dispatchMode in ['bridge-fallback', 'server-direct'])
-        && (data.attemptCount == null || isNumber(data.attemptCount));
+        && (data.attemptCount == null || isNumber(data.attemptCount))
+        && (data.directDispatchAt == null || isValidTimestampMs(data.directDispatchAt))
+        && (data.directDispatchResult == null || data.directDispatchResult is string);
     }
 
     match /sensor_data/{docId} {

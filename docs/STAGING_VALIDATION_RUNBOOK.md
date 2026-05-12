@@ -67,21 +67,15 @@ Ensure the following environment variables are set in Vercel for the `develop` b
      - `telegramCommandMode`: `server-direct-with-bridge-fallback`
      - `firestoreOk`: `true`
 
-2. **Setup and Repair**:
-   - If `webhookUrlMatch` is `false`, run the repair setup:
+2. **Setup and Repair (Webhook Sync)**:
+   - Run the sync API to ensure Telegram is using the correct `APP_BASE_URL`:
      ```bash
-     curl -X POST https://<staging-url>/api/telegram/setup \
+     curl -X POST https://<staging-url>/api/telegram/webhook-sync \
        -H "Content-Type: application/json" \
-       -d '{"mode": "webhook", "repair": true}'
+       -H "x-internal-command-secret: <INTERNAL_COMMAND_SECRET>" \
+       -d '{"repair":true,"force":false,"dropPendingUpdates":true}'
      ```
-   - If it still fails, use **Force Repair**:
-     ```bash
-     curl -X POST https://<staging-url>/api/telegram/setup \
-       -H "Content-Type: application/json" \
-       -d '{"mode": "webhook", "repair": true, "force": true}'
-     ```
-   - Verify result shows `webhookMatchesAppBaseUrl: true`.
-   - Verify `droppedPendingUpdates: true` was executed.
+   - Verify result shows `webhookUrlMatch: true` and `webhookStatus: "ok"`.
    - Run **Self-test**: Open `https://<staging-url>/api/telegram/webhook-self-test` to ensure the route is reachable.
    - Re-check `https://<staging-url>/api/telegram/diagnostics`.
 
@@ -91,23 +85,17 @@ Ensure the following environment variables are set in Vercel for the `develop` b
      ```bash
      curl -X POST https://<staging-url>/api/telegram/commands/cleanup \
        -H "Content-Type: application/json" \
-       -H "x-internal-command-secret: <your-secret>" \
+       -H "x-internal-command-secret: <INTERNAL_COMMAND_SECRET>" \
        -d '{"maxAgeMs":300000,"dryRun":true,"mode":"stale"}'
      ```
    - Run Actual Cleanup:
      ```bash
      curl -X POST https://<staging-url>/api/telegram/commands/cleanup \
        -H "Content-Type: application/json" \
-       -H "x-internal-command-secret: <your-secret>" \
+       -H "x-internal-command-secret: <INTERNAL_COMMAND_SECRET>" \
        -d '{"maxAgeMs":300000,"dryRun":false,"mode":"stale"}'
      ```
    - Verify `commands.stalePendingCount` is 0 in diagnostics.
-
-3. **Setup**:
-   - Run `POST /api/telegram/setup` with `{"mode": "webhook"}`
-   - Verify:
-     - `webhookRegistered`: `true`
-     - `webhookMatchesAppBaseUrl`: `true`
 
 4. **Commands**:
    - Test `/start`, `/help`, `/status`, `/ping`
@@ -134,8 +122,18 @@ Ensure the following environment variables are set in Vercel for the `develop` b
    - Telegram replies almost instantly with "dispatched to device".
    - Device responds and publishes status ACK.
    - Command status becomes `done` in Firestore.
-   
-### F2. Dashboard Bridge Fallback
+
+### F2. Direct MQTT API Test (Diagnostics)
+1. Run direct command test:
+   ```bash
+   curl -X POST https://<staging-url>/api/mqtt/command-test \
+     -H "Content-Type: application/json" \
+     -H "x-internal-command-secret: <INTERNAL_COMMAND_SECRET>" \
+     -d '{"command":"OPEN"}'
+   ```
+2. Verify device receives command and status updates.
+
+### F3. Dashboard Bridge Fallback
 1. Temporarily unset `MQTT_PASSWORD` in Vercel to break server-side publish, redeploy.
 2. Open Dashboard on a browser tab (this activates the command bridge).
 3. Send `/mode_manual` from Telegram.
