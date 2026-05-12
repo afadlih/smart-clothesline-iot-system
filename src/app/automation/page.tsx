@@ -28,7 +28,7 @@ const defaults: AutomationSettings = {
 };
 
 const RAIN_THRESHOLD_OFFSET = 200;
-const LIGHT_THRESHOLD_OFFSET = 500;
+const LIGHT_THRESHOLD_OFFSET = 300;
 const MIN_RAIN_THRESHOLD = 0;
 const MAX_RAIN_THRESHOLD = 4095;
 const MIN_LIGHT_THRESHOLD = 0;
@@ -43,11 +43,24 @@ function calculateAutoThreshold(sensor: {
   rainRaw?: number;
   light: number;
 }) {
-  const rainRaw = sensor.rainVal ?? sensor.rainRaw ?? 4095;
+  const rainRaw = sensor.rainVal ?? sensor.rainRaw;
+
+  if (typeof rainRaw !== "number") {
+    throw new Error("Raw rain value is required to calculate rain threshold");
+  }
 
   return {
-    rainThreshold: clamp(rainRaw - RAIN_THRESHOLD_OFFSET, MIN_RAIN_THRESHOLD, MAX_RAIN_THRESHOLD),
-    lightThreshold: clamp(sensor.light - LIGHT_THRESHOLD_OFFSET, MIN_LIGHT_THRESHOLD, MAX_LIGHT_THRESHOLD),
+    rainThreshold: clamp(
+      rainRaw - RAIN_THRESHOLD_OFFSET,
+      MIN_RAIN_THRESHOLD,
+      MAX_RAIN_THRESHOLD
+    ),
+
+    lightThreshold: clamp(
+      sensor.light + LIGHT_THRESHOLD_OFFSET,
+      MIN_LIGHT_THRESHOLD,
+      MAX_LIGHT_THRESHOLD
+    ),
   };
 }
 

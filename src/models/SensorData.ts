@@ -49,7 +49,7 @@ export class SensorData {
     }
 
     isDark(threshold: number = 3000): boolean {
-        return this.light < threshold;
+        return this.light > threshold;
     }
 
     getWeatherStatus(): string {
