@@ -64,6 +64,8 @@ type MqttSensorPayload = {
     stale: boolean;
 };
 
+const DEVICE_CONFIG_STORAGE_KEY = "smart-clothesline-device-config-v1";
+
 type MqttDeviceStatusPayload = {
     deviceId?: string;
     status: DeviceStatus;
@@ -271,6 +273,17 @@ let lastSensorStoredAt = 0;
 let lastStatusPayloadAt = 0;
 let lastBridgeDispatchedCommandId: string | null = null;
 let lastBridgeError: string | null = null;
+
+function loadCacheDeviceConfig(): Partial<DeviceConfig> | null {
+    if (typeof window === "undefined") return null;
+
+    try {
+        const raw = localStorage.getItem(DEVICE_CONFIG_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+}
 
 function normalizePacketTimestamp(input: number | undefined, fallback: number): number {
     if (typeof input !== "number" || !Number.isFinite(input)) {
@@ -596,7 +609,6 @@ function applyConfigAckPayload(payload: MqttConfigAckPayload, receivedAt: number
         });
         return;
     }
-
     const ackTimestamp = payload.timestamp ?? receivedAt;
 
     sharedState.deviceConfig = {
@@ -611,6 +623,13 @@ function applyConfigAckPayload(payload: MqttConfigAckPayload, receivedAt: number
         syncMessage: "Config synced with device",
     };
     sharedState.configSentAt = null;
+
+    if (typeof window !== "undefined") {
+        localStorage.setItem(
+            DEVICE_CONFIG_STORAGE_KEY,
+            JSON.stringify(sharedState.deviceConfig)
+        )
+    }
 
     appendSerialLog(
         "CONFIG",
@@ -1404,6 +1423,16 @@ export function useSensor() {
     const [now, setNow] = useState(() => Date.now());
     const [schedules, setSchedules] = useState<StoredScheduleItem[]>([]);
 
+    const cached = loadCacheDeviceConfig();
+    if (cached) {
+        sharedState.deviceConfig = {
+            ...sharedState.deviceConfig,
+            ...cached,
+            syncState: "IDLE",
+            syncMessage: "Using last known device config: waiting for device confirmation"
+        }
+    }
+
     useEffect(() => {
         startStreamIfNeeded();
         const listener = (nextSnapshot: SensorSnapshot) => {
@@ -1581,6 +1610,7 @@ export function useSensor() {
         currentHour: new Date(now).getHours(),
         safetyConfig: {
             lightThreshold: snapshot.deviceConfig.lightThreshold,
+            rainThreshold: snapshot.deviceConfig.rainThreshold,
             autoCloseOnRain: snapshot.deviceConfig.autoCloseOnRain,
             autoCloseOnDark: snapshot.deviceConfig.autoCloseOnDark,
         },

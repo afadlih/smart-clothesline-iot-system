@@ -90,6 +90,7 @@ export function getFinalState({
   currentHour: number;
   safetyConfig?: {
     lightThreshold: number;
+    rainThreshold: number;
     autoCloseOnRain: boolean;
     autoCloseOnDark: boolean;
   };
@@ -97,6 +98,7 @@ export function getFinalState({
   const activeSchedule = schedules.find((s) => isWithinSchedule(s, currentHour)) ?? null;
   const scheduleActive = activeSchedule !== null;
   const lightThreshold = safetyConfig?.lightThreshold ?? 3000;
+  const rainThreshold = safetyConfig?.rainThreshold ?? 3000;
   const autoCloseOnRain = safetyConfig?.autoCloseOnRain ?? true;
   const autoCloseOnDark = safetyConfig?.autoCloseOnDark ?? true;
   const rainTriggered = sensor ? autoCloseOnRain && sensor.isRaining() : false;
@@ -123,7 +125,7 @@ export function getFinalState({
   if (safetyTriggered) {
     const safetyReason = rainTriggered
       ? "Rain detected (auto close on rain enabled)"
-      : `Low light detected (light < ${lightThreshold})`;
+      : `Low light detected (light > ${lightThreshold})`;
 
     return {
       activeSchedule,
@@ -152,6 +154,6 @@ export function getFinalState({
     overriddenBySafety: false,
     decisionSource: "AUTO",
     recommendedStatus: (sensor && !rainTriggered && !darkTriggered) ? "OPEN" : "CLOSED",
-    reason: `Auto fallback (rainClose=${autoCloseOnRain ? "on" : "off"}, darkClose=${autoCloseOnDark ? "on" : "off"}, lightThreshold=${lightThreshold})`,
+    reason: `Auto fallback (rainClose=${autoCloseOnRain ? "on" : "off"}, darkClose=${autoCloseOnDark ? "on" : "off"}, lightThreshold=${lightThreshold}, rainThreshold=${rainThreshold})`,
   };
 }
