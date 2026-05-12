@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CloudRain, Settings2, Shield, Timer } from "lucide-react";
+import { Bot, CloudRain, Settings2, Shield, Timer, Zap, History, ChevronRight } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 import { useSystemState } from "@/hooks/useSystemState";
 import { formatClock } from "@/utils/timeFormat";
@@ -87,7 +87,7 @@ export default function AutomationPage() {
   }, []);
 
   const automationEvents = useMemo(
-    () => events.slice(0, 8),
+    () => events.slice(0, 10),
     [events],
   );
 
@@ -120,105 +120,195 @@ export default function AutomationPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 dark:from-slate-900 dark:to-slate-950">
-      <PageContainer className="space-y-5">
-        <header className="space-y-1">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Automation Control Center</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Manage schedules, safety behavior, and automatic responses.</p>
+    <main className="min-h-screen bg-[#f8fafc] dark:bg-[#020617] transition-colors duration-500 pb-20">
+      <PageContainer className="space-y-8">
+        {/* Header Section */}
+        <header className="relative overflow-hidden rounded-[2.5rem] bg-white dark:bg-slate-900/50 p-8 md:p-10 shadow-2xl shadow-emerald-500/5 border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+          <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-[80px]" />
+          <div className="absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-teal-500/5 blur-[80px]" />
+          
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/20">
+                  <Bot className="h-5 w-5" />
+                </div>
+                <span className="text-[11px] font-black uppercase tracking-[0.25em] text-emerald-600 dark:text-emerald-400">
+                  Intelligence Hub
+                </span>
+              </div>
+              <h1 className="text-5xl md:text-6xl font-black text-slate-800 dark:text-white tracking-tighter">Automation Control</h1>
+              <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Manage rules, safety behaviors, and automatic responses.</p>
+            </div>
+
+            <div className="flex items-center gap-4">
+                <div className="px-5 py-2.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 shadow-sm">
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Current State</p>
+                   <p className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">{decision.decisionSource === "MANUAL" ? "Manual Override" : "Auto Mode"}</p>
+                </div>
+                <button onClick={saveAndApply} className="px-8 py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs tracking-widest transition-all shadow-lg shadow-emerald-600/20 active:scale-95">
+                  SAVE & APPLY
+                </button>
+            </div>
+          </div>
         </header>
 
-        <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Mode</p>
-            <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">{decision.decisionSource === "MANUAL" ? "Manual" : "Auto"}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Schedule State</p>
-            <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">{decision.scheduleActive ? "Active" : "Inactive"}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Safety Status</p>
-            <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">{decision.decisionSource === "SAFETY" ? "Triggered" : "Safe"}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Current Decision</p>
-            <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">{decision.recommendedStatus}</p>
-          </div>
-        </section>
-
-        <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-          <div className="space-y-4 xl:col-span-8">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Automation Policies</h2>
-                <button onClick={saveAndApply} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">Save & Apply</button>
-              </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <label className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Rain Threshold</p>
-                  <input type="range" min={200} max={4000} step={50} value={settings.rainThreshold} onChange={(e) => setSettings((p) => ({ ...p, rainThreshold: Number(e.target.value) }))} className="mt-2 w-full accent-emerald-600" />
-                  <p className="mt-1 text-xs text-slate-500">{settings.rainThreshold}</p>
-                </label>
-                <label className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Light Threshold</p>
-                  <input type="range" min={500} max={10000} step={50} value={settings.lightThreshold} onChange={(e) => setSettings((p) => ({ ...p, lightThreshold: Number(e.target.value) }))} className="mt-2 w-full accent-emerald-600" />
-                  <p className="mt-1 text-xs text-slate-500">{settings.lightThreshold}</p>
-                </label>
-              </div>
-              <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-3">
-                <label className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700"><span>Auto close on rain</span><input type="checkbox" checked={settings.autoCloseOnRain} onChange={(e) => setSettings((p) => ({ ...p, autoCloseOnRain: e.target.checked }))} /></label>
-                <label className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700"><span>Auto close on dark</span><input type="checkbox" checked={settings.autoCloseOnDark} onChange={(e) => setSettings((p) => ({ ...p, autoCloseOnDark: e.target.checked }))} /></label>
-                <label className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700"><span>Auto open when safe</span><input type="checkbox" checked={settings.autoOpenWhenSafe} onChange={(e) => setSettings((p) => ({ ...p, autoOpenWhenSafe: e.target.checked }))} /></label>
-              </div>
-              <div className="mt-4">
-                <button onClick={applyAutoThreshold} className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">Auto</button>
-                <p className="mt-2 text-xs text-slate-500">Auto threshold uses current sensor values. Light uses normalized 0..10000 scale.</p>
-              </div>
-            </div>
-
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Schedule Manager</h2>
-                <Link href="/schedule" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Open Full Schedule</Link>
-              </div>
-              <p className="text-sm text-slate-600 dark:text-slate-300">Use the schedule page for full CRUD. This control center keeps automation context centralized.</p>
-            </div>
-          </div>
-
-          <aside className="space-y-4 xl:col-span-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Quick Actions</h3>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                <button onClick={() => sendCommand("AUTO")} className="rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold dark:border-slate-700">Auto</button>
-                <button onClick={() => sendCommand("OPEN")} className="rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold dark:border-slate-700">Open</button>
-                <button onClick={() => sendCommand("CLOSE")} className="rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold dark:border-slate-700">Close</button>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Automation Activity Logs</h3>
-              <div className="mt-3 space-y-2">
-                {automationEvents.length === 0 ? <p className="text-xs text-slate-500">No automation logs yet.</p> : automationEvents.map((item, index) => (
-                  <div key={`${item.timestamp}-${item.action}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-950">
-                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{item.action}</p>
-                    <p className="mt-0.5 text-[11px] text-slate-500">{formatClock(item.timestamp)}</p>
+        <section className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+          {/* Main Logic Configuration */}
+          <div className="space-y-8 lg:col-span-8">
+            <div className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-10 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+              <div className="flex items-center justify-between mb-10">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <Settings2 className="h-5 w-5" />
                   </div>
-                ))}
+                  <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">Logic Parameters</h2>
+                </div>
+                <button onClick={applyAutoThreshold} className="text-[10px] font-black text-emerald-600 hover:text-emerald-700 uppercase tracking-widest flex items-center gap-2 transition-colors">
+                   <Zap className="h-3 w-3" /> Auto-Tune
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+                <div className="space-y-4">
+                  <label className="block p-8 rounded-[2rem] bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 transition-all group focus-within:border-emerald-500/50">
+                    <div className="flex items-center justify-between mb-6">
+                       <span className="text-[10px] font-black text-slate-800 dark:text-white uppercase tracking-widest opacity-60">Rain Threshold</span>
+                       <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">{settings.rainThreshold}</span>
+                    </div>
+                    <input type="range" min={200} max={4000} step={50} value={settings.rainThreshold} onChange={(e) => setSettings((p) => ({ ...p, rainThreshold: Number(e.target.value) }))} className="w-full h-2 bg-slate-200 dark:bg-white/10 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
+                    <p className="mt-6 text-[9px] font-black text-slate-400 leading-tight uppercase tracking-[0.2em]">Lower is more sensitive</p>
+                  </label>
+                </div>
+                <div className="space-y-4">
+                  <label className="block p-8 rounded-[2rem] bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 transition-all group focus-within:border-emerald-500/50">
+                    <div className="flex items-center justify-between mb-6">
+                       <span className="text-[10px] font-black text-slate-800 dark:text-white uppercase tracking-widest opacity-60">Light Threshold</span>
+                       <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">{settings.lightThreshold}</span>
+                    </div>
+                    <input type="range" min={500} max={10000} step={50} value={settings.lightThreshold} onChange={(e) => setSettings((p) => ({ ...p, lightThreshold: Number(e.target.value) }))} className="w-full h-2 bg-slate-200 dark:bg-white/10 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
+                    <p className="mt-6 text-[9px] font-black text-slate-400 leading-tight uppercase tracking-[0.2em]">Ambient light reference</p>
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-3">
+                <ToggleButton label="Rain Protection" active={settings.autoCloseOnRain} icon={<CloudRain className="h-4 w-4" />} onClick={(v) => setSettings(p => ({ ...p, autoCloseOnRain: v }))} />
+                <ToggleButton label="Night Security" active={settings.autoCloseOnDark} icon={<Timer className="h-4 w-4" />} onClick={(v) => setSettings(p => ({ ...p, autoCloseOnDark: v }))} />
+                <ToggleButton label="Auto Resumption" active={settings.autoOpenWhenSafe} icon={<Zap className="h-4 w-4" />} onClick={(v) => setSettings(p => ({ ...p, autoOpenWhenSafe: v }))} />
               </div>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Safety Indicators</h3>
-              <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300">
-                <p className="flex items-center gap-2"><Shield size={14} /> Fallback logic active</p>
-                <p className="flex items-center gap-2"><CloudRain size={14} /> Rain response protection</p>
-                <p className="flex items-center gap-2"><AlertTriangle size={14} /> Retry behavior managed by MQTT ACK flow</p>
-                <p className="flex items-center gap-2"><Timer size={14} /> Update interval {settings.updateIntervalSec}s</p>
-                <p className="flex items-center gap-2"><Settings2 size={14} /> Business rules remain unchanged</p>
-              </div>
+
+            <div className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-10 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm overflow-hidden">
+               <div className="flex items-center justify-between mb-10">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <Timer className="h-5 w-5" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">Active Schedules</h2>
+                  </div>
+                  <Link href="/schedule" className="px-6 py-2.5 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 font-black text-[10px] tracking-widest flex items-center gap-2 hover:bg-slate-200 dark:hover:bg-white/10 transition-all uppercase">
+                    Configure <ChevronRight className="h-3 w-3" />
+                  </Link>
+               </div>
+               <div className="flex flex-col items-center justify-center py-20 bg-slate-50/50 dark:bg-white/5 rounded-[2rem] border border-dashed border-slate-200 dark:border-white/10">
+                  <div className="h-16 w-16 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center shadow-sm mb-6">
+                    <Timer className="h-8 w-8 text-slate-300 dark:text-slate-600" />
+                  </div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center leading-relaxed">No active override schedules found.<br/><span className="opacity-60">System currently follows default business rules.</span></p>
+               </div>
             </div>
+          </div>
+
+          {/* Quick Stats & Logs */}
+          <aside className="space-y-8 lg:col-span-4">
+             <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-10 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+                <div className="flex items-center gap-3 mb-8">
+                  <Zap className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Quick Actions</h2>
+                </div>
+                <div className="grid grid-cols-1 gap-4">
+                   <QuickActionButton label="Automatic" onClick={() => sendCommand("AUTO")} active={decision.decisionSource === "AUTO"} />
+                   <div className="grid grid-cols-2 gap-4">
+                      <QuickActionButton label="Open" onClick={() => sendCommand("OPEN")} />
+                      <QuickActionButton label="Close" onClick={() => sendCommand("CLOSE")} />
+                   </div>
+                </div>
+             </section>
+
+             <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-10 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+                <div className="flex items-center gap-3 mb-8">
+                  <History className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Activity Log</h2>
+                </div>
+                <div className="space-y-6 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                   {automationEvents.length === 0 ? (
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center py-16 opacity-30">No recent activity</p>
+                   ) : (
+                     automationEvents.map((item, index) => (
+                       <div key={index} className="flex gap-6 group">
+                          <div className="flex flex-col items-center">
+                             <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)] transition-all group-hover:scale-125" />
+                             {index < automationEvents.length - 1 && <div className="h-full w-px bg-slate-200 dark:bg-white/10 mt-2" />}
+                          </div>
+                          <div className="pb-6">
+                             <p className="text-xs font-black text-slate-800 dark:text-white leading-none mb-2 uppercase tracking-tight">{item.action}</p>
+                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{formatClock(item.timestamp)}</p>
+                          </div>
+                       </div>
+                     ))
+                   )}
+                </div>
+             </section>
+
+             <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-10 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+                <div className="flex items-center gap-3 mb-8">
+                  <Shield className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Safety Guard</h2>
+                </div>
+                <div className="space-y-4">
+                   <SafetyIndicator label="Rain Protection" active={true} icon={<CloudRain className="h-4 w-4" />} />
+                   <SafetyIndicator label="Hardware Fail-safe" active={decision.decisionSource === "SAFETY"} icon={<Shield className="h-4 w-4" />} />
+                   <SafetyIndicator label="Update Cycle" active={true} value={`${settings.updateIntervalSec}s`} icon={<Timer className="h-4 w-4" />} />
+                </div>
+             </section>
           </aside>
         </section>
       </PageContainer>
     </main>
   );
 }
+
+function ToggleButton({ label, active, icon, onClick }: { label: string; active: boolean; icon: React.ReactNode; onClick: (v: boolean) => void }) {
+  return (
+    <button onClick={() => onClick(!active)} className={`flex items-center justify-between gap-4 p-6 rounded-[2rem] border transition-all ${active ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 shadow-sm shadow-emerald-500/5' : 'bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/5 text-slate-500 dark:text-slate-400'}`}>
+       <div className="flex items-center gap-4">
+          <div className={`p-3 rounded-xl transition-colors ${active ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-white/10 text-slate-500'}`}>{icon}</div>
+          <span className="text-[10px] font-black uppercase tracking-widest leading-none">{label}</span>
+       </div>
+       <div className={`h-2.5 w-2.5 rounded-full transition-all ${active ? 'bg-emerald-500 animate-pulse scale-110 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-300 dark:bg-slate-700'}`} />
+    </button>
+  );
+}
+
+function QuickActionButton({ label, onClick, active }: { label: string; onClick: () => void; active?: boolean }) {
+  return (
+    <button onClick={onClick} className={`px-6 py-5 rounded-[2rem] font-black text-[10px] tracking-widest uppercase transition-all active:scale-95 ${active ? 'bg-emerald-500 text-white shadow-xl shadow-emerald-500/20' : 'bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/5 text-slate-800 dark:text-white hover:bg-slate-100 dark:hover:bg-white/10'}`}>
+       {label}
+    </button>
+  );
+}
+
+function SafetyIndicator({ label, active, value, icon }: { label: string; active: boolean; value?: string; icon: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between p-6 rounded-[1.5rem] bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 group hover:border-emerald-500/30 transition-all">
+       <div className="flex items-center gap-4">
+          <div className="text-slate-400 group-hover:text-emerald-500 transition-colors">{icon}</div>
+          <span className="text-[10px] font-black text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 uppercase tracking-widest transition-colors">{label}</span>
+       </div>
+       <span className={`text-[10px] font-black uppercase tracking-widest ${active ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>{value ?? (active ? "ACTIVE" : "STANDBY")}</span>
+    </div>
+  );
+}
+
+

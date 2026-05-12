@@ -85,11 +85,11 @@ export class RuntimeStatePresenter {
     const decisionSource = (decision.decisionSource as DecisionSource) || "UNKNOWN";
     const recommendedStatus = (decision.recommendedStatus as DeviceStatus) || "UNKNOWN";
     
-    let safetyLabel = "SAFE";
+    let safetyLabel = "MONITORING";
     if (decisionSource === "SAFETY") {
       const reason = decision.reason.toLowerCase();
       if (reason.includes("rain")) {
-        safetyLabel = "RAIN DETECTED";
+        safetyLabel = "RAIN ALERT";
       } else if (reason.includes("light") || reason.includes("dark")) {
         safetyLabel = "LOW LIGHT";
       } else {

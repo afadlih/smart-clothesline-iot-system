@@ -20,6 +20,10 @@ export function formatClock(value: number | string | Date, options?: { timezone?
   });
 }
 
+export function formatTime(value: number | string | Date, options?: { timezone?: string }): string {
+  return formatClock(value, options);
+}
+
 function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }

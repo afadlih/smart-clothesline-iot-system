@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bot, Command, Shield } from "lucide-react";
+import { Bot, Shield, Bell, Terminal, Activity, RefreshCcw, AlertCircle } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 import { useSystemState } from "@/hooks/useSystemState";
 import { formatDateTime } from "@/utils/timeFormat";
-
 
 const commandItems = [
   { cmd: "/status", purpose: "Get current clothesline status", permission: "Operator" },
@@ -19,10 +18,8 @@ const commandItems = [
 ];
 
 export default function NotificationsPage() {
-  const { smartAlerts, events } = useSystemState();
+  const { events } = useSystemState();
   const [webhookStatus, setWebhookStatus] = useState("Unknown");
-  const [commandRegistration, setCommandRegistration] = useState("Unknown");
-  const [pollingStatus, setPollingStatus] = useState("stopped");
   const [auditLogs, setAuditLogs] = useState<Array<{ id: string; command: string; result: string; detail: string; timestamp: number; username?: string }>>([]);
   
   // Diagnostic fields
@@ -31,52 +28,25 @@ export default function NotificationsPage() {
   const [webhookUrlMatch, setWebhookUrlMatch] = useState(false);
   const [botConfigured, setBotConfigured] = useState(false);
   const [allowedUserIdsCount, setAllowedUserIdsCount] = useState(0);
-  const [directMqttConfigured, setDirectMqttConfigured] = useState(false);
-  const [telegramCommandMode, setTelegramCommandMode] = useState("");
-  const [pendingCommandsCount, setPendingCommandsCount] = useState(0);
   const [bridgeAlive, setBridgeAlive] = useState(false);
-  const [expectedWebhookUrl, setExpectedWebhookUrl] = useState("");
-  const [actualTelegramWebhookUrl, setActualTelegramWebhookUrl] = useState("");
   const [appBaseUrl, setAppBaseUrl] = useState("");
-  const [nextAction, setNextAction] = useState<string | null>(null);
-  const [webhookSelfTestUrl, setWebhookSelfTestUrl] = useState("");
-  const [isRepairing, setIsRepairing] = useState(false);
-  const [repairResult, setRepairResult] = useState<{
-    ok: boolean;
-    msg: string;
-    description?: string;
-    actualUrl?: string;
-    nextAction?: string;
-  } | null>(null);
 
-  const notificationHistory = useMemo(() => events.slice(0, 12), [events]);
+  const notificationHistory = useMemo(() => events.slice(0, 15), [events]);
 
   const loadSetupState = async () => {
     try {
       const diagResponse = await fetch("/api/telegram/diagnostics");
       if (diagResponse.ok) {
         const data = await diagResponse.json();
-        
         setRuntimeMode(data.runtimeMode || "Unknown");
         setWebhookEnabled(Boolean(data.webhookEnabled));
         setWebhookUrlMatch(Boolean(data.webhookUrlMatch));
         setBotConfigured(Boolean(data.botConfigured));
         setAllowedUserIdsCount(data.allowedUserIdsCount || 0);
-        setDirectMqttConfigured(Boolean(data.directMqttConfigured));
-        setTelegramCommandMode(data.telegramCommandMode || "");
-        setPendingCommandsCount(data.pendingCommandsCount || 0);
         setBridgeAlive(Boolean(data.bridgeAlive));
-        setExpectedWebhookUrl(data.expectedWebhookUrl || "");
-        setActualTelegramWebhookUrl(data.actualTelegramWebhookUrl || "");
         setAppBaseUrl(data.appBaseUrl || "");
-        setNextAction(data.nextAction || null);
-        setWebhookSelfTestUrl(data.webhookSelfTestUrl || "");
-        
         setWebhookStatus(data.webhookStatus || "Unknown");
-        setPollingStatus(data.polling?.status ?? "stopped");
-        setCommandRegistration(data.botInfo ? "Registered" : "Pending");
       }
-
       const setupResponse = await fetch("/api/telegram/setup");
       if (setupResponse.ok) {
         const setupData = await setupResponse.json();
@@ -91,54 +61,20 @@ export default function NotificationsPage() {
     void loadSetupState();
     const timer = window.setInterval(() => {
       void loadSetupState();
-    }, 10000);
-    return () => {
-      window.clearInterval(timer);
-    };
+    }, 15000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const handleRepair = async (force: boolean = false) => {
-    setIsRepairing(true);
-    setRepairResult(null);
     try {
-      const response = await fetch("/api/telegram/setup", {
+      await fetch("/api/telegram/setup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: "webhook",
-          repair: true,
-          force
-        }),
+        body: JSON.stringify({ mode: "webhook", repair: true, force }),
       });
-      
-      const data = await response.json();
-      if (data.ok) {
-        setRepairResult({
-          ok: true,
-          msg: "Webhook registered successfully",
-          actualUrl: data.actualTelegramWebhookUrl,
-          nextAction: data.nextAction
-        });
-      } else {
-        setRepairResult({
-          ok: false,
-          msg: data.error || "Repair failed",
-          description: data.setWebhookDescription,
-          actualUrl: data.actualTelegramWebhookUrl,
-          nextAction: data.nextAction
-        });
-      }
-      
       await loadSetupState();
     } catch (err) {
-      setRepairResult({
-        ok: false,
-        msg: "Network error during repair",
-        nextAction: "Check your internet connection and verify APP_BASE_URL is reachable."
-      });
       console.error(err);
-    } finally {
-      setIsRepairing(false);
     }
   };
 
@@ -156,201 +92,176 @@ export default function NotificationsPage() {
 
   const stateClass =
     telegramState === "Connected" || telegramState === "Polling Active"
-      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-      : telegramState === "Webhook Mismatch" || telegramState === "Webhook Missing"
-        ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
-        : telegramState === "Webhook Disabled"
-          ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
-          : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300";
+      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]"
+      : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20";
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 dark:from-slate-900 dark:to-slate-950">
-      <PageContainer className="space-y-5">
-        <header className="space-y-1">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Notifications</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Telegram integration, alert rules, channels, and notification operations.</p>
-        </header>
-
-        <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-          <div className="space-y-4 xl:col-span-7">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Telegram Diagnostics</h2>
-                <span className={`rounded-full px-2 py-1 text-xs font-semibold ${stateClass}`}>{telegramState}</span>
-              </div>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Bot Configured: <span className="font-semibold">{botConfigured ? "Yes" : "No"}</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Runtime Mode: <span className="font-semibold">{runtimeMode}</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Webhook Enabled: <span className="font-semibold">{webhookEnabled ? "Yes" : "No"}</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Webhook Match: <span className={`font-semibold ${webhookUrlMatch ? "text-emerald-600" : "text-red-600"}`}>{webhookUrlMatch ? "Yes" : "No"}</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Allowed Users: <span className="font-semibold">{allowedUserIdsCount}</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Bridge Alive: <span className="font-semibold">{bridgeAlive ? "Yes" : "No"}</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">APP_BASE_URL: <span className="font-mono font-semibold">{appBaseUrl || "Not set"}</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Expected Webhook URL: <span className="font-mono text-[10px]">{expectedWebhookUrl || "None"}</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Telegram Registered URL: <span className="font-mono text-[10px]">{actualTelegramWebhookUrl || "None"}</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Direct MQTT Configured: <span className="font-semibold">{directMqttConfigured ? "Yes" : "No"}</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Command Mode: <span className="font-semibold">{telegramCommandMode || "Unknown"}</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Command Test Endpoint: <span className="font-mono">POST /api/mqtt/command-test</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs md:col-span-2 dark:border-slate-700 dark:bg-slate-950">Self-test URL: <a href={webhookSelfTestUrl} target="_blank" className="font-mono text-blue-600 dark:text-blue-400 hover:underline">{webhookSelfTestUrl || "Not set"}</a></div>
-              </div>
-
-              <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/50 p-4 dark:border-blue-900/30 dark:bg-blue-950/20">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-blue-800 dark:text-blue-300">Architecture Note</h3>
-                <p className="mt-1 text-xs text-blue-700 dark:text-blue-400">
-                  Outbound bot notifications (sendMessage) can work even when inbound commands fail. 
-                  Commands (/open, /status) require a <b>registered webhook</b> or active polling to reach this deployment.
-                </p>
-              </div>
-
-              {nextAction && (
-                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/30 dark:bg-amber-950/30 dark:text-amber-300">
-                  <p className="font-bold">Next Action:</p>
-                  <p>{nextAction}</p>
+    <main className="min-h-screen bg-[#f8fafc] dark:bg-[#020617] transition-colors duration-500 pb-20">
+      <PageContainer className="space-y-8">
+        {/* Header Section */}
+        <header className="relative overflow-hidden rounded-[2.5rem] bg-white dark:bg-slate-900/50 p-8 md:p-10 shadow-2xl shadow-teal-500/5 border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+          <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-teal-500/10 blur-[80px]" />
+          <div className="absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-teal-500/5 blur-[80px]" />
+          
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500 text-white shadow-lg shadow-teal-500/20">
+                  <Bell className="h-5 w-5" />
                 </div>
-              )}
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button onClick={loadSetupState} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">Refresh Diagnostics</button>
-                <button 
-                  onClick={() => handleRepair(false)} 
-                  disabled={isRepairing}
-                  className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {isRepairing ? "Repairing..." : "Repair Webhook from Env"}
-                </button>
-                {(webhookStatus === "mismatch" || webhookStatus === "missing") && (
-                  <div className="flex flex-col gap-1">
-                    <button 
-                      onClick={() => {
-                        if (confirm("Force repair will delete existing webhook and drop all pending Telegram updates to prevent replay storm. Continue?")) {
-                          handleRepair(true);
-                        }
-                      }} 
-                      disabled={isRepairing}
-                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-900/30 dark:bg-red-950/30 dark:text-red-300"
-                    >
-                      Force Repair
-                    </button>
-                    <span className="text-[9px] text-red-500 italic">* Drops pending updates</span>
-                  </div>
-                )}
+                <span className="text-[11px] font-black uppercase tracking-[0.25em] text-teal-600 dark:text-teal-400">
+                  Notification Hub
+                </span>
               </div>
-
-              <div className="mt-4 space-y-2">
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 italic">
-                  * APP_BASE_URL defines the expected URL. Registration with Telegram is explicit.
-                </p>
-                <div className="rounded-lg bg-slate-900 p-3 text-[10px] text-slate-300">
-                  <p className="mb-1 font-mono text-slate-500"># Post-deploy sync (requires secret)</p>
-                  <code className="break-all font-mono">
-                    curl -X POST {appBaseUrl}/api/telegram/webhook-sync \<br/>
-                    &nbsp;&nbsp;-H &quot;x-internal-command-secret: &lt;secret&gt;&quot; \<br/>
-                    &nbsp;&nbsp;-d &#39;{"{"}&quot;repair&quot;:true,&quot;force&quot;:false{"}"}&#39;
-                  </code>
-                </div>
-              </div>
-
-              {repairResult && (
-                <div className={`mt-3 rounded-lg border p-3 text-xs ${repairResult.ok && webhookUrlMatch ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/30 dark:bg-emerald-950/30 dark:text-emerald-300" : "border-red-200 bg-red-50 text-red-800 dark:border-red-900/30 dark:bg-red-950/30 dark:text-red-300"}`}>
-                  <p className="font-bold">{repairResult.ok && webhookUrlMatch ? "Repair Succeeded" : "Repair Incomplete"}</p>
-                  <p>{repairResult.msg}</p>
-                  {repairResult.description && <p className="mt-1 font-mono text-[10px] opacity-80">Telegram says: {repairResult.description}</p>}
-                  {repairResult.nextAction && <p className="mt-2 font-bold underline">Action Required: {repairResult.nextAction}</p>}
-                </div>
-              )}
-
-              <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Webhook Status: <span className="font-semibold uppercase">{webhookStatus}</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Command Registration: <span className="font-semibold">{commandRegistration}</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Pending Commands: <span className="font-semibold">{pendingCommandsCount}</span></div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-950">Polling Status: <span className="font-semibold">{pollingStatus}</span></div>
-              </div>
+              <h1 className="text-5xl md:text-6xl font-black text-slate-800 dark:text-white tracking-tighter">System Alerts</h1>
+              <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Telegram integration, audit trails, and command protocols.</p>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Telegram Command Center</h2>
-              <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-                {commandItems.map((item) => (
-                  <div key={item.cmd} className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.cmd}</p>
-                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">{item.permission}</span>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{item.purpose}</p>
-                    <p className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-300">Execution ready</p>
-                  </div>
-                ))}
-              </div>
+            <div className="flex items-center gap-4">
+                <div className={`px-6 py-3 rounded-2xl flex items-center gap-3 font-black text-xs tracking-widest ${stateClass}`}>
+                   <Bot className="h-4 w-4" />
+                   {telegramState.toUpperCase()}
+                </div>
+                <button onClick={loadSetupState} className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-slate-200/50 dark:border-white/5 shadow-sm hover:bg-slate-50 dark:hover:bg-white/10 transition-all active:scale-95">
+                  <RefreshCcw className="h-5 w-5 text-slate-500" />
+                </button>
             </div>
           </div>
+        </header>
 
-          <aside className="space-y-4 xl:col-span-5">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Remote Command Flow</h2>
-              <div className="mt-3 space-y-1 text-sm">
-                {["Telegram User", "Telegram Bot", "Cloud Command Queue", "MQTT Broker", "ESP32 Device", "ACK Response", "Realtime Dashboard Update"].map((item, idx) => (
-                  <div key={item} className="flex items-center gap-2">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">{idx + 1}</div>
-                    <p className="text-slate-700 dark:text-slate-200">{item}</p>
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+          {/* Main Content Area */}
+          <div className="space-y-8 lg:col-span-7">
+            
+            <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-10 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+              <div className="flex items-center gap-3 mb-10">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
+                  <Terminal className="h-5 w-5" />
+                </div>
+                <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">Command Protocol</h2>
+              </div>
+              
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {commandItems.map((item) => (
+                  <div key={item.cmd} className="group p-6 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 hover:border-teal-500/30 transition-all">
+                    <div className="flex items-center justify-between mb-3">
+                       <code className="text-sm font-black text-teal-600 dark:text-teal-400">{item.cmd}</code>
+                       <span className="text-[9px] font-black px-2.5 py-1 bg-slate-200 dark:bg-white/10 rounded-full text-slate-500 uppercase tracking-widest">{item.permission}</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-600 dark:text-slate-300 leading-relaxed">{item.purpose}</p>
                   </div>
                 ))}
               </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">BotFather Group Setup</h2>
-              <ol className="mt-3 list-decimal space-y-1 pl-4 text-xs text-slate-600 dark:text-slate-300">
-                <li>Open @BotFather and run <span className="font-semibold">/mybots</span>.</li>
-                <li>Disable bot privacy mode if you want non-mention group commands to be read.</li>
-                <li>Add bot to group/supergroup with message read and send permissions.</li>
-                <li>Run <span className="font-semibold">/register_group</span> in the target group.</li>
-              </ol>
-            </div>
+            </section>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Alert Severity Rules</h2>
-              <div className="mt-3 space-y-2 text-xs text-slate-600 dark:text-slate-300">
-                <p className="flex items-center gap-2"><Shield size={14} /> Critical: Immediate device risk</p>
-                <p className="flex items-center gap-2"><Command size={14} /> Warning: Requires operator attention</p>
-                <p className="flex items-center gap-2"><Bot size={14} /> Info: Telemetry insights</p>
+            <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-10 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+              <div className="flex items-center gap-3 mb-10">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
+                  <Activity className="h-5 w-5" />
+                </div>
+                <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">Audit Trail</h2>
               </div>
-            </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Notification History</h2>
-              <div className="mt-3 space-y-2">
-                {notificationHistory.length === 0 ? <p className="text-xs text-slate-500">No notification events.</p> : notificationHistory.map((item, index) => (
-                  <div key={`${item.timestamp}-${item.action}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-950">
-                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{item.action}</p>
-                    <p className="text-[11px] text-slate-500">{formatDateTime(item.timestamp)}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Device Alert Events</h2>
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{smartAlerts.length} active alert events in current session.</p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Command Audit Logs</h2>
-              <div className="mt-3 space-y-2">
+              <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
                 {auditLogs.length === 0 ? (
-                  <p className="text-xs text-slate-500">No command logs yet.</p>
+                  <div className="flex flex-col items-center justify-center py-20 opacity-30">
+                    <Terminal className="h-12 w-12 mb-4 text-teal-500" />
+                    <p className="text-[10px] font-black uppercase tracking-widest text-center">No Audit Records Found</p>
+                  </div>
                 ) : (
                   auditLogs.map((log) => (
-                    <div key={log.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-950">
-                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{log.command} • {log.result}</p>
-                      <p className="text-[11px] text-slate-500">{log.detail}</p>
-                      <p className="text-[11px] text-slate-500">{formatDateTime(log.timestamp)}</p>
+                    <div key={log.id} className="p-6 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/30 transition-all">
+                       <div className="flex items-center justify-between mb-3">
+                          <p className="text-base font-black text-slate-800 dark:text-white tracking-tight">{log.command}</p>
+                          <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${log.result === 'success' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                            {log.result}
+                          </span>
+                       </div>
+                       <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-3">{log.detail}</p>
+                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em]">{formatDateTime(log.timestamp)}</p>
                     </div>
                   ))
                 )}
               </div>
+            </section>
+          </div>
+
+          {/* Sidebar Area */}
+          <aside className="space-y-8 lg:col-span-5">
+            <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-10 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+              <div className="flex items-center justify-between mb-10">
+                <div className="flex items-center gap-3">
+                  <Shield className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Diagnostics</h2>
+                </div>
+                <button onClick={() => handleRepair()} className="text-[10px] font-black text-teal-600 hover:text-teal-700 uppercase tracking-widest transition-colors">Repair</button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                 <DiagRow label="Bot Config" value={botConfigured ? "VALID" : "MISSING"} active={botConfigured} />
+                 <DiagRow label="Bridge Status" value={bridgeAlive ? "ALIVE" : "DEAD"} active={bridgeAlive} />
+                 <DiagRow label="Webhook" value={webhookUrlMatch ? "MATCH" : "MISMATCH"} active={webhookUrlMatch} />
+                 <DiagRow label="Users" value={`${allowedUserIdsCount} REGISTERED`} active={allowedUserIdsCount > 0} />
+              </div>
+              
+              <div className="mt-8 pt-8 border-t border-slate-100 dark:border-white/5 space-y-4">
+                 <div className="p-5 rounded-2xl bg-slate-900 text-[10px] font-mono text-slate-400 overflow-hidden shadow-inner">
+                    <p className="mb-2 text-teal-500">{"// ENDPOINT"}</p>
+                    <p className="truncate opacity-80">{appBaseUrl || "Not set"}</p>
+                 </div>
+              </div>
+            </section>
+
+            <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-10 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+                <div className="flex items-center gap-3 mb-10">
+                  <Activity className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Stream</h2>
+                </div>
+                <div className="space-y-6">
+                   {notificationHistory.length === 0 ? (
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center py-10 opacity-30">Empty Stream</p>
+                   ) : (
+                     notificationHistory.map((item, index) => (
+                       <div key={index} className="flex gap-6 group">
+                          <div className="flex flex-col items-center">
+                             <div className={`h-2.5 w-2.5 rounded-full ${item.action.toLowerCase().includes('fail') ? 'bg-rose-500' : 'bg-teal-500'} shadow-[0_0_12px_rgba(20,184,166,0.3)] transition-all group-hover:scale-125`} />
+                             {index < notificationHistory.length - 1 && <div className="h-full w-px bg-slate-200 dark:bg-white/10 mt-2" />}
+                          </div>
+                          <div className="pb-6">
+                             <p className="text-xs font-black text-slate-800 dark:text-white leading-none mb-2 uppercase tracking-tight">{item.action}</p>
+                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{formatDateTime(item.timestamp)}</p>
+                          </div>
+                       </div>
+                     ))
+                   )}
+                </div>
+            </section>
+
+            <div className="p-10 rounded-[2.5rem] bg-teal-600 text-white shadow-2xl shadow-teal-600/20 relative overflow-hidden group">
+                <div className="absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-white/10 blur-3xl group-hover:scale-110 transition-transform duration-700" />
+                <div className="relative z-10">
+                   <AlertCircle className="h-10 w-10 mb-6 opacity-40" />
+                   <h3 className="text-2xl font-black mb-3">Protocol Insight</h3>
+                   <p className="text-sm font-medium opacity-90 leading-relaxed">
+                     Outbound notifications function independently of command webhooks. 
+                     If /open fails, check Webhook Diagnostics.
+                   </p>
+                </div>
             </div>
           </aside>
-        </section>
+        </div>
       </PageContainer>
     </main>
   );
 }
+
+function DiagRow({ label, value, active }: { label: string; value: string; active: boolean }) {
+  return (
+    <div className="flex items-center justify-between p-6 rounded-[2rem] bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/30 transition-all">
+       <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:text-teal-600 transition-colors">{label}</span>
+       <span className={`text-[10px] font-black uppercase tracking-widest ${active ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>{value}</span>
+    </div>
+  );
+}
+
+
