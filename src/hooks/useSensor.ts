@@ -586,12 +586,12 @@ function shouldAcceptDevicePayload(payloadDeviceId?: string): boolean {
     const activeDeviceId = getActiveDeviceId();
 
     if (!activeDeviceId) {
-        return true;
+        return false;
     }
 
     // Allow legacy payloads without deviceId so production streams are not blocked.
     if (!payloadDeviceId) {
-        return true;
+        return false;
     }
 
     if (activeDeviceId === WOKWI_DEVICE_ID) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Cpu, RefreshCw, Wifi } from "lucide-react";
+import { Activity, Cpu, RefreshCw, Wifi, Radio, Zap, ShieldAlert, Binary } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 import PairingDeviceSettings, { type PairableDevice } from "@/features/settings/PairingDeviceSettings";
 import { useSystemState } from "@/hooks/useSystemState";
@@ -20,6 +20,7 @@ export default function IoTHubPage() {
   const [devices, setDevices] = useState<PairableDevice[]>(initialDevices);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [didHydrate, setDidHydrate] = useState(false);
 
   useEffect(() => {
     const raw = localStorage.getItem(DEVICES_STORAGE_KEY);
@@ -34,9 +35,11 @@ export default function IoTHubPage() {
     }
     const active = localStorage.getItem(ACTIVE_DEVICE_STORAGE_KEY);
     if (active) setSelectedDeviceId(active);
+    setDidHydrate(true);
   }, []);
 
   useEffect(() => {
+    if (!didHydrate) return;
     localStorage.setItem(DEVICES_STORAGE_KEY, JSON.stringify({ devices, selectedDeviceId }));
     if (selectedDeviceId) localStorage.setItem(ACTIVE_DEVICE_STORAGE_KEY, selectedDeviceId);
   }, [devices, selectedDeviceId]);
@@ -71,59 +74,133 @@ export default function IoTHubPage() {
   );
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 dark:from-slate-900 dark:to-slate-950">
-      <PageContainer className="space-y-5">
-        <header className="space-y-1">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">IoT Hub</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Device management console for pairing, connection health, sync, and diagnostics.</p>
+    <main className="min-h-screen bg-[#f8fafc] dark:bg-[#020617] transition-colors duration-500 pb-20">
+      <PageContainer className="space-y-8">
+        {/* Header Section */}
+        <header className="relative overflow-hidden rounded-[2.5rem] bg-white dark:bg-slate-900/50 p-8 md:p-10 shadow-2xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+          <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-teal-500/10 blur-[80px]" />
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500 text-white shadow-lg shadow-teal-500/20">
+                  <Wifi className="h-5 w-5" />
+                </div>
+                <span className="text-[11px] font-black uppercase tracking-[0.25em] text-teal-600 dark:text-teal-400">
+                  Connectivity Core
+                </span>
+              </div>
+              <h1 className="text-4xl font-black text-slate-800 dark:text-white tracking-tight">IoT Hub Management</h1>
+              <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Pairing, orchestration, and real-time synchronization bridge.</p>
+            </div>
+
+            <div className={`px-6 py-3 rounded-2xl flex items-center gap-3 font-black text-xs tracking-widest ${mqttConnected ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'}`}>
+               <Radio className={`h-4 w-4 ${mqttConnected ? 'animate-pulse' : ''}`} />
+               {mqttConnected ? 'BROKER CONNECTED' : 'BROKER OFFLINE'}
+            </div>
+          </div>
         </header>
 
-        <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"><p className="text-xs uppercase tracking-wide text-slate-500">MQTT Connection</p><p className="mt-1 text-lg font-semibold">{mqttConnected ? "Online" : "Offline"}</p></div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"><p className="text-xs uppercase tracking-wide text-slate-500">Latest Heartbeat</p><p className="mt-1 text-lg font-semibold">{lastUpdate ? new Date(lastUpdate).toLocaleTimeString("en-US") : "-"}</p></div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"><p className="text-xs uppercase tracking-wide text-slate-500">Reconnect Attempts</p><p className="mt-1 text-lg font-semibold">{reconnectAttempts}</p></div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"><p className="text-xs uppercase tracking-wide text-slate-500">Sync Status</p><p className="mt-1 text-lg font-semibold">{deviceConfig.syncState}</p></div>
+        <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+           <HubStat label="Sync State" value={deviceConfig.syncState} icon={<RefreshCw className="h-4 w-4" />} />
+           <HubStat label="Heartbeat" value={lastUpdate ? new Date(lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "-"} icon={<Activity className="h-4 w-4" />} color="blue" />
+           <HubStat label="Queue" value={operationalHealth.queueBacklog} icon={<Binary className="h-4 w-4" />} color="amber" />
+           <HubStat label="Attempts" value={reconnectAttempts} icon={<ShieldAlert className="h-4 w-4" />} color="rose" />
         </section>
 
-        <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <div className="grid grid-cols-1 gap-8 xl:grid-cols-12">
           <div className="xl:col-span-8">
-            <PairingDeviceSettings
-              discoveredDevices={devices}
-              selectedDeviceId={selectedDeviceId}
-              isScanning={isScanning}
-              onScan={() => {
-                setIsScanning(true);
-                window.setTimeout(() => setIsScanning(false), 1200);
-              }}
-              onSelectDevice={(deviceId) => setSelectedDeviceId(deviceId)}
-            />
+            <div className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm overflow-hidden">
+               <div className="p-8 border-b border-slate-100 dark:border-white/5">
+                  <div className="flex items-center gap-3">
+                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
+                        <Cpu className="h-5 w-5" />
+                     </div>
+                     <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Provisioning</h2>
+                  </div>
+               </div>
+               <div className="p-2">
+                  <PairingDeviceSettings
+                    discoveredDevices={devices}
+                    selectedDeviceId={selectedDeviceId}
+                    isScanning={isScanning}
+                    onScan={() => {
+                      setIsScanning(true);
+                      window.setTimeout(() => setIsScanning(false), 1200);
+                    }}
+                    onSelectDevice={(deviceId) => setSelectedDeviceId(deviceId)}
+                  />
+               </div>
+            </div>
           </div>
 
-          <aside className="space-y-4 xl:col-span-4">
+          <aside className="space-y-8 xl:col-span-4">
             <TelegramBridgeStatus />
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Device Console</h2>
-              <div className="mt-3 space-y-2 text-sm text-slate-700 dark:text-slate-200">
-                <p className="flex items-center gap-2"><Cpu size={14} /> Device: {selectedDevice?.name ?? "No device selected"}</p>
-                <p className="flex items-center gap-2"><Wifi size={14} /> Broker: {connection.state}</p>
-                <p className="flex items-center gap-2"><Activity size={14} /> Last ACK: {debug.lastAckResult}</p>
-                <p className="flex items-center gap-2"><RefreshCw size={14} /> Queue Backlog: {operationalHealth.queueBacklog}</p>
-                <p className="flex items-center gap-2"><Activity size={14} /> Drift: {operationalHealth.statusDriftMs ?? 0} ms</p>
-              </div>
-            </div>
+            
+            <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-8 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+               <div className="flex items-center gap-3 mb-6">
+                  <Zap className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                  <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">Bridge Diagnostics</h2>
+               </div>
+               
+               <div className="space-y-4">
+                  <DiagItem label="Device Target" value={selectedDevice?.name ?? "None"} icon={<Cpu className="h-3.5 w-3.5" />} />
+                  <DiagItem label="Broker Mode" value={connection.state} icon={<Wifi className="h-3.5 w-3.5" />} />
+                  <DiagItem label="Last Transaction" value={debug.lastAckResult} icon={<Activity className="h-3.5 w-3.5" />} />
+                  <DiagItem label="Latency Drift" value={`${operationalHealth.statusDriftMs ?? 0}ms`} icon={<RefreshCw className="h-3.5 w-3.5" />} />
+               </div>
+            </section>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Firmware & Sync</h2>
-              <div className="mt-3 space-y-2 text-sm">
-                <p className="text-slate-700 dark:text-slate-200">Firmware: v1.0 (simulation)</p>
-                <p className="text-slate-700 dark:text-slate-200">Last Sync: {deviceConfig.lastSyncAt ? new Date(deviceConfig.lastSyncAt).toLocaleString("en-US") : "-"}</p>
-                <p className="text-slate-700 dark:text-slate-200">Sync Message: {deviceConfig.syncMessage}</p>
-                <p className="text-slate-700 dark:text-slate-200">Signal Quality: {mqttConnected ? "Good" : "Unavailable"}</p>
-              </div>
-            </div>
+            <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-8 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+               <div className="flex items-center gap-3 mb-6">
+                  <Binary className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                  <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">Firmware Manifest</h2>
+               </div>
+               <div className="space-y-3">
+                  <ManifestRow label="Revision" value="v1.0-sim" />
+                  <ManifestRow label="Last Sync" value={deviceConfig.lastSyncAt ? new Date(deviceConfig.lastSyncAt).toLocaleDateString() : "Never"} />
+                  <ManifestRow label="Sync Code" value={deviceConfig.syncMessage.split(' ')[0]} />
+               </div>
+            </section>
           </aside>
-        </section>
+        </div>
       </PageContainer>
     </main>
   );
+}
+
+function HubStat({ label, value, icon, color = "teal" }: { label: string; value: string | number; icon: React.ReactNode; color?: string }) {
+   const colors: Record<string, string> = {
+      teal: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
+      blue: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+      rose: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+      amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+   };
+   return (
+      <div className="p-6 rounded-[2rem] bg-white dark:bg-slate-900/40 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+         <div className={`p-2.5 rounded-xl w-fit mb-4 ${colors[color]}`}>{icon}</div>
+         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">{label}</p>
+         <p className="text-xl font-black text-slate-800 dark:text-white truncate uppercase">{value}</p>
+      </div>
+   );
+}
+
+function DiagItem({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
+   return (
+      <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5">
+         <div className="flex items-center gap-3">
+            <div className="text-slate-400">{icon}</div>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</span>
+         </div>
+         <span className="text-[10px] font-black text-slate-800 dark:text-white uppercase truncate ml-4">{value}</span>
+      </div>
+   );
+}
+
+function ManifestRow({ label, value }: { label: string; value: string }) {
+   return (
+      <div className="flex justify-between text-xs font-bold py-1">
+         <span className="text-slate-500">{label}</span>
+         <span className="text-slate-800 dark:text-slate-200">{value}</span>
+      </div>
+   );
 }
