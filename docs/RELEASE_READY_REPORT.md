@@ -21,7 +21,7 @@ The `develop` branch has been stabilized following the merge of PR #21. All runt
 ## Documentation Cleanup
 - [x] **README.md:** Updated with `APP_BASE_URL`, `INTERNAL_COMMAND_SECRET`, and telemetry contract.
 - [x] **STAGING_VALIDATION_RUNBOOK.md:** Consolidated Telegram setup and added direct MQTT test instructions.
-- [x] **MQTT_DATA_CONTRACT.md:** Added optional debug fields and clarified light normalization.
+- [x] **MQTT_GUIDE.md:** Consolidated all MQTT contracts and security models.
 - [x] **Big Data Docs:** Marked as "Future Readiness".
 
 ## Firebase Status
