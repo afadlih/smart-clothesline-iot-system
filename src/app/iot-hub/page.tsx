@@ -42,7 +42,7 @@ export default function IoTHubPage() {
     if (!didHydrate) return;
     localStorage.setItem(DEVICES_STORAGE_KEY, JSON.stringify({ devices, selectedDeviceId }));
     if (selectedDeviceId) localStorage.setItem(ACTIVE_DEVICE_STORAGE_KEY, selectedDeviceId);
-  }, [devices, selectedDeviceId]);
+  }, [devices, selectedDeviceId, didHydrate]);
 
   useEffect(() => {
     const unsubscribe = mqttService.subscribeTopic(PAIRING_DISCOVERY_TOPIC, (rawPayload) => {

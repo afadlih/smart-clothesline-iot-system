@@ -8,20 +8,15 @@ import {
   Calendar,
   Activity,
   AlertCircle,
-  HelpCircle,
   History,
-  ChevronDown,
-  ChevronUp,
   Terminal,
   Bug,
 } from "lucide-react";
-import EventTimeline from "@/components/events/EventTimeline";
 import OperationalHealthPanel from "@/components/status/OperationalHealth";
 import PageContainer from "@/components/layout/PageContainer";
 import StatusBadge from "@/components/layout/StatusBadge";
 import { useNotificationEngine } from "@/hooks/useNotificationEngine";
 import { useSystemState } from "@/hooks/useSystemState";
-import { MQTT_BROKER_URL } from "@/services/MQTTService";
 
 function formatClock(value: number | null): string {
   if (value === null) {
@@ -51,33 +46,18 @@ function badgeClassByState(state: "good" | "warn" | "danger" | "info"): string {
   return "bg-teal-500/10 text-teal-600 dark:bg-teal-500/10 dark:text-teal-400 border border-teal-500/20";
 }
 
-function sanitizeBrokerUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    parsed.username = "";
-    parsed.password = "";
-    return parsed.toString();
-  } catch {
-    return url.replace(/\/\/.*@/, "//");
-  }
-}
 
 export default function DashboardScreen() {
   const {
     runtime,
     sendCommand,
     operationalHealth,
-    smartAlerts,
     uiState,
     decision,
     lastUpdate,
     sensor,
-    events: sensorEvents,
     serialLogs,
-    mqttConnected,
     connection,
-    lastSensorUpdate,
-    lastStatusUpdate,
     drift,
     debug,
   } = useSystemState();
@@ -139,13 +119,6 @@ export default function DashboardScreen() {
           ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
           : "bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20";
 
-  const criticalAlerts = smartAlerts.filter(
-    (alert) => alert.severity === "critical",
-  );
-  const warningAlerts = smartAlerts.filter(
-    (alert) => alert.severity === "warning",
-  );
-  const infoAlerts = smartAlerts.filter((alert) => alert.severity === "info");
 
   return (
     <main className="min-h-screen bg-[#f8fafc] dark:bg-[#020617] transition-colors duration-500 pb-20">
