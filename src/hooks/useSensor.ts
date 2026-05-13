@@ -11,11 +11,12 @@ import type { EventLog } from "@/models/EventLog";
 import { EventLogService } from "@/services/EventLogService";
 import { FirestoreService, sensorDataQueue } from "@/services/FirestoreService";
 import {
-    COMMAND_TOPIC,
-    CONFIG_TOPIC,
-    CONFIG_ACK_TOPIC,
-    SENSOR_TOPIC,
     STATUS_TOPIC,
+    getDeviceConfigAckTopic,
+    getDeviceCommandTopic,
+    getDeviceConfigTopic,
+    getDeviceSensorTopic,
+    getDeviceStatusTopic,
     mqttService,
 } from "@/services/MQTTService";
 import { pushSystemEvent } from "@/hooks/useNotificationEngine";
@@ -489,7 +490,7 @@ async function processPendingTelegramCommands(): Promise<void> {
                 lastBridgeError = "Dashboard bridge waiting for MQTT connection";
                 // Do not update doc if we already updated it recently to avoid write spam
                 if (commandJob.updatedAt < now - 5000) {
-                   await TelegramOpsService.markCommandStatus(commandJob.id, "pending", lastBridgeError);
+                    await TelegramOpsService.markCommandStatus(commandJob.id, "pending", lastBridgeError);
                 }
                 continue;
             }
@@ -501,7 +502,7 @@ async function processPendingTelegramCommands(): Promise<void> {
 
             await TelegramOpsService.markCommandStatus(commandJob.id, "processing", "Processing by dashboard bridge");
             let dispatched = false;
-            
+
             if (commandJob.command === "/open") dispatched = sendCommand("OPEN");
             else if (commandJob.command === "/close") dispatched = sendCommand("CLOSE");
             else if (commandJob.command === "/mode_auto") dispatched = sendCommand("AUTO");
@@ -519,7 +520,7 @@ async function processPendingTelegramCommands(): Promise<void> {
                     detail: lastBridgeError,
                     source: "telegram-bridge",
                 });
-                
+
                 void notifyCommandResult(commandJob.id, "pending", lastBridgeError);
                 continue;
             }
@@ -957,7 +958,19 @@ function startStreamIfNeeded(): void {
             });
     }
 
-    mqttService.subscribe((topic, rawPayload) => {
+    const activeDeviceId = getActiveDeviceId();
+    if (!activeDeviceId) {
+        appendSerialLog("ALERT", "No active device selected; MQTT telemetry subscription skipped", Date.now(), "WARN");
+        sharedState.loading = false;
+        notifyListeners();
+        return;
+    }
+
+    const sensorTopic = getDeviceSensorTopic(activeDeviceId);
+    const statusTopic = getDeviceStatusTopic(activeDeviceId);
+    const configAckTopic = getDeviceConfigAckTopic(activeDeviceId);
+
+    const handleTopicMessage = (rawPayload: string, topic: string) => {
         const receivedAt = Date.now();
         sharedState.lastMqttMessage = {
             topic,
@@ -965,7 +978,7 @@ function startStreamIfNeeded(): void {
             receivedAt,
         };
 
-        if (topic === SENSOR_TOPIC) {
+        if (topic === sensorTopic) {
             MqttDiagnosticsService.recordSensorPayload(rawPayload, receivedAt);
             const payload = parseSensorPayload(rawPayload, receivedAt);
             if (!payload) {
@@ -1079,7 +1092,7 @@ function startStreamIfNeeded(): void {
             detectRealtimeAlerts(data, sharedState.deviceState.status, sensorTimestamp);
 
             logger.info("mqtt", "Sensor state update", {
-                topic: SENSOR_TOPIC,
+                topic: sensorTopic,
                 sensor: {
                     temperature: payload.temperature,
                     humidity: payload.humidity,
@@ -1092,7 +1105,7 @@ function startStreamIfNeeded(): void {
             return;
         }
 
-        if (topic === CONFIG_ACK_TOPIC) {
+        if (topic === configAckTopic) {
             MqttDiagnosticsService.recordConfigAckPayload(rawPayload, receivedAt);
             const packet = parseStatusPacket(rawPayload);
             if (packet?.kind === "configAck") {
@@ -1101,7 +1114,7 @@ function startStreamIfNeeded(): void {
             return;
         }
 
-        if (topic !== STATUS_TOPIC) {
+        if (topic !== statusTopic) {
             notifyListeners();
             return;
         }
@@ -1203,13 +1216,17 @@ function startStreamIfNeeded(): void {
         detectRealtimeAlerts(sharedState.sensorData, payload.status, statusTimestamp);
 
         logger.info("mqtt", "Status state update", {
-            topic: STATUS_TOPIC,
+            topic: statusTopic,
             status: payload.status,
             mode: payload.mode,
             lastCommand: payload.lastCommand ?? null,
         });
         notifyListeners();
-    });
+    };
+
+    mqttService.subscribeTopic(sensorTopic, handleTopicMessage);
+    mqttService.subscribeTopic(statusTopic, handleTopicMessage);
+    mqttService.subscribeTopic(configAckTopic, handleTopicMessage);
 }
 
 export function sendCommand(command: DeviceCommand): boolean {
@@ -1259,6 +1276,25 @@ export function sendCommand(command: DeviceCommand): boolean {
         return false;
     }
 
+    const activeDeviceId = getActiveDeviceId();
+
+    if (!activeDeviceId) {
+        logger.warn("mqtt", "Command blocked because no active device is selected");
+        pushSystemEvent({
+            type: "ALERT",
+            title: "Command blocked",
+            description: "No active device selected",
+            timestamp: now,
+        });
+        return false;
+    }
+
+    const commandTopic = getDeviceCommandTopic(activeDeviceId);
+    const commandPayload = {
+        deviceId: activeDeviceId,
+        command,
+    };
+
     if (command === "RESTART") {
         commandRateLimiter.recordSend(command);
         sharedState.pendingCommand = command;
@@ -1266,12 +1302,7 @@ export function sendCommand(command: DeviceCommand): boolean {
         sharedState.commandSentAt = now;
         notifyListeners();
 
-        const activeDeviceId = getActiveDeviceId();
-        const targetDeviceId = activeDeviceId && activeDeviceId !== WOKWI_DEVICE_ID ? activeDeviceId : null;
-        const commandPayload = targetDeviceId ? { deviceId: targetDeviceId, command } : { command };
-        const targetLabel = targetDeviceId ?? "legacy";
-
-        appendSerialLog("COMMAND", `${command} -> publish ${COMMAND_TOPIC} target=${targetLabel}`, now);
+        appendSerialLog("COMMAND", `${command} -> publish ${commandTopic} target=${activeDeviceId}`, now);
 
         appendLegacyEvent({
             type: "USER",
@@ -1281,12 +1312,12 @@ export function sendCommand(command: DeviceCommand): boolean {
         pushSystemEvent({
             type: "COMMAND",
             title: "Command sent",
-            description: `USER -> ${command} (${targetLabel})`,
+            description: `USER -> ${command} (${activeDeviceId})`,
             timestamp: now,
         });
 
         MqttDiagnosticsService.recordCommandPayload(JSON.stringify(commandPayload), now);
-        const published = mqttService.publish(COMMAND_TOPIC, commandPayload);
+        const published = mqttService.publish(commandTopic, commandPayload);
         if (!published) {
             sharedState.pendingCommand = null;
             sharedState.commandStatus = "idle";
@@ -1303,12 +1334,7 @@ export function sendCommand(command: DeviceCommand): boolean {
     sharedState.commandSentAt = now;
     notifyListeners();
 
-    const activeDeviceId = getActiveDeviceId();
-    const targetDeviceId = activeDeviceId && activeDeviceId !== WOKWI_DEVICE_ID ? activeDeviceId : null;
-    const commandPayload = targetDeviceId ? { deviceId: targetDeviceId, command } : { command };
-    const targetLabel = targetDeviceId ?? "legacy";
-
-    appendSerialLog("COMMAND", `${command} -> publish ${COMMAND_TOPIC} target=${targetLabel}`, now);
+    appendSerialLog("COMMAND", `${command} -> publish ${commandTopic} target=${activeDeviceId}`, now);
     appendLegacyEvent({
         type: "USER",
         action: command,
@@ -1317,12 +1343,12 @@ export function sendCommand(command: DeviceCommand): boolean {
     pushSystemEvent({
         type: "COMMAND",
         title: "Command sent",
-        description: `USER -> ${command} (${targetLabel})`,
+        description: `USER -> ${command} (${activeDeviceId})`,
         timestamp: now,
     });
 
     MqttDiagnosticsService.recordCommandPayload(JSON.stringify(commandPayload), now);
-    const published = mqttService.publish(COMMAND_TOPIC, commandPayload);
+    const published = mqttService.publish(commandTopic, commandPayload);
     if (!published) {
         sharedState.pendingCommand = null;
         sharedState.commandStatus = "idle";
@@ -1377,6 +1403,25 @@ export function publishConfig(config: Omit<DeviceConfig, "syncState" | "lastSync
         return false;
     }
 
+    const activeDeviceId = getActiveDeviceId();
+
+    if (!activeDeviceId) {
+        sharedState.deviceConfig = {
+            ...sharedState.deviceConfig,
+            syncState: "FAILED",
+            syncMessage: "Sync failed: no active device selected",
+        };
+        appendSerialLog("CONFIG", "FAILED no active device selected", now, "WARN");
+        pushSystemEvent({
+            type: "CONFIG",
+            title: "Config sync failed",
+            description: "No active device selected",
+            timestamp: now,
+        });
+        notifyListeners();
+        return false;
+    }
+
     sharedState.deviceConfig = {
         ...sharedState.deviceConfig,
         syncState: "PENDING",
@@ -1387,18 +1432,17 @@ export function publishConfig(config: Omit<DeviceConfig, "syncState" | "lastSync
     lastConfigPublishAt = now;
     lastConfigPublishKey = configKey;
 
-    const activeDeviceId = getActiveDeviceId();
-    const targetDeviceId = activeDeviceId && activeDeviceId !== WOKWI_DEVICE_ID ? activeDeviceId : null;
+    const configTopic = getDeviceConfigTopic(activeDeviceId);
 
     appendSerialLog(
         "CONFIG",
-        `PUBLISH rainThreshold=${config.rainThreshold} lightThreshold=${config.lightThreshold} updateIntervalSec=${config.updateIntervalSec} autoCloseOnRain=${config.autoCloseOnRain} autoCloseOnDark=${config.autoCloseOnDark} autoOpenWhenSafe=${config.autoOpenWhenSafe}`,
+        `PUBLISH ${configTopic} rainThreshold=${config.rainThreshold} lightThreshold=${config.lightThreshold} updateIntervalSec=${config.updateIntervalSec} autoCloseOnRain=${config.autoCloseOnRain} autoCloseOnDark=${config.autoCloseOnDark} autoOpenWhenSafe=${config.autoOpenWhenSafe}`,
         now,
     );
     pushSystemEvent({
         type: "CONFIG",
         title: "Config publish",
-        description: `rain=${config.rainThreshold}, light=${config.lightThreshold}, interval=${config.updateIntervalSec}s`,
+        description: `target=${activeDeviceId}, rain=${config.rainThreshold}, light=${config.lightThreshold}, interval=${config.updateIntervalSec}s`,
         timestamp: now,
     });
     appendLegacyEvent({
@@ -1406,8 +1450,8 @@ export function publishConfig(config: Omit<DeviceConfig, "syncState" | "lastSync
         action: "CONFIG_PUBLISH",
         timestamp: now,
     });
-    mqttService.publish(CONFIG_TOPIC, {
-        ...(targetDeviceId ? { deviceId: targetDeviceId } : {}),
+    mqttService.publish(configTopic, {
+        deviceId: activeDeviceId,
         rainThreshold: config.rainThreshold,
         lightThreshold: config.lightThreshold,
         updateIntervalSec: config.updateIntervalSec,

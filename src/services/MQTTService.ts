@@ -20,7 +20,7 @@ if (typeof window !== "undefined" && (MQTT_USER || MQTT_PASS) && process.env.NOD
 }
 
 type SubscribeCallback = (topic: string, payload: string) => void;
-type TopicCallback = (payload: string) => void;
+type TopicCallback = (payload: string, topic: string) => void;
 type ConnectionState = "connecting" | "online" | "reconnecting" | "offline" | "error";
 
 export type MqttConnectionSnapshot = {
@@ -112,10 +112,36 @@ class RetryStrategy {
   }
 }
 
+export function getDeviceDiscoveryTopic(deviceId: string): string {
+  return `smart-clothesline/${deviceId}/pairing/discovery`;
+}
+
+export function getDeviceSensorTopic(deviceId: string): string {
+  return `smart-clothesline/${deviceId}/sensor`;
+}
+
+export function getDeviceStatusTopic(deviceId: string): string {
+  return `smart-clothesline/${deviceId}/status`;
+}
+
+export function getDeviceCommandTopic(deviceId: string): string {
+  return `smart-clothesline/${deviceId}/command`;
+}
+
+export function getDeviceConfigTopic(deviceId: string): string {
+  return `smart-clothesline/${deviceId}/config`;
+}
+
+export function getDeviceConfigAckTopic(deviceId: string): string {
+  return `smart-clothesline/${deviceId}/config/ack`;
+}
+
+
 class MqttService {
   private client: MqttClient | null = null;
   private subscribers = new Set<SubscribeCallback>();
   private topicSubscribers = new Map<string, Set<TopicCallback>>();
+  private dynamicSubscription = new Set<string>();
   private sensorSubscribers = new Set<SensorMessageCallback>();
   private connectionSubscribers = new Set<ConnectionCallback>();
   private connection: MqttConnectionSnapshot = {
@@ -188,7 +214,7 @@ class MqttService {
     }
 
     for (const callback of callbacks) {
-      callback(raw);
+      callback(raw, topic);
     }
   }
 
@@ -218,13 +244,16 @@ class MqttService {
 
     this.client.on("connect", () => {
       this.retryStrategy.reset();
-      this.client?.subscribe([SENSOR_TOPIC, STATUS_TOPIC, CONFIG_TOPIC, CONFIG_ACK_TOPIC, PAIRING_DISCOVERY_TOPIC], (error) => {
-        if (error) {
-          logger.error("mqtt", "Failed to subscribe", error.message);
-        }
-      });
       this.setConnection({ state: "online", isOnline: true, lastError: null });
       logger.info("mqtt", "Connected successfully");
+
+      for (const topic of this.topicSubscribers.keys()) {
+        this.client?.subscribe(topic, (error) => {
+          if (!error) {
+            this.dynamicSubscription.add(topic);
+          }
+        })
+      }
     });
 
     this.client.on("reconnect", () => {
@@ -296,9 +325,21 @@ class MqttService {
 
   subscribeTopic(topic: string, callback: TopicCallback): () => void {
     this.connect();
+
     const existing = this.topicSubscribers.get(topic) ?? new Set<TopicCallback>();
     existing.add(callback);
     this.topicSubscribers.set(topic, existing);
+
+    if (this.client?.connected && !this.dynamicSubscription.has(topic)) {
+      this.client.subscribe(topic, (error) => {
+        if (error) {
+          logger.error("mqtt", "Failed to subscribe topic", error.message);
+          return;
+        }
+
+        this.dynamicSubscription.add(topic);
+      })
+    }
 
     return () => {
       const callbacks = this.topicSubscribers.get(topic);
@@ -306,8 +347,14 @@ class MqttService {
         return;
       }
       callbacks.delete(callback);
+
       if (callbacks.size === 0) {
         this.topicSubscribers.delete(topic);
+
+        if (this.client?.connected && this.dynamicSubscription.has(topic)) {
+          this.client.unsubscribe(topic);
+          this.dynamicSubscription.delete(topic);
+        }
       }
     };
   }
