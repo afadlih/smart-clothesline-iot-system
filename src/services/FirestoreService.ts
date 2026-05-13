@@ -86,16 +86,20 @@ export class FirestoreService {
   }
 
   static async getSensorHistory(maxItems: number = 20): Promise<SensorData[]> {
-    const constraints: QueryConstraint[] = [orderBy("createdAt", "desc")];
+    const constraints: QueryConstraint[] = [];
+
+    // Note: Removed orderBy("createdAt") because it filters out documents missing that field.
+    // We will sort the results client-side instead to ensure ALL data is included.
 
     if (maxItems > 0) {
+      constraints.push(orderBy("createdAt", "desc"));
       constraints.push(limit(maxItems));
     }
 
     const q = query(collection(db, COLLECTION_NAME), ...constraints);
     const snapshot = await getDocs(q);
 
-    return snapshot.docs.map((doc) => {
+    const sensorDataList = snapshot.docs.map((doc) => {
       const value = doc.data() as {
         temperature?: number;
         humidity?: number;
@@ -103,6 +107,8 @@ export class FirestoreService {
         rain?: boolean;
         status?: "OPEN" | "CLOSED" | "TERBUKA" | "TERTUTUP";
         createdAt?: Timestamp;
+        receivedAt?: number;
+        deviceTimestamp?: number;
       };
 
       const normalizedStatus =
@@ -112,15 +118,30 @@ export class FirestoreService {
             ? "CLOSED"
             : value.status;
 
+      // Fallback timestamp logic: createdAt -> receivedAt -> deviceTimestamp -> now
+      let timestamp: string;
+      if (value.createdAt) {
+        timestamp = value.createdAt.toDate().toISOString();
+      } else if (typeof value.receivedAt === "number") {
+        timestamp = new Date(value.receivedAt).toISOString();
+      } else if (typeof value.deviceTimestamp === "number") {
+        timestamp = new Date(value.deviceTimestamp).toISOString();
+      } else {
+        timestamp = new Date().toISOString();
+      }
+
       return new SensorData({
         temp: value.temperature ?? 0,
         humidity: value.humidity ?? 0,
         light: value.light ?? 0,
         rain: value.rain ? 1 : 0,
         status: normalizedStatus ?? "CLOSED",
-        timestamp: value.createdAt?.toDate().toISOString() ?? new Date().toISOString(),
+        timestamp: timestamp,
       });
     });
+
+    // Client-side sort by timestamp descending
+    return sensorDataList.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   }
 
   static async saveSystemSettings(settings: SystemSettingsPayload): Promise<void> {
