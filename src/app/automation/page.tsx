@@ -67,6 +67,7 @@ function calculateAutoThreshold(sensor: {
 export default function AutomationPage() {
   const { decision, sendCommand, publishConfig, events, sensorData } = useSystemState();
   const [settings, setSettings] = useState<AutomationSettings>(defaults);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     try {
@@ -91,16 +92,27 @@ export default function AutomationPage() {
     [events],
   );
 
-  const saveAndApply = () => {
+  const saveAndApply = async () => {
+    if (isSaving) return;
+    
+    setIsSaving(true);
+
     const next = { ...settings };
+
     try {
       const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
       const prev = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ ...prev, ...next }));
+
+      publishConfig(next);
+
+      await new Promise((resolve) => setTimeout(resolve, 800));
     } catch {
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(next));
+    } finally {
+      setIsSaving(false);
     }
-    publishConfig(next);
   };
 
   const applyAutoThreshold = () => {
@@ -146,8 +158,8 @@ export default function AutomationPage() {
                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Current State</p>
                    <p className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">{decision.decisionSource === "MANUAL" ? "Manual Override" : "Auto Mode"}</p>
                 </div>
-                <button onClick={saveAndApply} className="px-8 py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs tracking-widest transition-all shadow-lg shadow-emerald-600/20 active:scale-95">
-                  SAVE & APPLY
+                <button onClick={saveAndApply} disabled={isSaving} className="px-8 py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs tracking-widest transition-all shadow-lg shadow-emerald-600/20 active:scale-95">
+                  {isSaving ? "SAVING...." : "SAVE & APPLY"}
                 </button>
             </div>
           </div>
@@ -193,9 +205,9 @@ export default function AutomationPage() {
               </div>
 
               <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-3">
-                <ToggleButton label="Rain Protection" active={settings.autoCloseOnRain} icon={<CloudRain className="h-4 w-4" />} onClick={(v) => setSettings(p => ({ ...p, autoCloseOnRain: v }))} />
-                <ToggleButton label="Night Security" active={settings.autoCloseOnDark} icon={<Timer className="h-4 w-4" />} onClick={(v) => setSettings(p => ({ ...p, autoCloseOnDark: v }))} />
-                <ToggleButton label="Auto Resumption" active={settings.autoOpenWhenSafe} icon={<Zap className="h-4 w-4" />} onClick={(v) => setSettings(p => ({ ...p, autoOpenWhenSafe: v }))} />
+                <ToggleButton label="Auto Close on Rain" active={settings.autoCloseOnRain} icon={<CloudRain className="h-4 w-4" />} onClick={(v) => setSettings(p => ({ ...p, autoCloseOnRain: v }))} />
+                <ToggleButton label="Auto Close on Dark" active={settings.autoCloseOnDark} icon={<Timer className="h-4 w-4" />} onClick={(v) => setSettings(p => ({ ...p, autoCloseOnDark: v }))} />
+                <ToggleButton label="Auto Open When Safe" active={settings.autoOpenWhenSafe} icon={<Zap className="h-4 w-4" />} onClick={(v) => setSettings(p => ({ ...p, autoOpenWhenSafe: v }))} />
               </div>
             </div>
 

@@ -25,6 +25,7 @@ import {
   PAIRING_DISCOVERY_TOPIC,
   type PairingDiscoveryMessage,
 } from "@/services/MQTTService";
+import { useSystemState } from "@/hooks/useSystemState";
 
 type TabId = "profile" | "notification" | "device" | "pairing" | "data-management";
 
@@ -121,6 +122,13 @@ export default function SettingsScreen() {
   const [didHydrateDeviceRef, setDidHydrateDeviceRef] = useState(false);
   const [cacheStats, setCacheStats] = useState({ history: 0, queue: 0, events: 0, total: 0, totalKB: 0 });
   const [lastCleared, setLastCleared] = useState<string | null>(null);
+  const {runtime} = useSystemState();
+  const activeDeviceRuntimeStatus = 
+    runtime.deviceConnectivity === "ONLINE"
+      ? "online"
+      : runtime.deviceConnectivity === "DELAYED"
+        ? "delayed"
+        : "offline";
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -544,6 +552,7 @@ export default function SettingsScreen() {
               <PairingDeviceSettings
                 discoveredDevices={devices}
                 selectedDeviceId={selectedDeviceId}
+                activeDeviceStatus={activeDeviceRuntimeStatus}
                 isScanning={isScanning}
                 onScan={onScanDevices}
                 onSelectDevice={(deviceId) => setSelectedDeviceId(deviceId)}
