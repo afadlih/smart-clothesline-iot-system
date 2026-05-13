@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useSensorHistory } from "@/hooks/useSensorHistory";
 import {
   ChevronLeft,
@@ -13,11 +13,12 @@ import {
   Zap,
   Filter,
   Droplets,
-  Database,
   Sun,
   Activity,
   Clock,
   TrendingUp,
+  X,
+  Loader2,
 } from "lucide-react";
 import { formatClock, formatDateTime } from "@/utils/timeFormat";
 import PageContainer from "@/components/layout/PageContainer";
@@ -73,110 +74,103 @@ function formatTime(timestamp: string): string {
 }
 
 export default function HistoryPage() {
-  const { history, loading, error, lastFetchedAt } = useSensorHistory(200);
+  const { history, loading, error, lastFetchedAt } = useSensorHistory(0);
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [weatherFilter, setWeatherFilter] = useState<WeatherFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedDataKey, setSelectedDataKey] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loadingDetailsKey, setLoadingDetailsKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isModalOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [isModalOpen]);
 
   const sortedHistory = useMemo(
     () => [...history].sort((a, b) => getTimestampMs(b.timestamp) - getTimestampMs(a.timestamp)),
     [history],
   );
 
-  const dailyHistory = useMemo(() => {
-    const dailySummaryMap = sortedHistory.reduce<Record<string, DailySummary>>((accumulator, item) => {
+  const historyByDay = useMemo(() => {
+    const map: Record<string, typeof sortedHistory> = {};
+    sortedHistory.forEach((item) => {
       const dateKey = formatDateValue(item.timestamp);
+      if (!map[dateKey]) map[dateKey] = [];
+      map[dateKey].push(item);
+    });
+    // Critical Optimization: Pre-sort each day once during map creation
+    // This removes the O(N log N) sorting cost from the click event
+    Object.values(map).forEach((dayReadings) => {
+      dayReadings.sort((a, b) => getTimestampMs(a.timestamp) - getTimestampMs(b.timestamp));
+    });
+    return map;
+  }, [sortedHistory]);
 
-      if (!accumulator[dateKey]) {
-        accumulator[dateKey] = {
-          dateKey,
-          averageTemperature: 0,
-          averageHumidity: 0,
-          averageLight: 0,
-          totalReadings: 0,
-          rainyReadings: 0,
-          openCount: 0,
-          closedCount: 0,
-          status: "CLOSED",
-          dominantRatio: 0,
-          humidityTrend: "flat",
-          lightTrend: "flat",
-          firstReadingAt: item.timestamp,
-          lastReadingAt: item.timestamp,
-        };
-      }
+  const dailyHistory = useMemo(() => {
+    return Object.entries(historyByDay).map<DailySummary>(([dateKey, dayReadings]) => {
+      let totalTemp = 0;
+      let totalHum = 0;
+      let totalLight = 0;
+      let rainyCount = 0;
+      let openCount = 0;
+      let closedCount = 0;
+      
+      let firstReading = dayReadings[0];
+      let lastReading = dayReadings[0];
+      let firstTime = getTimestampMs(firstReading.timestamp);
+      let lastTime = firstTime;
 
-      const dailySummary = accumulator[dateKey];
-      dailySummary.averageTemperature += item.temperature;
-      dailySummary.averageHumidity += item.humidity;
-      dailySummary.averageLight += item.light;
-      dailySummary.totalReadings += 1;
+      dayReadings.forEach((r) => {
+        totalTemp += r.temperature;
+        totalHum += r.humidity;
+        totalLight += r.light;
+        if (r.isRaining()) rainyCount++;
+        if (r.status === "OPEN") openCount++;
+        else closedCount++;
 
-      if (item.isRaining()) {
-        dailySummary.rainyReadings += 1;
-      }
+        const rTime = getTimestampMs(r.timestamp);
+        if (rTime < firstTime) {
+          firstTime = rTime;
+          firstReading = r;
+        }
+        if (rTime > lastTime) {
+          lastTime = rTime;
+          lastReading = r;
+        }
+      });
 
-      if (item.status === "OPEN") {
-        dailySummary.openCount += 1;
-      } else {
-        dailySummary.closedCount += 1;
-      }
-
-      if (getTimestampMs(item.timestamp) < getTimestampMs(dailySummary.firstReadingAt)) {
-        dailySummary.firstReadingAt = item.timestamp;
-      }
-      if (getTimestampMs(item.timestamp) > getTimestampMs(dailySummary.lastReadingAt)) {
-        dailySummary.lastReadingAt = item.timestamp;
-      }
-
-      return accumulator;
-    }, {});
-
-    return Object.values(dailySummaryMap).map<DailySummary>((item) => {
-      const averageTemperature = item.averageTemperature / item.totalReadings;
-      const averageHumidity = item.averageHumidity / item.totalReadings;
-      const averageLight = item.averageLight / item.totalReadings;
-      const status: DailySummary["status"] =
-        item.openCount >= item.closedCount ? "OPEN" : "CLOSED";
-      const dominantCount = Math.max(item.openCount, item.closedCount);
-      const dominantRatio = item.totalReadings > 0 ? (dominantCount / item.totalReadings) * 100 : 0;
-      const dayReadings = sortedHistory
-        .filter((entry) => formatDateValue(entry.timestamp) === item.dateKey)
-        .sort((a, b) => getTimestampMs(a.timestamp) - getTimestampMs(b.timestamp));
-      const firstReading = dayReadings[0];
-      const lastReading = dayReadings[dayReadings.length - 1];
-      const humidityTrend =
-        !firstReading || !lastReading
-          ? "flat"
-          : lastReading.humidity > firstReading.humidity
-            ? "up"
-            : lastReading.humidity < firstReading.humidity
-              ? "down"
-              : "flat";
-      const lightTrend =
-        !firstReading || !lastReading
-          ? "flat"
-          : lastReading.light > firstReading.light
-            ? "up"
-            : lastReading.light < firstReading.light
-              ? "down"
-              : "flat";
-
+      const total = dayReadings.length;
       return {
-        ...item,
-        averageTemperature,
-        averageHumidity,
-        averageLight,
-        status,
-        dominantRatio,
-        humidityTrend,
-        lightTrend,
+        dateKey,
+        averageTemperature: totalTemp / total,
+        averageHumidity: totalHum / total,
+        averageLight: totalLight / total,
+        totalReadings: total,
+        rainyReadings: rainyCount,
+        openCount,
+        closedCount,
+        status: openCount >= closedCount ? "OPEN" : "CLOSED",
+        dominantRatio: (Math.max(openCount, closedCount) / total) * 100,
+        humidityTrend:
+          lastReading.humidity > firstReading.humidity ? "up" :
+          lastReading.humidity < firstReading.humidity ? "down" : "flat",
+        lightTrend:
+          lastReading.light > firstReading.light ? "up" :
+          lastReading.light < firstReading.light ? "down" : "flat",
+        firstReadingAt: firstReading.timestamp,
+        lastReadingAt: lastReading.timestamp,
       };
     });
-  }, [sortedHistory]);
+  }, [historyByDay]);
 
   const filteredDailyHistory = useMemo(() => {
     const result = dailyHistory.filter((item) => {
@@ -234,13 +228,21 @@ export default function HistoryPage() {
       ? selectedDataKey
       : paginatedHistory[0]?.dateKey ?? null;
 
-  const orderedSelectedDayHistory = useMemo(
-    () =>
-      sortedHistory
-        .filter((item) => selectedDateKey !== null && formatDateValue(item.timestamp) === selectedDateKey)
-        .sort((a, b) => getTimestampMs(a.timestamp) - getTimestampMs(b.timestamp)),
-    [selectedDateKey, sortedHistory],
-  );
+  const orderedSelectedDayHistory = useMemo(() => {
+    if (!selectedDateKey || !historyByDay[selectedDateKey]) return [];
+    // Now just a direct O(1) lookup since it's pre-sorted
+    return historyByDay[selectedDateKey];
+  }, [selectedDateKey, historyByDay]);
+
+  // Pre-calculate chart values for the selected day
+  const selectedDayMetrics = useMemo(() => {
+    if (orderedSelectedDayHistory.length === 0) return { temp: [], hum: [], light: [] };
+    return {
+       temp: orderedSelectedDayHistory.map(h => h.temperature),
+       hum: orderedSelectedDayHistory.map(h => h.humidity),
+       light: orderedSelectedDayHistory.map(h => h.light)
+    };
+  }, [orderedSelectedDayHistory]);
 
   const selectedSummary = filteredDailyHistory.find((item) => item.dateKey === selectedDateKey) ?? null;
 
@@ -267,31 +269,39 @@ export default function HistoryPage() {
     });
   };
 
-  const temperatureValues = orderedSelectedDayHistory.map((item) => item.temperature);
-  const humidityValues = orderedSelectedDayHistory.map((item) => item.humidity);
-  const lightValues = orderedSelectedDayHistory.map((item) => item.light);
+
 
   const buildChartPoints = (values: number[]) => {
-    if (values.length === 0) {
-      return "";
+    if (values.length === 0) return "";
+
+    // Maximum optimization: limit to 50 points for lightning fast SVG rendering
+    const maxPoints = 50;
+    let sampled;
+    if (values.length <= maxPoints) {
+       sampled = values;
+    } else {
+       const step = values.length / maxPoints;
+       sampled = [];
+       for (let i = 0; i < maxPoints; i++) {
+          sampled.push(values[Math.floor(i * step)]);
+       }
     }
 
     const width = 100;
     const top = 4;
     const bottom = 32;
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    const min = Math.min(...sampled);
+    const max = Math.max(...sampled);
+    const range = max - min || 1;
 
-    return values
-      .map((value, index) => {
-        const x = values.length === 1 ? width / 2 : (index / (values.length - 1)) * width;
-        const range = max - min;
-        const normalized = range === 0 ? 0.5 : (value - min) / range;
-        const y = bottom - normalized * (bottom - top);
-
-        return `${x},${y}`;
-      })
-      .join(" ");
+    let points = "";
+    for (let i = 0; i < sampled.length; i++) {
+       const x = sampled.length === 1 ? width / 2 : (i / (sampled.length - 1)) * width;
+       const normalized = (sampled[i] - min) / range;
+       const y = bottom - normalized * (bottom - top);
+       points += `${x.toFixed(1)},${y.toFixed(1)} `;
+    }
+    return points.trim();
   };
 
   const renderChartCard = (
@@ -300,45 +310,75 @@ export default function HistoryPage() {
     stroke: string,
     unit: string,
   ) => {
-    const latestValue = values.length > 0 ? values[values.length - 1] : null;
-    const minValue = values.length > 0 ? Math.min(...values) : 0;
-    const maxValue = values.length > 0 ? Math.max(...values) : 0;
+    const avgValue = values.length > 0 ? (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1) : "0";
+    const minValue = values.length > 0 ? Math.min(...values).toFixed(1) : "0";
+    const maxValue = values.length > 0 ? Math.max(...values).toFixed(1) : "0";
     const points = buildChartPoints(values);
-
+    const themeColor = stroke;
+    
     return (
-      <article className="rounded-2xl border border-slate-200/50 bg-slate-50 dark:bg-white/5 p-6 dark:border-white/5 transition-all group hover:border-teal-500/30">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">{title}</h3>
-          <span className="text-sm font-black text-slate-800 dark:text-white">
-            {latestValue === null ? "--" : `${latestValue.toFixed(1)} ${unit}`}
-          </span>
-        </div>
-
-        {values.length < 2 ? (
-          <div className="flex flex-col items-center justify-center py-6 opacity-30">
-             <Database className="h-6 w-6 mb-2" />
-             <p className="text-[9px] font-black uppercase tracking-widest">Insufficient Data</p>
+      <div className="group relative p-10 rounded-[3rem] bg-white dark:bg-slate-900/40 border border-slate-200/50 dark:border-white/5 shadow-sm hover:shadow-2xl hover:shadow-teal-500/5 transition-all duration-500 overflow-hidden">
+        {/* Thematic background glow */}
+        <div className="absolute -right-24 -top-24 h-80 w-80 rounded-full opacity-[0.03] group-hover:opacity-[0.08] transition-all duration-700 blur-[80px]" style={{ backgroundColor: themeColor }} />
+        
+        <div className="relative z-10 space-y-8">
+          {/* Header Section: Title & Average */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: themeColor }} />
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">{title}</p>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-6xl font-black text-slate-800 dark:text-white tracking-tighter leading-none">{avgValue}</span>
+                <span className="text-xl font-black text-slate-400 uppercase tracking-widest">{unit}</span>
+                <span className="ml-2 text-[10px] font-black text-teal-500 uppercase tracking-widest opacity-40">Average</span>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-6 pb-2">
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Peak</span>
+                <span className="text-base font-black text-emerald-600 dark:text-emerald-400">{maxValue}{unit}</span>
+              </div>
+              <div className="h-8 w-px bg-slate-100 dark:bg-white/5" />
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Floor</span>
+                <span className="text-base font-black text-rose-600 dark:text-rose-400">{minValue}{unit}</span>
+              </div>
+            </div>
           </div>
-        ) : (
-          <svg viewBox="0 0 100 36" className="h-20 w-full" role="img" aria-label={`${title} chart`}>
-            <polyline fill="none" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.1" points="0,32 100,32" />
-            <polyline
-              fill="none"
-              stroke={stroke}
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              points={points}
-              className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.1)]"
-            />
-          </svg>
-        )}
 
-        <div className="mt-4 flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-          <span>Min: {values.length > 0 ? `${minValue.toFixed(1)} ${unit}` : "--"}</span>
-          <span>Max: {values.length > 0 ? `${maxValue.toFixed(1)} ${unit}` : "--"}</span>
+          {/* Main Chart Section - The Focus */}
+          <div className="w-full h-48 md:h-64 relative bg-slate-50/50 dark:bg-white/5 rounded-[2rem] p-8 border border-slate-100/50 dark:border-white/5">
+            <div className="absolute inset-0 p-8 flex flex-col justify-between pointer-events-none opacity-30">
+               <div className="w-full border-t border-slate-200 dark:border-white/10" />
+               <div className="w-full border-t border-slate-200 dark:border-white/10 border-dashed" />
+               <div className="w-full border-t border-slate-200 dark:border-white/10" />
+            </div>
+            
+            <svg className="w-full h-full overflow-visible" viewBox="0 0 100 32" preserveAspectRatio="none">
+              <polyline
+                points={points}
+                fill="none"
+                stroke={themeColor}
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="drop-shadow-[0_12px_20px_rgba(0,0,0,0.2)]"
+              />
+            </svg>
+            
+            {/* Trend Indicator */}
+            <div className="absolute right-8 top-8">
+               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white dark:bg-slate-800 shadow-lg border border-slate-100 dark:border-white/10">
+                  <TrendingUp size={12} style={{ color: themeColor }} />
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Trend Active</span>
+               </div>
+            </div>
+          </div>
         </div>
-      </article>
+      </div>
     );
   };
 
@@ -479,7 +519,7 @@ export default function HistoryPage() {
         {/* Data Content Grid */}
         <div className="grid grid-cols-1 gap-8 xl:grid-cols-12">
           {/* Daily Summary Table */}
-          <section className="xl:col-span-8 rounded-[2.5rem] bg-white dark:bg-slate-900/40 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm overflow-hidden flex flex-col">
+          <section className="xl:col-span-12 rounded-[2.5rem] bg-white dark:bg-slate-900/40 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm overflow-hidden flex flex-col">
             <div className="p-10 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
               <div className="flex items-center gap-3">
                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
@@ -548,9 +588,31 @@ export default function HistoryPage() {
                               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest opacity-70 ml-1">{item.dominantRatio.toFixed(0)}% dominant</span>
                            </div>
                         </td>
-                        <td className="px-8 py-8 text-right">
-                           <button className={`p-4 rounded-2xl transition-all ${selectedDateKey === item.dateKey ? 'bg-teal-500 text-white shadow-lg shadow-teal-500/20' : 'bg-slate-100 dark:bg-white/5 text-slate-400 group-hover:bg-teal-500/10 group-hover:text-teal-500'}`}>
-                              <MoreHorizontal size={20} />
+                         <td className="px-8 py-8 text-right">
+                           <button 
+                             disabled={!!loadingDetailsKey}
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               if (loadingDetailsKey) return;
+                               
+                               setLoadingDetailsKey(item.dateKey);
+                               // Small delay to allow the loading spinner to render before heavy processing
+                               setTimeout(() => {
+                                 setSelectedDataKey(item.dateKey);
+                                 setIsModalOpen(true);
+                                 setLoadingDetailsKey(null);
+                               }, 50);
+                             }}
+                             className={`inline-flex items-center gap-2 px-5 py-3.5 rounded-2xl transition-all duration-300 ${selectedDateKey === item.dateKey ? 'bg-teal-500 text-white shadow-lg shadow-teal-500/20' : 'bg-slate-100 dark:bg-white/5 text-slate-400 group-hover:bg-teal-500/10 group-hover:text-teal-500'} ${loadingDetailsKey === item.dateKey ? 'opacity-80' : ''}`}
+                           >
+                              <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">
+                                {loadingDetailsKey === item.dateKey ? 'Processing' : 'Details'}
+                              </span>
+                              {loadingDetailsKey === item.dateKey ? (
+                                <Loader2 size={18} className="animate-spin" />
+                              ) : (
+                                <MoreHorizontal size={18} />
+                              )}
                            </button>
                         </td>
                       </tr>
@@ -569,85 +631,137 @@ export default function HistoryPage() {
             </div>
           </section>
 
-          {/* Detailed Side Panel */}
-          <aside className="xl:col-span-4 space-y-8">
-             <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-10 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
-                <div className="flex items-center gap-3 mb-10">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
-                    <TrendingUp className="h-5 w-5" />
+        </div>
+      </PageContainer>
+
+      {/* Detail History Modal */}
+      {isModalOpen && selectedSummary && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8">
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-modal-overlay" 
+            onClick={() => setIsModalOpen(false)}
+          />
+          <div className="relative w-full max-w-5xl max-h-[90vh] overflow-hidden bg-white dark:bg-[#020617] rounded-[3rem] shadow-2xl border border-slate-200 dark:border-white/10 flex flex-col animate-modal-content">
+            {/* Modal Header */}
+            <div className="p-8 md:p-10 border-b border-slate-100 dark:border-white/5 flex items-center justify-between bg-slate-50/50 dark:bg-white/5">
+              <div className="flex items-center gap-5">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-500 text-white shadow-xl shadow-teal-500/20">
+                  <Activity className="h-7 w-7" />
+                </div>
+                <div>
+                  <h2 className="text-3xl md:text-4xl font-black text-slate-800 dark:text-white tracking-tight">
+                    {formatDateLabel(selectedSummary.dateKey)}
+                  </h2>
+                  <p className="text-[11px] font-black text-teal-600 dark:text-teal-400 uppercase tracking-[0.2em] mt-1">
+                    Operational Analytics • {selectedSummary.totalReadings} Readings Recorded
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="p-4 rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-all group"
+              >
+                <X size={24} className="group-hover:rotate-90 transition-transform duration-300" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-8 md:p-10 custom-scrollbar">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-stretch">
+                {/* Left Column: Stats & Charts */}
+                <div className="lg:col-span-7 space-y-10 h-full">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="p-8 rounded-[2.5rem] bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/30 transition-all">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Dominant System State</p>
+                      <div className="flex items-center gap-4">
+                        <div className={`h-4 w-4 rounded-full ${selectedSummary.status === 'OPEN' ? 'bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.5)]' : 'bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.5)]'}`} />
+                        <p className={`text-3xl font-black uppercase tracking-tight ${selectedSummary.status === 'OPEN' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {selectedSummary.status}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="p-8 rounded-[2.5rem] bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/30 transition-all">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Weather Condition</p>
+                      <div className="flex items-center gap-4">
+                        <CloudRain className={`h-6 w-6 ${selectedSummary.rainyReadings > 0 ? 'text-blue-500' : 'text-slate-300'}`} />
+                        <p className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">
+                          {selectedSummary.rainyReadings} <span className="text-xs font-black text-slate-400 uppercase">Rain Hits</span>
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">Temporal Insights</h2>
+
+                  {renderDominantStatusCard(selectedSummary)}
+
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-3 ml-2">
+                       <TrendingUp size={16} className="text-teal-500" />
+                       <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Environmental Trends</h3>
+                    </div>
+                    <div className="grid grid-cols-1 gap-6">
+                       {renderChartCard("Thermal Variance", selectedDayMetrics.temp, "#f43f5e", "°C")}
+                       {renderChartCard("Humidity Path", selectedDayMetrics.hum, "#3b82f6", "%")}
+                       {renderChartCard("Photon Flux", selectedDayMetrics.light, "#fbbf24", "lx")}
+                    </div>
+                  </div>
                 </div>
 
-                {!selectedSummary ? (
-                   <div className="flex flex-col items-center justify-center py-24 opacity-30">
-                      <History className="h-16 w-16 mb-6 text-teal-500" />
-                      <p className="text-[10px] font-black uppercase tracking-widest text-center">Select a day<br/>to view details</p>
-                   </div>
-                ) : (
-                   <div className="space-y-8">
-                      <div className="p-10 rounded-[2.5rem] bg-slate-900 text-white relative overflow-hidden shadow-2xl">
-                         <div className="absolute -right-10 -bottom-10 h-32 w-32 rounded-full bg-teal-500/20 blur-2xl" />
-                         <p className="text-[10px] font-black uppercase tracking-widest text-teal-400 mb-2">Archive Entry</p>
-                         <h3 className="text-3xl font-black mb-1">{formatDateLabel(selectedSummary.dateKey)}</h3>
-                         <p className="text-sm font-bold text-slate-400">{selectedSummary.totalReadings} readings recorded.</p>
+                {/* Right Column: Sequence Stream */}
+                <div className="lg:col-span-5 relative">
+                  <div className="sticky top-0 h-[calc(90vh-180px)] rounded-[3rem] bg-slate-50/50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 p-8 flex flex-col overflow-hidden shadow-sm">
+                    <div className="flex items-center gap-3 mb-8 shrink-0">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
+                        <Clock className="h-5 w-5" />
                       </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                         <div className="p-6 rounded-[2rem] bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Dominant State</p>
-                            <p className={`text-base font-black uppercase ${selectedSummary.status === 'OPEN' ? 'text-emerald-600' : 'text-rose-600'}`}>{selectedSummary.status}</p>
+                      <h3 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Sequence Stream</h3>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+                      {orderedSelectedDayHistory.length > 300 && (
+                         <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest text-center mb-4 shrink-0">
+                            Showing latest 300 of {orderedSelectedDayHistory.length} readings for performance
                          </div>
-                         <div className="p-6 rounded-[2rem] bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Rain Events</p>
-                            <p className="text-base font-black text-slate-800 dark:text-white">{selectedSummary.rainyReadings} Detected</p>
-                         </div>
-                      </div>
-
-                      {renderDominantStatusCard(selectedSummary)}
-
-                      <div className="space-y-6">
-                         {renderChartCard("Thermal Variance", temperatureValues, "#f43f5e", "°C")}
-                         {renderChartCard("Humidity Path", humidityValues, "#3b82f6", "%")}
-                         {renderChartCard("Photon Flux", lightValues, "#fbbf24", "lx")}
-                      </div>
-                   </div>
-                )}
-             </section>
-
-             <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-10 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm overflow-hidden">
-                <div className="flex items-center gap-3 mb-10">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
-                    <Clock className="h-5 w-5" />
-                  </div>
-                  <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">Sequence Stream</h2>
-                </div>
-                <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-                   {orderedSelectedDayHistory.length === 0 ? (
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center py-24">Stream Offline</p>
-                   ) : (
-                      orderedSelectedDayHistory.slice().reverse().map((item, idx) => (
-                        <div key={idx} className="p-8 rounded-[2rem] bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/30 transition-all">
-                           <div className="flex items-center justify-between mb-6">
-                              <p className="text-base font-black text-slate-800 dark:text-white">{formatTime(item.timestamp)}</p>
-                              <span className={`text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest ${item.isRaining() ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-600'}`}>
+                      )}
+                      {orderedSelectedDayHistory.slice(-300).reverse().map((item, idx) => (
+                        <div key={idx} className="p-6 rounded-[1.5rem] bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-white/5 group hover:border-teal-500/40 transition-all shadow-sm shrink-0">
+                           <div className="flex items-center justify-between mb-5">
+                              <p className="text-sm font-black text-slate-800 dark:text-white tracking-tight">{formatTime(item.timestamp)}</p>
+                              <span className={`text-[9px] font-black px-3 py-1.5 rounded-full uppercase tracking-widest ${item.isRaining() ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'}`}>
                                  {item.isRaining() ? 'Rain' : 'Dry'}
                               </span>
                            </div>
-                           <div className="grid grid-cols-2 gap-y-6">
-                              <ReadingMetric label="Temp" value={`${item.temperature.toFixed(1)}°`} icon={<Thermometer size={14}/>} />
-                              <ReadingMetric label="Humid" value={`${item.humidity.toFixed(1)}%`} icon={<Droplets size={14}/>} />
-                              <ReadingMetric label="Light" value={`${item.light.toFixed(0)}`} icon={<Sun size={14}/>} />
-                              <ReadingMetric label="Status" value={item.status} icon={<Zap size={14}/>} />
+                           <div className="grid grid-cols-2 gap-4">
+                              <ReadingMetric label="Temp" value={`${item.temperature.toFixed(1)}°`} icon={<Thermometer size={12}/>} />
+                              <ReadingMetric label="Humid" value={`${item.humidity.toFixed(0)}%`} icon={<Droplets size={12}/>} />
+                              <ReadingMetric label="Light" value={`${item.light.toFixed(0)}`} icon={<Sun size={12}/>} />
+                              <ReadingMetric label="State" value={item.status} icon={<Zap size={12}/>} />
                            </div>
                         </div>
-                      ))
-                   )}
+                      ))}
+                    </div>
+                  </div>
                 </div>
-             </section>
-          </aside>
+              </div>
+            </div>
+            
+
+          </div>
         </div>
-      </PageContainer>
+      )}
+
+      {/* Full-Screen Processing Overlay */}
+      {loadingDetailsKey && (
+        <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-white/60 dark:bg-slate-950/60 backdrop-blur-md animate-modal-overlay">
+           <div className="relative">
+              <div className="h-24 w-24 rounded-full border-4 border-teal-500/20 border-t-teal-500 animate-spin" />
+              <Activity className="absolute inset-0 m-auto h-8 w-8 text-teal-500 animate-pulse" />
+           </div>
+           <div className="mt-8 text-center">
+              <p className="text-xl font-black text-slate-800 dark:text-white tracking-tight">Analyzing Archive</p>
+              <p className="text-[10px] font-black text-teal-600 dark:text-teal-400 uppercase tracking-[0.2em] mt-2">Preparing detailed operational insights...</p>
+           </div>
+        </div>
+      )}
     </main>
   );
 }

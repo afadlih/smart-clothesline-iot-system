@@ -139,16 +139,29 @@ export default function AnalyticsPage() {
         </section>
 
         <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-8 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
-           <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center gap-3">
-                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
-                    <TrendingUp className="h-5 w-5" />
+           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+              <div className="flex items-center gap-4">
+                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-500/10 text-teal-600 dark:text-teal-400 shrink-0">
+                    <TrendingUp className="h-6 w-6" />
                  </div>
-                 <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Temporal Analysis</h2>
+                 <div>
+                    <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Temporal Analysis</h2>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Environmental vs Operational Trends</p>
+                 </div>
               </div>
-              <div className="flex bg-slate-100 dark:bg-white/5 p-1 rounded-xl">
-                 <button onClick={() => setActiveTab("environment")} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'environment' ? 'bg-white dark:bg-slate-800 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-slate-400'}`}>Environment</button>
-                 <button onClick={() => setActiveTab("operations")} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'operations' ? 'bg-white dark:bg-slate-800 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-slate-400'}`}>Operations</button>
+              <div className="flex bg-slate-100 dark:bg-white/5 p-1.5 rounded-2xl border border-slate-200 dark:border-white/5 w-full md:w-auto">
+                 <button 
+                   onClick={() => setActiveTab("environment")} 
+                   className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'environment' ? 'bg-white dark:bg-slate-800 text-teal-600 dark:text-teal-400 shadow-lg shadow-teal-500/5' : 'text-slate-400 hover:text-slate-600'}`}
+                 >
+                   Environment
+                 </button>
+                 <button 
+                   onClick={() => setActiveTab("operations")} 
+                   className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'operations' ? 'bg-white dark:bg-slate-800 text-teal-600 dark:text-teal-400 shadow-lg shadow-teal-500/5' : 'text-slate-400 hover:text-slate-600'}`}
+                 >
+                   Operations
+                 </button>
               </div>
            </div>
 
