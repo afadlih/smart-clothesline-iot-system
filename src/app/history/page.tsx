@@ -13,7 +13,6 @@ import {
   Zap,
   Filter,
   Droplets,
-  Database,
   Sun,
   Activity,
   Clock,
@@ -270,9 +269,7 @@ export default function HistoryPage() {
     });
   };
 
-  const temperatureValues = orderedSelectedDayHistory.map((item) => item.temperature);
-  const humidityValues = orderedSelectedDayHistory.map((item) => item.humidity);
-  const lightValues = orderedSelectedDayHistory.map((item) => item.light);
+
 
   const buildChartPoints = (values: number[]) => {
     if (values.length === 0) return "";

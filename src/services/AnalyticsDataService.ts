@@ -1,4 +1,4 @@
-import { Timestamp, collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
+import { collection, getDocs, limit, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { SensorData } from "@/models/SensorData";
 import { logger } from "@/lib/logger";
@@ -65,18 +65,18 @@ export class AnalyticsDataService {
       else if (range === "24h") startTime = now - 24 * 60 * 60 * 1000;
       else if (range === "7d") startTime = now - 7 * 24 * 60 * 60 * 1000;
       else if (range === "30d") startTime = now - 30 * 24 * 60 * 60 * 1000;
+      
       const rangeLimit = this.RANGE_LIMITS[range];
-      const startTimestamp = Timestamp.fromMillis(startTime);
 
+      // Use a robust fetching strategy similar to FirestoreService.getSensorHistory
+      // Fetch more data than needed to ensure we cover the time range even with missing createdAt fields
       const q = query(
         collection(db, this.COLLECTION),
-        where("createdAt", ">=", startTimestamp),
-        orderBy("createdAt", "asc"),
-        limit(rangeLimit),
+        limit(Math.max(rangeLimit * 2, 5000)) 
       );
 
       const snapshot = await getDocs(q);
-      const data: SensorData[] = [];
+      const allDataPoints: SensorData[] = [];
       const dedupeKeys = new Set<string>();
       
       let sumTemp = 0;
@@ -87,29 +87,33 @@ export class AnalyticsDataService {
 
       snapshot.docs.forEach((doc) => {
         const raw = doc.data() as Record<string, unknown>;
+        
+        // Extract timestamp using fallbacks (createdAt -> receivedAt -> timestamp -> deviceTimestamp)
         const createdAtMs =
           this.normalizeTimestamp(raw.createdAt) ??
           this.normalizeTimestamp(raw.receivedAt) ??
-          this.normalizeTimestamp(raw.timestamp);
+          this.normalizeTimestamp(raw.timestamp) ??
+          this.normalizeTimestamp(raw.deviceTimestamp);
+
+        if (createdAtMs === null) return;
+        
+        // Filter based on selected time range on client side
+        if (createdAtMs < startTime || createdAtMs > now) return;
+
         const temperature = this.toFiniteNumber(raw.temperature);
         const humidity = this.toFiniteNumber(raw.humidity);
         const light = this.toFiniteNumber(raw.light);
         const rain = typeof raw.rain === "boolean" ? raw.rain : null;
         const status = raw.status === "OPEN" || raw.status === "CLOSED" ? raw.status : raw.status == null ? "CLOSED" : null;
 
-        if (createdAtMs === null || temperature === null || humidity === null || light === null || rain === null || status === null) {
+        if (temperature === null || humidity === null || light === null || rain === null || status === null) {
           return;
         }
 
-        const createdAtDate = new Date(createdAtMs);
-        if (!Number.isFinite(createdAtDate.getTime())) {
-          return;
-        }
-        const createdAtIso = createdAtDate.toISOString();
+        const createdAtIso = new Date(createdAtMs).toISOString();
         const dedupeKey = `${createdAtMs}|${temperature}|${humidity}|${light}|${rain}|${status}`;
-        if (dedupeKeys.has(dedupeKey)) {
-          return;
-        }
+        
+        if (dedupeKeys.has(dedupeKey)) return;
         dedupeKeys.add(dedupeKey);
 
         const sensor = new SensorData({
@@ -121,19 +125,26 @@ export class AnalyticsDataService {
           timestamp: createdAtIso,
         });
         
-        data.push(sensor);
-        
+        allDataPoints.push(sensor);
+      });
+
+      // Sort chronological
+      allDataPoints.sort((a, b) => {
+        const aMs = this.normalizeTimestamp(a.timestamp) ?? 0;
+        const bMs = this.normalizeTimestamp(b.timestamp) ?? 0;
+        return aMs - bMs;
+      });
+
+      // Limit to the required number of points after sorting
+      const data = allDataPoints.slice(-rangeLimit);
+
+      // Final statistics calculation
+      data.forEach(sensor => {
         sumTemp += sensor.temperature;
         sumHum += sensor.humidity;
         sumLight += sensor.light;
         if (sensor.isRaining()) rainCount++;
         if (sensor.status === "OPEN") openCount++;
-      });
-
-      data.sort((a, b) => {
-        const aMs = this.normalizeTimestamp(a.timestamp) ?? 0;
-        const bMs = this.normalizeTimestamp(b.timestamp) ?? 0;
-        return aMs - bMs;
       });
 
       const count = data.length;
