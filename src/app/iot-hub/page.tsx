@@ -5,7 +5,7 @@ import { Activity, Cpu, RefreshCw, Wifi, Radio, Zap, ShieldAlert, Binary } from 
 import PageContainer from "@/components/layout/PageContainer";
 import PairingDeviceSettings, { type PairableDevice } from "@/features/settings/PairingDeviceSettings";
 import { useSystemState } from "@/hooks/useSystemState";
-import { getDeviceDiscoveryTopic, mqttService, PAIRING_DISCOVERY_TOPIC, type PairingDiscoveryMessage } from "@/services/MQTTService";
+import { getDeviceDiscoveryTopic, mqttService, type PairingDiscoveryMessage } from "@/services/MQTTService";
 import TelegramBridgeStatus from "@/features/dashboard/TelegramBridgeStatus";
 import { useAuth } from "@/hooks/useAuth";
 import { listUserDevices, pairUserDevice } from "@/services/UserDeviceService";

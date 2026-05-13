@@ -8,7 +8,6 @@ import {
   Smartphone,
   Wifi,
 } from 'lucide-react';
-import { useSystemState } from '@/hooks/useSystemState';
 
 export type PairableDevice = {
   id: string;
@@ -60,7 +59,6 @@ export default function PairingDeviceSettings({
   onSelectDevice,
 }: PairingDeviceSettingsProps) {
   const selectedDevice = discoveredDevices.find((item) => item.id === selectedDeviceId);
-  const { runtime } = useSystemState();
   const activeStatusLabel =
     activeDeviceStatus === "online"
       ? "Online"
