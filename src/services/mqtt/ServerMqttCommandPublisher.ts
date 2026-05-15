@@ -73,17 +73,14 @@ async function resolveActiveCommandDevice(): Promise<ActiveCommandDevice | null>
 
 export function resolveServerCommandTopic(configuredTopic: string, targetDeviceId?: string): string {
   const target = targetDeviceId?.trim();
-  if (!target) return configuredTopic;
 
-  const parts = configuredTopic.split("/").filter(Boolean);
-  const alreadyPerDevice =
-    parts.length >= 3 &&
-    parts[0] === "smart-clothesline" &&
-    parts[1] === target &&
-    parts[parts.length - 1] === "command";
+  // Dashboard command path uses getDeviceCommandTopic(deviceId), which resolves
+  // to smart-clothesline/{deviceId}/command. Server-side Telegram commands must
+  // publish to that same topic so firmware only needs one command subscription.
+  if (target) {
+    return `smart-clothesline/${target}/command`;
+  }
 
-  if (alreadyPerDevice) return configuredTopic;
-  if (configuredTopic === LEGACY_COMMAND_TOPIC) return `smart-clothesline/${target}/command`;
   return configuredTopic;
 }
 
@@ -143,12 +140,11 @@ export async function publishDeviceCommand(input: ServerCommandInput): Promise<S
     };
   }
 
+  // Keep the published payload identical to the dashboard command contract.
+  // Dashboard sendCommand publishes exactly: { deviceId, command }.
   const payload: Record<string, unknown> = {
     deviceId: targetDeviceId,
     command: input.command,
-    source: "telegram-server",
-    sourceCommand: input.sourceCommand,
-    requestedAt: Date.now(),
   };
 
   return new Promise((resolve) => {
