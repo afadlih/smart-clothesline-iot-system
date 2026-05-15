@@ -1,12 +1,14 @@
 import mqtt from "mqtt";
 import { logger } from "@/lib/logger";
 
+const LEGACY_COMMAND_TOPIC = "smart-clothesline/command";
+
 const ENV = {
   get brokerUrl() { return process.env.MQTT_BROKER_URL; },
   get username() { return process.env.MQTT_USERNAME; },
   get password() { return process.env.MQTT_PASSWORD; },
-  get commandTopic() { 
-    return process.env.MQTT_TOPIC_COMMAND || process.env.NEXT_PUBLIC_MQTT_TOPIC_COMMAND || "smart-clothesline/command"; 
+  get commandTopic() {
+    return process.env.MQTT_TOPIC_COMMAND || process.env.NEXT_PUBLIC_MQTT_TOPIC_COMMAND || LEGACY_COMMAND_TOPIC;
   },
   get targetDeviceId() { return process.env.MQTT_TARGET_DEVICE_ID; }
 };
@@ -33,17 +35,28 @@ function maskBrokerUrl(url: string | undefined): string {
   if (!url) return "unconfigured";
   try {
     const parsed = new URL(url);
-    if (parsed.username) {
-      parsed.username = "masked";
-    }
-    if (parsed.password) {
-      parsed.password = "***";
-    }
+    if (parsed.username) parsed.username = "masked";
+    if (parsed.password) parsed.password = "***";
     return parsed.toString();
   } catch {
-    // Basic masking if URL parsing fails but credentials exist in string
     return url.replace(/\/\/([^:]+):([^@]+)@/, "//masked:***@");
   }
+}
+
+export function resolveServerCommandTopic(configuredTopic: string, targetDeviceId?: string): string {
+  const target = targetDeviceId?.trim();
+  if (!target) return configuredTopic;
+
+  const parts = configuredTopic.split("/").filter(Boolean);
+  const alreadyPerDevice =
+    parts.length >= 3 &&
+    parts[0] === "smart-clothesline" &&
+    parts[1] === target &&
+    parts[parts.length - 1] === "command";
+
+  if (alreadyPerDevice) return configuredTopic;
+  if (configuredTopic === LEGACY_COMMAND_TOPIC) return `smart-clothesline/${target}/command`;
+  return configuredTopic;
 }
 
 export function isServerMqttCommandPublisherConfigured(): boolean {
@@ -52,13 +65,17 @@ export function isServerMqttCommandPublisherConfigured(): boolean {
 }
 
 export function getServerMqttCommandPublisherStatus() {
+  const configuredCommandTopic = ENV.commandTopic;
+  const targetDeviceId = ENV.targetDeviceId || null;
+
   return {
     configured: isServerMqttCommandPublisherConfigured(),
     brokerUrlMasked: maskBrokerUrl(ENV.brokerUrl),
     hasUsername: Boolean(ENV.username),
     hasPassword: Boolean(ENV.password),
-    commandTopic: ENV.commandTopic,
-    targetDeviceId: ENV.targetDeviceId || null,
+    commandTopic: resolveServerCommandTopic(configuredCommandTopic, targetDeviceId ?? undefined),
+    configuredCommandTopic,
+    targetDeviceId,
   };
 }
 
@@ -70,8 +87,8 @@ export async function publishDeviceCommand(input: ServerCommandInput): Promise<S
   const brokerUrl = ENV.brokerUrl;
   const username = ENV.username;
   const password = ENV.password;
-  const commandTopic = ENV.commandTopic;
   const targetDeviceId = ENV.targetDeviceId;
+  const commandTopic = resolveServerCommandTopic(ENV.commandTopic, targetDeviceId);
 
   if (!brokerUrl || !username || !password) {
     return {
@@ -84,21 +101,30 @@ export async function publishDeviceCommand(input: ServerCommandInput): Promise<S
     };
   }
 
+  if (!targetDeviceId) {
+    return {
+      ok: false,
+      mode: "server-direct",
+      topic: commandTopic,
+      command: input.command,
+      detail: "Direct MQTT target device is not configured.",
+      error: "Missing MQTT_TARGET_DEVICE_ID",
+    };
+  }
+
   const payload: Record<string, unknown> = {
+    deviceId: targetDeviceId,
     command: input.command,
     source: "telegram-server",
     sourceCommand: input.sourceCommand,
     requestedAt: Date.now(),
   };
 
-  if (targetDeviceId) {
-    payload.deviceId = targetDeviceId;
-  }
-
   return new Promise((resolve) => {
     logger.info("mqtt", "Connecting to MQTT broker for direct command publish", {
       url: maskBrokerUrl(brokerUrl),
       topic: commandTopic,
+      targetDeviceId,
     });
 
     const client = mqtt.connect(brokerUrl, {
@@ -111,11 +137,8 @@ export async function publishDeviceCommand(input: ServerCommandInput): Promise<S
 
     const cleanup = () => {
       try {
-        if (client.connected) {
-          client.end(true);
-        } else {
-          client.end();
-        }
+        if (client.connected) client.end(true);
+        else client.end();
       } catch {
         // Ignore cleanup errors
       }
@@ -152,7 +175,7 @@ export async function publishDeviceCommand(input: ServerCommandInput): Promise<S
       client.publish(commandTopic, message, { qos: 1 }, (err) => {
         clearTimeout(timeout);
         cleanup();
-        
+
         if (err) {
           logger.error("mqtt", "Failed to publish direct command", err.message);
           resolve({
@@ -163,19 +186,21 @@ export async function publishDeviceCommand(input: ServerCommandInput): Promise<S
             detail: "Direct MQTT publish failed.",
             error: err.message,
           });
-        } else {
-          logger.info("mqtt", "Published direct command to MQTT", {
-            topic: commandTopic,
-            command: input.command,
-          });
-          resolve({
-            ok: true,
-            mode: "server-direct",
-            topic: commandTopic,
-            command: input.command,
-            detail: "Dispatched directly to MQTT from server.",
-          });
+          return;
         }
+
+        logger.info("mqtt", "Published direct command to MQTT", {
+          topic: commandTopic,
+          command: input.command,
+          targetDeviceId,
+        });
+        resolve({
+          ok: true,
+          mode: "server-direct",
+          topic: commandTopic,
+          command: input.command,
+          detail: "Dispatched directly to MQTT from server.",
+        });
       });
     });
   });
