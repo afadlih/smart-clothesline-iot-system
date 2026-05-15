@@ -4,8 +4,23 @@ import { test } from "node:test";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("server-side Telegram commands use per-device MQTT routing", () => {
+test("IoT Hub persists the selected paired device as the Telegram command target", () => {
+  const iotHub = read("src/app/iot-hub/page.tsx");
+  const userDeviceService = read("src/services/UserDeviceService.ts");
+
+  assert.match(iotHub, /setActiveCommandDevice/);
+  assert.match(iotHub, /handleSelectDevice/);
+  assert.match(userDeviceService, /system_settings/);
+  assert.match(userDeviceService, /active_device/);
+  assert.match(userDeviceService, /selectedByUid/);
+});
+
+test("server-side Telegram commands prefer active IoT Hub device over env fallback", () => {
   const source = read("src/services/mqtt/ServerMqttCommandPublisher.ts");
+  assert.match(source, /resolveActiveCommandDevice/);
+  assert.match(source, /ACTIVE_DEVICE_SETTINGS_DOC/);
+  assert.match(source, /iot-hub-active-device/);
+  assert.match(source, /env-fallback/);
   assert.match(source, /MQTT_TARGET_DEVICE_ID/);
   assert.match(source, /targetDeviceId/);
   assert.match(source, /deviceId/);
