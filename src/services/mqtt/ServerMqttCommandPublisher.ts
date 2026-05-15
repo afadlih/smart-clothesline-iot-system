@@ -1,7 +1,10 @@
 import mqtt from "mqtt";
+import { doc, getDoc } from "firebase/firestore";
 import { logger } from "@/lib/logger";
+import { db } from "@/lib/firebase";
 
 const LEGACY_COMMAND_TOPIC = "smart-clothesline/command";
+const ACTIVE_DEVICE_SETTINGS_DOC = "active_device";
 
 const ENV = {
   get brokerUrl() { return process.env.MQTT_BROKER_URL; },
@@ -31,6 +34,12 @@ export type ServerCommandResult = {
   error?: string;
 };
 
+type ActiveCommandDevice = {
+  deviceId: string;
+  source?: "esp32" | "wokwi";
+  deviceName?: string;
+};
+
 function maskBrokerUrl(url: string | undefined): string {
   if (!url) return "unconfigured";
   try {
@@ -40,6 +49,25 @@ function maskBrokerUrl(url: string | undefined): string {
     return parsed.toString();
   } catch {
     return url.replace(/\/\/([^:]+):([^@]+)@/, "//masked:***@");
+  }
+}
+
+async function resolveActiveCommandDevice(): Promise<ActiveCommandDevice | null> {
+  try {
+    const snapshot = await getDoc(doc(db, "system_settings", ACTIVE_DEVICE_SETTINGS_DOC));
+    if (!snapshot.exists()) return null;
+
+    const data = snapshot.data() as Record<string, unknown>;
+    if (typeof data.deviceId !== "string" || data.deviceId.trim().length === 0) return null;
+
+    return {
+      deviceId: data.deviceId.trim(),
+      source: data.source === "wokwi" ? "wokwi" : "esp32",
+      deviceName: typeof data.deviceName === "string" ? data.deviceName : undefined,
+    };
+  } catch (error) {
+    logger.warn("mqtt", "Failed to resolve active command device from IoT Hub settings", error);
+    return null;
   }
 }
 
@@ -66,16 +94,17 @@ export function isServerMqttCommandPublisherConfigured(): boolean {
 
 export function getServerMqttCommandPublisherStatus() {
   const configuredCommandTopic = ENV.commandTopic;
-  const targetDeviceId = ENV.targetDeviceId || null;
+  const fallbackTargetDeviceId = ENV.targetDeviceId || null;
 
   return {
     configured: isServerMqttCommandPublisherConfigured(),
     brokerUrlMasked: maskBrokerUrl(ENV.brokerUrl),
     hasUsername: Boolean(ENV.username),
     hasPassword: Boolean(ENV.password),
-    commandTopic: resolveServerCommandTopic(configuredCommandTopic, targetDeviceId ?? undefined),
+    commandTopic: resolveServerCommandTopic(configuredCommandTopic, fallbackTargetDeviceId ?? undefined),
     configuredCommandTopic,
-    targetDeviceId,
+    targetDeviceId: fallbackTargetDeviceId,
+    targetSource: fallbackTargetDeviceId ? "env-fallback" : null,
   };
 }
 
@@ -87,7 +116,9 @@ export async function publishDeviceCommand(input: ServerCommandInput): Promise<S
   const brokerUrl = ENV.brokerUrl;
   const username = ENV.username;
   const password = ENV.password;
-  const targetDeviceId = ENV.targetDeviceId;
+  const activeDevice = await resolveActiveCommandDevice();
+  const targetDeviceId = activeDevice?.deviceId || ENV.targetDeviceId;
+  const targetSource = activeDevice ? "iot-hub-active-device" : "env-fallback";
   const commandTopic = resolveServerCommandTopic(ENV.commandTopic, targetDeviceId);
 
   if (!brokerUrl || !username || !password) {
@@ -108,7 +139,7 @@ export async function publishDeviceCommand(input: ServerCommandInput): Promise<S
       topic: commandTopic,
       command: input.command,
       detail: "Direct MQTT target device is not configured.",
-      error: "Missing MQTT_TARGET_DEVICE_ID",
+      error: "No active IoT Hub command device and missing MQTT_TARGET_DEVICE_ID fallback",
     };
   }
 
@@ -125,6 +156,7 @@ export async function publishDeviceCommand(input: ServerCommandInput): Promise<S
       url: maskBrokerUrl(brokerUrl),
       topic: commandTopic,
       targetDeviceId,
+      targetSource,
     });
 
     const client = mqtt.connect(brokerUrl, {
@@ -193,13 +225,14 @@ export async function publishDeviceCommand(input: ServerCommandInput): Promise<S
           topic: commandTopic,
           command: input.command,
           targetDeviceId,
+          targetSource,
         });
         resolve({
           ok: true,
           mode: "server-direct",
           topic: commandTopic,
           command: input.command,
-          detail: "Dispatched directly to MQTT from server.",
+          detail: `Dispatched directly to MQTT from server using ${targetSource}.`,
         });
       });
     });
