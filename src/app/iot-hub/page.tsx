@@ -8,7 +8,7 @@ import { useSystemState } from "@/hooks/useSystemState";
 import { getDeviceDiscoveryTopic, mqttService, type PairingDiscoveryMessage } from "@/services/MQTTService";
 import TelegramBridgeStatus from "@/features/dashboard/TelegramBridgeStatus";
 import { useAuth } from "@/hooks/useAuth";
-import { listUserDevices, pairUserDevice } from "@/services/UserDeviceService";
+import { listUserDevices, pairUserDevice, setActiveCommandDevice } from "@/services/UserDeviceService";
 
 const DEVICES_STORAGE_KEY = "smart-clothesline-devices-v1";
 const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
@@ -44,6 +44,12 @@ function getCachedDeviceById(deviceId: string) {
   }
 }
 
+function normalizeDeviceStatus(status: string | undefined): "online" | "offline" | "unknown" {
+  if (status === "Online" || status === "online") return "online";
+  if (status === "Offline" || status === "offline") return "offline";
+  return "unknown";
+}
+
 export default function IoTHubPage() {
   const { connection, mqttConnected, deviceConfig, serialLogs, lastUpdate, debug, operationalHealth, runtime } = useSystemState();
   const [devices, setDevices] = useState<PairableDevice[]>(initialDevices);
@@ -53,7 +59,7 @@ export default function IoTHubPage() {
   const { user, loading: authLoading } = useAuth();
   const [deviceIdQuery, setDeviceIdQuery] = useState("");
   const [pendingDeviceId, setPendingDeviceId] = useState<string | null>(null);
-  const activeDeviceRuntimeStatus = 
+  const activeDeviceRuntimeStatus =
     runtime.deviceConnectivity === "ONLINE"
       ? "online"
       : runtime.deviceConnectivity === "DELAYED"
@@ -173,20 +179,18 @@ export default function IoTHubPage() {
     const device = devices.find((item) => item.id === deviceId);
     if (!device) return;
 
-    await pairUserDevice(user.uid, {
+    const pairedDevice = {
       deviceId: device.id,
       deviceName: device.name,
       source: device.source ?? "esp32",
       pairingCode: device.pairingCode ?? "",
       pairedAt: Date.now(),
       lastSeenAt: device.lastSeenAt,
-      status:
-        device.status === "Online" || device.status === "online"
-          ? "online"
-          : device.status === "Offline" || device.status === "offline"
-            ? "offline"
-            : "unknown",
-    });
+      status: normalizeDeviceStatus(device.status),
+    };
+
+    await pairUserDevice(user.uid, pairedDevice);
+    await setActiveCommandDevice(user.uid, pairedDevice);
   };
 
   const handleFindDevice = () => {
