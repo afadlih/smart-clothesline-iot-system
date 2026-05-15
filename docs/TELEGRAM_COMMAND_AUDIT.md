@@ -4,6 +4,20 @@ This document captures the production contract for Telegram command, notificatio
 
 ## Runtime Contract
 
+### Command target source of truth
+
+Telegram commands must target the same device selected in IoT Hub.
+
+```txt
+IoT Hub paired device selection
+-> users/{uid}/devices/{deviceId}
+-> system_settings/active_device
+-> ServerMqttCommandPublisher
+-> smart-clothesline/{deviceId}/command
+```
+
+`MQTT_TARGET_DEVICE_ID` is only a deployment fallback for empty environments or first boot. It must not override a device explicitly selected from IoT Hub.
+
 ### Inbound command path
 
 ```txt
@@ -13,6 +27,7 @@ Telegram user
 -> TelegramCommandRouter
 -> TelegramCommandExecutor
 -> ServerMqttCommandPublisher
+-> active IoT Hub device target
 -> MQTT command topic
 -> ESP32/Wokwi device
 ```
@@ -63,7 +78,13 @@ MQTT_TARGET_DEVICE_ID=wokwi-default
 MQTT_TOPIC_COMMAND=smart-clothesline/command
 ```
 
-`MQTT_TARGET_DEVICE_ID` is required for direct server-side command execution because the current dashboard/device contract uses per-device topics such as:
+`MQTT_TARGET_DEVICE_ID` remains useful as a fallback, but the preferred target is the active device written by IoT Hub to:
+
+```txt
+system_settings/active_device
+```
+
+The current dashboard/device contract uses per-device topics such as:
 
 ```txt
 smart-clothesline/{deviceId}/command
@@ -71,7 +92,7 @@ smart-clothesline/{deviceId}/status
 smart-clothesline/{deviceId}/sensor
 ```
 
-If this variable is missing, direct command dispatch must fail loudly and fallback to the dashboard bridge instead of pretending a global topic publish reached the device.
+If no IoT Hub active device and no fallback target exist, direct command dispatch must fail loudly and fallback to the dashboard bridge instead of pretending a global topic publish reached the device.
 
 ## Audit Requirements
 
@@ -80,17 +101,19 @@ Every command must create enough evidence to answer these questions:
 1. Did Telegram reach this deployment?
 2. Was the actor authorized?
 3. Was the command parsed and routed?
-4. Was direct MQTT configured?
-5. Was the command dispatched directly or queued?
-6. If queued, did the dashboard bridge pick it up?
-7. Did the device publish ACK/status?
-8. Was a Telegram result notification sent back?
+4. Which active IoT Hub device was selected?
+5. Was direct MQTT configured?
+6. Was the command dispatched directly or queued?
+7. If queued, did the dashboard bridge pick it up?
+8. Did the device publish ACK/status?
+9. Was a Telegram result notification sent back?
 
 The current audit evidence is distributed across:
 
 - `telegram_audit`
 - `telegram_commands`
 - `/api/telegram/diagnostics`
+- `system_settings/active_device`
 - `system_settings/telegram_bridge`
 - dashboard serial logs
 
@@ -110,8 +133,10 @@ npm run validate
 
 ## Live Smoke Test
 
-1. Open `/api/telegram/diagnostics`.
-2. Verify:
+1. Open IoT Hub and select/pair the intended device.
+2. Confirm Firestore has `system_settings/active_device` with the selected `deviceId`.
+3. Open `/api/telegram/diagnostics`.
+4. Verify:
 
 ```json
 {
@@ -125,7 +150,7 @@ npm run validate
 }
 ```
 
-3. Sync webhook if needed:
+5. Sync webhook if needed:
 
 ```bash
 curl -X POST "$APP_BASE_URL/api/telegram/webhook-sync" \
@@ -134,7 +159,7 @@ curl -X POST "$APP_BASE_URL/api/telegram/webhook-sync" \
   -d '{"repair":true,"force":true,"dropPendingUpdates":true}'
 ```
 
-4. Test server MQTT direct path:
+6. Test server MQTT direct path:
 
 ```bash
 curl -X POST "$APP_BASE_URL/api/mqtt/command-test" \
@@ -143,7 +168,7 @@ curl -X POST "$APP_BASE_URL/api/mqtt/command-test" \
   -d '{"command":"OPEN"}'
 ```
 
-5. Test from Telegram:
+7. Test from Telegram:
 
 ```txt
 /ping
@@ -165,7 +190,7 @@ Likely direct MQTT is not configured and dashboard bridge is not alive or not co
 
 ### Bot replies "dispatched" but device does not move
 
-Likely the command was published to the wrong MQTT topic. Confirm `MQTT_TARGET_DEVICE_ID` and the resolved command topic in `/api/telegram/diagnostics`.
+Likely the command was published to the wrong MQTT topic or the active IoT Hub target is stale. Confirm `system_settings/active_device`, `MQTT_TARGET_DEVICE_ID`, and the resolved command topic in `/api/telegram/diagnostics`.
 
 ### Alert notification does not arrive
 
