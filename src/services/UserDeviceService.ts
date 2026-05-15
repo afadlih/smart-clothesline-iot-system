@@ -3,6 +3,7 @@ import {
     deleteDoc,
     doc,
     getDocs,
+    serverTimestamp,
     setDoc
 } from "firebase/firestore";
 import {db} from "@/lib/firebase";
@@ -19,12 +20,26 @@ export type UserDevice = {
     status?: "online" | "offline" | "unknown";
 };
 
+export type ActiveCommandDevice = {
+    deviceId: string;
+    deviceName: string;
+    source: UserDeviceSource;
+    selectedByUid: string;
+    selectedAt?: unknown;
+    lastSeenAt?: number;
+    status?: "online" | "offline" | "unknown";
+};
+
 function userDeviceCollection(uid: string) {
     return collection(db, "users", uid, "devices");
 }
 
 function userDeviceDoc(uid: string, deviceId: string){
     return doc(db, "users", uid, "devices", deviceId)
+}
+
+function activeCommandDeviceDoc() {
+    return doc(db, "system_settings", "active_device");
 }
 
 export async function listUserDevices(uid:string): Promise<UserDevice[]> {
@@ -39,8 +54,8 @@ export async function listUserDevices(uid:string): Promise<UserDevice[]> {
             source: data.source === "wokwi" ? "wokwi" : "esp32",
             pairingCode: data.pairingCode ?? "",
             pairedAt: typeof data.pairedAt === "number" ? data.pairedAt : Date.now(),
-            lastKnownSeenAt: typeof data.lastSeenAt === "number" ? data.lastSeenAt : undefined,
-            lastKnownStatus:
+            lastSeenAt: typeof data.lastSeenAt === "number" ? data.lastSeenAt : undefined,
+            status:
                 data.status === "online" || data.status === "offline"
                     ? data.status
                     : "unknown",
@@ -50,6 +65,22 @@ export async function listUserDevices(uid:string): Promise<UserDevice[]> {
 
 export async function pairUserDevice(uid:string, device:UserDevice): Promise<void> {
     await setDoc(userDeviceDoc(uid, device.deviceId), device, { merge: true});
+}
+
+export async function setActiveCommandDevice(uid: string, device: UserDevice): Promise<void> {
+    await setDoc(
+        activeCommandDeviceDoc(),
+        {
+            deviceId: device.deviceId,
+            deviceName: device.deviceName,
+            source: device.source,
+            selectedByUid: uid,
+            selectedAt: serverTimestamp(),
+            lastSeenAt: device.lastSeenAt ?? null,
+            status: device.status ?? "unknown",
+        },
+        { merge: true },
+    );
 }
 
 export async function unpairUserDevice(uid:string, deviceId:string): Promise<void> {
