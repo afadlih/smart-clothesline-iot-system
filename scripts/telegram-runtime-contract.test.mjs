@@ -36,25 +36,25 @@ test("Dashboard stream subscribes to selected per-device telemetry topics", () =
   assert.match(source, /mqttService\.subscribeTopic\(statusTopic, handleTopicMessage\)/);
 });
 
-test("server-side Telegram commands prefer active IoT Hub device over env fallback", () => {
-  const source = read("src/services/mqtt/ServerMqttCommandPublisher.ts");
-  assert.match(source, /resolveActiveCommandDevice/);
-  assert.match(source, /ACTIVE_DEVICE_SETTINGS_DOC/);
+test("server-side Telegram commands have resilient target resolution", () => {
+  const source = read("src/services/mqtt/TelegramMqttCommandPublisher.ts");
+
   assert.match(source, /iot-hub-active-device/);
   assert.match(source, /env-fallback/);
-  assert.match(source, /MQTT_TARGET_DEVICE_ID/);
-  assert.match(source, /targetDeviceId/);
-  assert.match(source, /deviceId/);
-  assert.match(source, /commandTopic/);
+  assert.match(source, /legacy-global-fallback/);
+  assert.match(source, /smart-clothesline\/command/);
+  assert.match(source, /smart-clothesline\/\$\{targetDeviceId\}\/command/);
+  assert.match(source, /deviceId: target\.deviceId/);
+  assert.match(source, /command/);
 });
 
-test("server-side Telegram MQTT payload matches dashboard command contract", () => {
-  const source = read("src/services/mqtt/ServerMqttCommandPublisher.ts");
+test("Telegram executor uses resilient direct MQTT before queue fallback", () => {
+  const source = read("src/services/telegram/TelegramCommandExecutor.ts");
 
-  assert.match(source, /Dashboard sendCommand publishes exactly/);
-  assert.match(source, /deviceId: targetDeviceId/);
-  assert.match(source, /command: input\.command/);
-  assert.match(source, /smart-clothesline\/\$\{target\}\/command/);
+  assert.match(source, /publishTelegramDeviceCommand/);
+  assert.match(source, /isTelegramMqttCommandPublisherConfigured/);
+  assert.match(source, /recordCommandResult/);
+  assert.match(source, /enqueueCommand/);
 });
 
 test("Telegram webhook path audits received and processed commands", () => {
@@ -64,7 +64,7 @@ test("Telegram webhook path audits received and processed commands", () => {
   assert.match(source, /x-telegram-bot-api-secret-token/);
 });
 
-test("Telegram diagnostics expose command readiness separately from notification readiness", () => {
+test("Telegram diagnostics expose command readiness and fallback mode", () => {
   const source = read("src/app/api/telegram/diagnostics/route.ts");
   assert.match(source, /outboundTelegramCanWork/);
   assert.match(source, /inboundCommandsCanWork/);
@@ -72,7 +72,8 @@ test("Telegram diagnostics expose command readiness separately from notification
   assert.match(source, /telegramCommandMode/);
   assert.match(source, /webhookUrlMatch/);
   assert.match(source, /directMqttTargetDeviceId/);
-  assert.match(source, /activeCommandDevice/);
+  assert.match(source, /directMqttLegacyFallback/);
+  assert.match(source, /legacy smart-clothesline\/command fallback/);
 });
 
 test("Telegram notification endpoint is server-side and requires bot token plus chat target", () => {
