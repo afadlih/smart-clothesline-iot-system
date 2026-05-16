@@ -64,6 +64,20 @@ test("Telegram webhook path audits received and processed commands", () => {
   assert.match(source, /x-telegram-bot-api-secret-token/);
 });
 
+test("Telegram webhook registration requests message updates", () => {
+  const source = read("src/services/TelegramBotApiService.ts");
+  assert.match(source, /allowed_updates/);
+  assert.match(source, /\["message"\]/);
+});
+
+test("Telegram webhook sync exposes delivery errors from Telegram", () => {
+  const source = read("src/services/telegram/TelegramWebhookSyncService.ts");
+  assert.match(source, /telegramPendingUpdateCount/);
+  assert.match(source, /telegramLastErrorMessage/);
+  assert.match(source, /telegramWebhookInfo/);
+  assert.match(source, /Telegram delivery error/);
+});
+
 test("Telegram diagnostics expose command readiness and fallback mode", () => {
   const source = read("src/app/api/telegram/diagnostics/route.ts");
   assert.match(source, /outboundTelegramCanWork/);
