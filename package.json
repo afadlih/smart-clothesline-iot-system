@@ -4,13 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && npm run telegram:sync-webhook:auto",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "test:telegram": "node --test scripts/telegram-runtime-contract.test.mjs",
     "validate": "npm run lint && npm run typecheck && npm run test:telegram && npm run build",
-    "telegram:sync-webhook": "node scripts/sync-telegram-webhook.mjs"
+    "telegram:sync-webhook": "node scripts/sync-telegram-webhook.mjs",
+    "telegram:sync-webhook:auto": "node scripts/sync-telegram-webhook.mjs || node -e \"if (process.env.TELEGRAM_WEBHOOK_SYNC_REQUIRED === 'true') process.exit(1); console.warn('[telegram:webhook] auto sync failed but build continues. Set TELEGRAM_WEBHOOK_SYNC_REQUIRED=true to make this fatal.');\""
   },
   "dependencies": {
     "autoprefixer": "^10.5.0",
