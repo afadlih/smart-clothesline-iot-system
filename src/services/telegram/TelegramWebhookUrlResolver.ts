@@ -8,16 +8,22 @@
  *
  *   TELEGRAM_ALLOW_EPHEMERAL_WEBHOOK=true
  *
- * If Vercel Deployment Protection is still enabled, set TELEGRAM_WEBHOOK_URL to
- * the full externally accessible webhook URL, including any Vercel share/bypass
- * query string, for example:
- *
- *   https://preview.vercel.app/api/telegram/webhook?_vercel_share=...
+ * If Vercel Deployment Protection is still enabled, either:
+ *   1. Set TELEGRAM_WEBHOOK_URL to the full external webhook URL, including
+ *      _vercel_share or x-vercel-protection-bypass query params, OR
+ *   2. Call webhook-sync/diagnostics with those params; this resolver preserves
+ *      them when building /api/telegram/webhook.
  */
 
 import type { NextRequest } from "next/server";
 
 export type WebhookEnvironmentLabel = "production" | "preview" | "development" | "unknown";
+
+const VERCEL_ACCESS_QUERY_KEYS = [
+  "_vercel_share",
+  "x-vercel-protection-bypass",
+  "x-vercel-set-bypass-cookie",
+];
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/$/, "");
@@ -31,6 +37,25 @@ function requestOrigin(request?: NextRequest): string | null {
   return `${proto}://${host}`;
 }
 
+function getVercelAccessQuery(request?: NextRequest): string {
+  if (!request) return "";
+  const params = new URLSearchParams();
+
+  for (const key of VERCEL_ACCESS_QUERY_KEYS) {
+    const value = request.nextUrl.searchParams.get(key);
+    if (value) params.set(key, value);
+  }
+
+  const bypassFromEnv = process.env.VERCEL_PROTECTION_BYPASS_TOKEN?.trim();
+  if (bypassFromEnv && !params.has("x-vercel-protection-bypass")) {
+    params.set("x-vercel-protection-bypass", bypassFromEnv);
+    params.set("x-vercel-set-bypass-cookie", "true");
+  }
+
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
 export function shouldAllowEphemeralWebhook(): boolean {
   return process.env.TELEGRAM_ALLOW_EPHEMERAL_WEBHOOK?.toLowerCase() === "true";
 }
@@ -41,16 +66,6 @@ export function resolveExplicitTelegramWebhookUrl(): string | null {
   return explicit;
 }
 
-/**
- * Resolve the stable base URL for this deployment.
- *
- * Priority:
- *   1. TELEGRAM_WEBHOOK_BASE_URL, if set, because it is explicit for Telegram
- *   2. Preview request origin when TELEGRAM_ALLOW_EPHEMERAL_WEBHOOK=true
- *   3. APP_BASE_URL / NEXT_PUBLIC_APP_URL
- *   4. Request origin
- *   5. localhost fallback
- */
 export function resolveAppBaseUrl(request?: NextRequest): string {
   const telegramExplicit = process.env.TELEGRAM_WEBHOOK_BASE_URL;
   if (telegramExplicit) return normalizeBaseUrl(telegramExplicit);
@@ -81,7 +96,9 @@ export function resolveAppBaseUrl(request?: NextRequest): string {
 export function resolveTelegramWebhookUrl(request?: NextRequest): string {
   const explicit = resolveExplicitTelegramWebhookUrl();
   if (explicit) return explicit;
-  return `${resolveAppBaseUrl(request)}/api/telegram/webhook`;
+
+  const query = getVercelAccessQuery(request);
+  return `${resolveAppBaseUrl(request)}/api/telegram/webhook${query}`;
 }
 
 export function isTelegramWebhookEnabled(): boolean {
