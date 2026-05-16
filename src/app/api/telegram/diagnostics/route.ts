@@ -5,9 +5,10 @@ import {
   isTelegramWebhookEnabled,
 } from "@/services/telegram/TelegramWebhookUrlResolver";
 import { TelegramBotApiService } from "@/services/TelegramBotApiService";
-import { TelegramOpsService } from "@/services/TelegramOpsService";
 import { logger } from "@/lib/logger";
 import { TelegramWebhookSyncService } from "@/services/telegram/TelegramWebhookSyncService";
+import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export const dynamic = "force-dynamic";
 
@@ -28,11 +29,15 @@ export async function GET(request: NextRequest) {
     }
 
     let firestoreTelemetryContextReadable = false;
+    let latestTelemetryAvailable = false;
     try {
-      // Small smoke test for firestore readability
-      await TelegramOpsService.getConfig();
+      // Check sensor_data readability
+      const q = query(collection(db, "sensor_data"), orderBy("createdAt", "desc"), limit(1));
+      const snap = await getDocs(q);
       firestoreTelemetryContextReadable = true;
-    } catch {
+      latestTelemetryAvailable = !snap.empty;
+    } catch (err) {
+      logger.error("telegram", "Telemetry check failed in diagnostics", err);
       firestoreTelemetryContextReadable = false;
     }
 
@@ -43,6 +48,7 @@ export async function GET(request: NextRequest) {
     const warnings = [...syncStatus.warnings];
     if (!botConfigured) warnings.push("TELEGRAM_BOT_TOKEN is not configured.");
     if (!defaultChatConfigured) warnings.push("TELEGRAM_CHAT_ID is not configured.");
+    if (!latestTelemetryAvailable) warnings.push("No telemetry data found in Firestore.");
 
     return NextResponse.json({
       ok: true,
@@ -55,6 +61,7 @@ export async function GET(request: NextRequest) {
       groupNotificationsEnabled: groupModeEnabled,
       allowedGroupsCount: allowedGroupIds.length,
       firestoreTelemetryContextReadable,
+      latestTelemetryAvailable,
       vercelEnv,
       botInfo,
       warnings,

@@ -17,9 +17,11 @@ export async function POST(request: NextRequest) {
 
     if (result.skipped) {
       return NextResponse.json({
-        ok: true,
+        ok: result.ok,
         skipped: true,
         reason: result.reason,
+        sentCount: result.sentCount,
+        targetsCount: result.targetsCount,
       });
     }
 

@@ -11,7 +11,6 @@ import {
   setDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { logger } from "@/lib/logger";
 
 const TELEGRAM_CONFIG_COLLECTION = "telegram_config";
 const TELEGRAM_CONFIG_DOC = "global";

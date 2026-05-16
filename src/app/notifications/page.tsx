@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bot, Shield, Bell, Activity, RefreshCcw, AlertCircle, Send, Users } from "lucide-react";
+import { Bot, Shield, Bell, Activity, RefreshCcw, AlertCircle, Send } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 import { useSystemState } from "@/hooks/useSystemState";
 import { formatDateTime } from "@/utils/timeFormat";

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-export async function POST() {
+function gone() {
   return NextResponse.json(
     {
       ok: false,
@@ -8,4 +8,12 @@ export async function POST() {
     },
     { status: 410 }
   );
+}
+
+export async function GET() {
+  return gone();
+}
+
+export async function POST() {
+  return gone();
 }
