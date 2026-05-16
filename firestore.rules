@@ -2,6 +2,14 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
     function isNumber(v) {
       return v is int || v is float;
     }
@@ -12,6 +20,30 @@ service cloud.firestore {
 
     function isValidTimestampMs(v) {
       return isNumber(v) && v > 0 && v < 4102444800000; // < year 2100
+    }
+
+    function isValidUserDevice(data) {
+      return data.deviceId is string
+        && data.deviceId.size() > 0
+        && data.deviceName is string
+        && data.deviceName.size() > 0
+        && data.source in ['esp32', 'wokwi']
+        && data.pairingCode is string
+        && isValidTimestampMs(data.pairedAt)
+        && (data.lastSeenAt == null || isValidTimestampMs(data.lastSeenAt))
+        && (data.status == null || data.status in ['online', 'offline', 'unknown']);
+    }
+
+    function isValidActiveCommandDevice(data) {
+      return data.deviceId is string
+        && data.deviceId.size() > 0
+        && data.deviceName is string
+        && data.deviceName.size() > 0
+        && data.source in ['esp32', 'wokwi']
+        && data.selectedByUid is string
+        && data.selectedByUid.size() > 0
+        && (data.lastSeenAt == null || isValidTimestampMs(data.lastSeenAt))
+        && (data.status == null || data.status in ['online', 'offline', 'unknown']);
     }
 
     function isValidSensorPayload(data) {
@@ -76,9 +108,19 @@ service cloud.firestore {
       allow delete: if true;
     }
 
+    match /users/{userId}/devices/{deviceId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && request.resource.data.deviceId == deviceId
+        && isValidUserDevice(request.resource.data);
+      allow delete: if isOwner(userId);
+    }
+
     match /system_settings/{docId} {
       allow read: if true;
-      allow create, update: if true;
+      allow create, update: if docId == 'active_device'
+        ? (isSignedIn() && isValidActiveCommandDevice(request.resource.data))
+        : true;
       allow delete: if false;
     }
 
