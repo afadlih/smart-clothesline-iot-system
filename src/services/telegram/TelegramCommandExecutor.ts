@@ -1,24 +1,20 @@
 /**
  * TelegramCommandExecutor
  *
- * Server-side command execution abstraction for Telegram operator commands.
- *
- * On Vercel (serverless), WebSocket MQTT is not always reliable at the
- * server edge. The preferred runtime path is server-side direct publish when
- * the MQTT server environment is complete and aligned with the current
- * per-device topic contract. Otherwise the permanent safe path is Firestore
- * queue fallback, where the dashboard bridge dispatches through the same
- * topic resolver used by the latest dashboard backend.
+ * Executes Telegram operator commands with direct MQTT first. The MQTT
+ * publisher resolves target in this order:
+ * 1. system_settings/active_device from IoT Hub
+ * 2. MQTT_TARGET_DEVICE_ID env fallback
+ * 3. legacy smart-clothesline/command fallback for Wokwi/testing
  */
 
 import { TelegramOpsService, type TelegramCommandJob } from "@/services/TelegramOpsService";
 import { logger } from "@/lib/logger";
 import {
-  publishDeviceCommand,
-  isServerMqttCommandPublisherConfigured,
-  getServerMqttCommandPublisherStatus,
-  type ServerCommandInput,
-} from "@/services/mqtt/ServerMqttCommandPublisher";
+  publishTelegramDeviceCommand,
+  isTelegramMqttCommandPublisherConfigured,
+  type TelegramMqttCommandResult,
+} from "@/services/mqtt/TelegramMqttCommandPublisher";
 
 export type CommandExecutionResult =
   | { result: "queued"; commandId: string; detail: string }
@@ -28,9 +24,9 @@ export type CommandExecutionResult =
 
 export type ExecutorCommand = TelegramCommandJob["command"];
 
-const LEGACY_GLOBAL_COMMAND_TOPIC = "smart-clothesline/command";
+type MappedCommand = "OPEN" | "CLOSE" | "AUTO" | "MANUAL" | "RESTART";
 
-function mapTelegramCommand(command: ExecutorCommand): ServerCommandInput["command"] {
+function mapTelegramCommand(command: ExecutorCommand): MappedCommand {
   switch (command) {
     case "/open": return "OPEN";
     case "/close": return "CLOSE";
@@ -40,94 +36,27 @@ function mapTelegramCommand(command: ExecutorCommand): ServerCommandInput["comma
   }
 }
 
-function isPerDeviceCommandTopic(topic: string | null | undefined): boolean {
-  if (!topic) return false;
-  const parts = topic.split("/").filter(Boolean);
-  return parts.length >= 3 && parts[0] === "smart-clothesline" && parts[parts.length - 1] === "command";
+function formatDirectDetail(result: TelegramMqttCommandResult): string {
+  const target = result.targetDeviceId ?? "legacy-global";
+  return `Dispatched to ${result.topic} target=${target} source=${result.targetSource}`;
 }
 
-function getDirectPublishReadiness(): {
-  configured: boolean;
-  ready: boolean;
-  detail: string;
-  topic: string | null;
-  targetDeviceId: string | null;
-} {
-  const publisherStatus = getServerMqttCommandPublisherStatus();
-  const configured = isServerMqttCommandPublisherConfigured();
-  const topic = publisherStatus.commandTopic ?? null;
-  const targetDeviceId = publisherStatus.targetDeviceId ?? null;
-
-  if (!configured) {
-    return {
-      configured,
-      ready: false,
-      detail: "Direct MQTT is not configured. Queued for dashboard bridge.",
-      topic,
-      targetDeviceId,
-    };
-  }
-
-  if (!targetDeviceId) {
-    return {
-      configured,
-      ready: false,
-      detail: "Direct MQTT is configured but MQTT_TARGET_DEVICE_ID is missing. Queued for dashboard bridge.",
-      topic,
-      targetDeviceId,
-    };
-  }
-
-  if (topic === LEGACY_GLOBAL_COMMAND_TOPIC || !isPerDeviceCommandTopic(topic)) {
-    return {
-      configured,
-      ready: false,
-      detail: "Direct MQTT is configured but not aligned with the per-device command topic contract. Queued for dashboard bridge.",
-      topic,
-      targetDeviceId,
-    };
-  }
-
-  return {
-    configured,
-    ready: true,
-    detail: "Direct MQTT is configured for the per-device command topic contract.",
-    topic,
-    targetDeviceId,
-  };
-}
-
-/**
- * Execute a Telegram operator command.
- *
- * Tries server-side direct MQTT publish only when the server publisher is
- * aligned with the latest per-device MQTT backend. Falls back to Firestore
- * queue when direct publish is unavailable or would publish to the old global
- * topic that devices no longer subscribe to.
- */
 export async function executeTelegramCommand(input: {
   command: ExecutorCommand;
   chatId?: number;
   userId: number;
   username?: string;
 }): Promise<CommandExecutionResult> {
-  const directReadiness = getDirectPublishReadiness();
+  const mqttCommand = mapTelegramCommand(input.command);
 
-  if (directReadiness.ready) {
-    const mqttCommand = mapTelegramCommand(input.command);
-
+  if (isTelegramMqttCommandPublisherConfigured()) {
     try {
-      const directResult = await publishDeviceCommand({
-        command: mqttCommand,
-        requestedBy: "telegram",
-        sourceCommand: input.command,
-        chatId: input.chatId,
-        userId: input.userId,
-        username: input.username,
-      });
+      const directResult = await publishTelegramDeviceCommand(mqttCommand);
 
       if (directResult.ok) {
         let commandId = "-";
+        const detail = formatDirectDetail(directResult);
+
         try {
           commandId = await TelegramOpsService.recordCommandResult({
             command: input.command,
@@ -135,7 +64,7 @@ export async function executeTelegramCommand(input: {
             chatId: input.chatId,
             userId: input.userId,
             username: input.username,
-            result: `Dispatched directly to MQTT topic ${directResult.topic}`,
+            result: detail,
             dispatchMode: "server-direct",
           });
         } catch (error) {
@@ -145,11 +74,11 @@ export async function executeTelegramCommand(input: {
         return {
           result: "dispatched",
           commandId,
-          detail: `Dispatched directly to MQTT topic ${directResult.topic}.`,
+          detail,
         };
       }
 
-      logger.warn("telegram", "Direct MQTT publish returned non-ok result", {
+      logger.warn("telegram", "Direct MQTT publish failed; falling back to bridge queue", {
         command: input.command,
         topic: directResult.topic,
         detail: directResult.detail,
@@ -158,16 +87,8 @@ export async function executeTelegramCommand(input: {
     } catch (error) {
       logger.error("telegram", "Direct MQTT publish threw error", error);
     }
-  } else if (directReadiness.configured) {
-    logger.warn("telegram", "Skipping direct MQTT publish because runtime is not per-device ready", {
-      command: input.command,
-      topic: directReadiness.topic,
-      targetDeviceId: directReadiness.targetDeviceId,
-      detail: directReadiness.detail,
-    });
   }
 
-  // Fallback to queue
   try {
     const commandId = await TelegramOpsService.enqueueCommand({
       command: input.command,
@@ -180,13 +101,12 @@ export async function executeTelegramCommand(input: {
       command: input.command,
       commandId,
       userId: input.userId,
-      directReadiness,
     });
 
     return {
       result: "queued",
       commandId,
-      detail: directReadiness.detail,
+      detail: "Direct MQTT unavailable. Queued for dashboard bridge.",
     };
   } catch (error) {
     logger.error("telegram", "Command enqueue failed", { command: input.command, error });
@@ -197,9 +117,6 @@ export async function executeTelegramCommand(input: {
   }
 }
 
-/**
- * Build a user-facing reply message from an execution result.
- */
 export function buildCommandReplyMessage(
   command: ExecutorCommand,
   execResult: CommandExecutionResult,
