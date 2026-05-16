@@ -53,3 +53,6 @@ To validate the notification integration, use the diagnostic endpoint:
 
 You can also run the validation script:
 `npm run test:telegram`
+
+> [!NOTE]
+> The previous Telegram command diagnostics path (`/api/mqtt/command-test`) is intentionally removed. Telegram no longer has any command-dispatch path. MQTT/device control diagnostics, if needed, must be handled separately from Telegram using browser-side MQTT controls in the dashboard.
