@@ -30,8 +30,12 @@ type TelegramWebhookInfo = {
   url: string;
   has_custom_certificate?: boolean;
   pending_update_count?: number;
+  last_error_date?: number;
+  last_error_message?: string;
+  last_synchronization_error_date?: number;
   max_connections?: number;
   ip_address?: string;
+  allowed_updates?: string[];
 };
 
 function endpoint(token: string, method: string): string {
@@ -115,6 +119,7 @@ export class TelegramBotApiService {
         url: webhookUrl,
         secret_token: options?.secretToken || undefined,
         drop_pending_updates: options?.dropPendingUpdates ?? false,
+        allowed_updates: ["message"],
       }),
     });
   }
@@ -128,10 +133,7 @@ export class TelegramBotApiService {
     return res.ok;
   }
 
-  static async deleteWebhookWithResult(
-    token: string,
-    options?: { dropPendingUpdates?: boolean },
-  ): Promise<TelegramApiResponse<unknown>> {
+  static async deleteWebhookWithResult(token: string, options?: { dropPendingUpdates?: boolean }): Promise<TelegramApiResponse<unknown>> {
     return this.safeRequest<unknown>(endpoint(token, "deleteWebhook"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -219,15 +221,14 @@ export class TelegramBotApiService {
     const updates = Array.isArray(data.result) ? data.result : [];
     for (const update of updates) {
       this.offset = Math.max(this.offset, update.update_id + 1);
-      
       const messageDate = update.message?.date ?? 0;
       if (config.ignoreBeforeStart && messageDate > 0 && messageDate < this.pollingStartedAtSec - 30) {
         this.ignoredStaleUpdates += 1;
         this.lastIgnoredUpdateAt = Date.now();
-        logger.info("polling", "Ignored stale Telegram update", { 
+        logger.info("polling", "Ignored stale Telegram update", {
           updateId: update.update_id,
           messageDate,
-          pollingStartedAtSec: this.pollingStartedAtSec
+          pollingStartedAtSec: this.pollingStartedAtSec,
         });
         continue;
       }
@@ -243,18 +244,9 @@ export class TelegramBotApiService {
       const userId = typeof update.message?.from?.id === "number" ? update.message.from.id : undefined;
       const username = typeof update.message?.from?.username === "string" ? update.message.from.username : undefined;
 
-      if (!text || !chatId || !userId) {
-        continue;
-      }
+      if (!text || !chatId || !userId) continue;
 
-      await TelegramCommandRouter.handle({
-        text,
-        chatId,
-        chatType,
-        chatTitle,
-        userId,
-        username,
-      });
+      await TelegramCommandRouter.handle({ text, chatId, chatType, chatTitle, userId, username });
       logger.info("polling", "Reply sent", { command: text });
     }
   }
@@ -278,10 +270,9 @@ export class TelegramBotApiService {
         await this.pollOnce(token, config);
         this.pollingStatus = "running";
       } catch (error) {
-        this.lastError = String(error);
         this.pollingStatus = "retrying";
-        logger.error("polling", "Polling crash", error);
-        logger.warn("polling", "Retrying polling in 3s");
+        this.lastError = String(error);
+        logger.error("polling", "Polling error", error);
         await this.sleep(3000);
       }
     }
