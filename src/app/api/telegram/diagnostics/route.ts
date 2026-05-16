@@ -11,7 +11,7 @@ import { logger } from "@/lib/logger";
 import { ensureTelegramPollingStarted, getTelegramPollingDiagnostics } from "@/lib/telegramSingleton";
 import { db } from "@/lib/firebase";
 import { getTelegramMqttCommandPublisherStatus } from "@/services/mqtt/TelegramMqttCommandPublisher";
-import { TelegramWebhookSyncService } from "@/services/telegram/TelegramWebhookSyncService";
+import { TelegramWebhookSyncService, type TelegramWebhookSyncResult } from "@/services/telegram/TelegramWebhookSyncService";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +22,31 @@ function safeMillis(value: unknown): number | null {
   return null;
 }
 
+function shouldAutoRepairWebhook(): boolean {
+  return process.env.TELEGRAM_AUTO_REPAIR_WEBHOOK !== "false";
+}
+
+function needsWebhookRepair(status: TelegramWebhookSyncResult): boolean {
+  if (!status.botConfigured || !status.webhookEnabled) return false;
+  if (!status.webhookUrlMatch) return true;
+  return Boolean(status.telegramLastErrorMessage);
+}
+
 export async function GET(request: NextRequest) {
   try {
-    const syncStatus = await TelegramWebhookSyncService.getStatus(request);
+    let syncStatus = await TelegramWebhookSyncService.getStatus(request);
+    let autoRepairAttempted = false;
+
+    if (shouldAutoRepairWebhook() && needsWebhookRepair(syncStatus)) {
+      autoRepairAttempted = true;
+      syncStatus = await TelegramWebhookSyncService.sync({
+        repair: true,
+        force: true,
+        dropPendingUpdates: true,
+        source: "diagnostics",
+      }, request);
+    }
+
     const botToken = TelegramEnvConfigService.getBotToken();
     const allowedUserIds = TelegramEnvConfigService.getAllowedUserIds();
     const allowedGroupIds = TelegramEnvConfigService.getAllowedGroupIds();
@@ -78,6 +100,7 @@ export async function GET(request: NextRequest) {
     const pollingDiags = getTelegramPollingDiagnostics();
     const isLocalPollingEnabled = TelegramEnvConfigService.isLocalPollingEnabled();
 
+    if (autoRepairAttempted) warnings.push("Diagnostics attempted automatic Telegram webhook repair.");
     if (!botConfigured) unconfiguredReasons.push("missing TELEGRAM_BOT_TOKEN");
     if (webhookEnabled && !process.env.APP_BASE_URL && vercelEnv !== "preview") unconfiguredReasons.push("APP_BASE_URL missing");
     if (vercelEnv !== "development" && !webhookEnabled) unconfiguredReasons.push("webhook disabled on Vercel");
@@ -110,6 +133,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ...syncStatus,
       ok: diagnosticsOk,
+      autoRepairAttempted,
       runtimeMode,
       vercelEnv,
       webhookSelfTestUrl,
