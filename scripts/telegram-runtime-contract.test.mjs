@@ -70,6 +70,20 @@ test("Telegram webhook registration requests message updates", () => {
   assert.match(source, /\["message"\]/);
 });
 
+test("Deploy build auto-syncs Telegram webhook directly through Telegram API", () => {
+  const pkg = read("package.json");
+  const source = read("scripts/sync-telegram-webhook.mjs");
+
+  assert.match(pkg, /telegram:sync-webhook:auto/);
+  assert.match(pkg, /next build && npm run telegram:sync-webhook:auto/);
+  assert.match(source, /api\.telegram\.org\/bot\$\{token\}\/\$\{method\}/);
+  assert.match(source, /setWebhook/);
+  assert.match(source, /getWebhookInfo/);
+  assert.match(source, /VERCEL_URL/);
+  assert.match(source, /TELEGRAM_WEBHOOK_URL/);
+  assert.match(source, /TELEGRAM_WEBHOOK_BASE_URL/);
+});
+
 test("Telegram webhook sync exposes delivery errors from Telegram", () => {
   const source = read("src/services/telegram/TelegramWebhookSyncService.ts");
   assert.match(source, /telegramPendingUpdateCount/);
