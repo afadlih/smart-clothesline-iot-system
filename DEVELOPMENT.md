@@ -22,7 +22,7 @@ This guide covers everything needed to set up, develop, and contribute to the Sm
 We welcome contributions focused on:
 - UI/UX improvements.
 - Realtime stability and MQTT data-flow performance.
-- Telegram bot command hardening and security.
+- Telegram notification reliability and safety.
 - Documentation and developer experience.
 
 ### B. Pull Request Rules
@@ -32,14 +32,14 @@ We welcome contributions focused on:
 - **PR Description:** Describe what changed and why. Mention any Firestore index or environment changes.
 
 ### C. Webhook Safety
-Preview branches (`feature/*`, `fix/*`) **MUST** set `TELEGRAM_WEBHOOK_ENABLED=false` to avoid stealing the production webhook updates. Use separate bot tokens for different environments.
+Preview branches (`feature/*`, `fix/*`) should use separate bot tokens or disable `TELEGRAM_WEBHOOK_ENABLED` to avoid stealing the production webhook updates.
 
 ---
 
 ## 4. Engineering Standards
 
 - **TypeScript:** Use explicit types for domain models and service interfaces.
-- **Architecture:** Keep Telegram polling and heavy MQTT logic in server-side singletons (`lib/` and `services/`).
+- **Architecture:** Keep Telegram notification logic and server-side utilities in `services/`.
 - **Safety:** Never start long-running tasks or polling inside React components or hooks.
 - **MQTT:** Follow the [MQTT_GUIDE.md](./docs/MQTT_GUIDE.md) for telemetry standards and light normalization (0-10000).
 
@@ -47,4 +47,4 @@ Preview branches (`feature/*`, `fix/*`) **MUST** set `TELEGRAM_WEBHOOK_ENABLED=f
 
 ## 5. Roadmap
 - **Analytics:** Integration of historical trend analysis using Firestore partitions.
-- **Big Data:** Preparation for Hadoop/Spark telemetry archival (see [BIG_DATA_ROADMAP.md](./docs/BIG_DATA_ROADMAP.md)).
+- **Big Data:** Preparation for Hadoop/Spark telemetry archival (see [MQTT_GUIDE.md](./docs/MQTT_GUIDE.md#6-big-data--analytics-roadmap-future-readiness)).

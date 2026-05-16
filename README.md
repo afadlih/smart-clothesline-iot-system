@@ -6,8 +6,8 @@ Smart Clothesline IoT System is a Next.js 14 dashboard for realtime monitoring, 
 
 ## 🚀 System Status: v1.0.0 Ready
 The system has been stabilized and validated for production release. 
-- [Latest Release Readiness Report](./docs/RELEASE_READY_REPORT.md)
 - [Staging Validation Runbook](./docs/STAGING_VALIDATION_RUNBOOK.md)
+- [Telegram Notification Only Docs](./docs/TELEGRAM_NOTIFICATION_ONLY.md)
 
 ---
 
@@ -15,7 +15,7 @@ The system has been stabilized and validated for production release.
 
 - **Realtime Dashboard:** Live telemetry, device health, and operational summary.
 - **Automation Engine:** Thresholds, schedules, and safety logic.
-- **Telegram Integration:** Command-based control and event notifications.
+- **Telegram Integration:** Outbound operational event notifications.
 - **Analytics:** Historical trends and data export (CSV/JSON).
 - **IoT Hub:** Device pairing, diagnostics, and sync management.
 
@@ -53,7 +53,6 @@ The system is optimized for Vercel. See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for
 
 - **MQTT Guide:** Canonical topics and payload schemas (see **[MQTT_GUIDE.md](./docs/MQTT_GUIDE.md)**).
 - **Telemetry:** Normalized light (0-10000) and authoritative rain state.
-- **Big Data Roadmap:** Future Hadoop/Spark readiness (see **[BIG_DATA_ROADMAP.md](./docs/BIG_DATA_ROADMAP.md)**).
 
 ---
 

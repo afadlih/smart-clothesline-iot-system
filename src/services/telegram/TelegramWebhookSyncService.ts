@@ -62,7 +62,6 @@ export class TelegramWebhookSyncService {
     const webhookEnabled = isTelegramWebhookEnabled();
     const appBaseUrl = resolveAppBaseUrl(request);
     const expectedWebhookUrl = resolveTelegramWebhookUrl(request);
-    const allowEphemeral = TelegramEnvConfigService.shouldAllowEphemeralWebhook();
     const envDropOnSetup = TelegramEnvConfigService.shouldDropPendingUpdatesOnWebhookSetup();
     
     const repair = options.repair === true;
@@ -95,7 +94,7 @@ export class TelegramWebhookSyncService {
         ok: true,
         webhookUrlMatch: false,
         webhookStatus: "disabled",
-        nextAction: "Enable TELEGRAM_WEBHOOK_ENABLED=true if you want to receive commands via webhook.",
+        nextAction: "Enable TELEGRAM_WEBHOOK_ENABLED=true if you want to track inbound messages and send notification-only auto-replies.",
         warnings: ["Webhook mode is disabled in environment"],
       } as TelegramWebhookSyncResult;
     }
@@ -108,13 +107,13 @@ export class TelegramWebhookSyncService {
       }
     }
 
-    if (!allowEphemeral && appBaseUrl && isLikelyEphemeralVercelUrl(appBaseUrl)) {
+    if (appBaseUrl && isLikelyEphemeralVercelUrl(appBaseUrl)) {
       return {
         ...result,
         ok: false,
         webhookUrlMatch: false,
         webhookStatus: "failed",
-        nextAction: "Use a stable domain or set TELEGRAM_ALLOW_EPHEMERAL_WEBHOOK=true.",
+        nextAction: "Use a stable domain for Telegram webhooks.",
         warnings: ["APP_BASE_URL is an ephemeral Vercel deployment URL."],
       } as TelegramWebhookSyncResult;
     }
@@ -181,7 +180,7 @@ export class TelegramWebhookSyncService {
 
     let nextAction = "Webhook is synchronized.";
     if (webhookStatus === "missing") {
-      nextAction = "Telegram has no webhook registered. Inbound commands will fail. Click 'Repair' to register.";
+      nextAction = "Telegram has no webhook registered. Inbound tracking will not work. Click 'Repair' to register.";
     } else if (webhookStatus === "mismatch") {
       nextAction = "Telegram webhook URL differs from this deployment. Click 'Repair' to sync.";
     }
@@ -192,6 +191,7 @@ export class TelegramWebhookSyncService {
       webhookStatus,
       nextAction,
     } as TelegramWebhookSyncResult;
+
   }
 
   static async isWebhookInSync(request?: NextRequest): Promise<boolean> {

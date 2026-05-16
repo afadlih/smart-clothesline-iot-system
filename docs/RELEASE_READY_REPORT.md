@@ -7,6 +7,9 @@
 
 The `develop` branch has been stabilized following the merge of PR #21. All runtime features, telemetry normalization, and documentation have been validated and aligned with the production release requirements.
 
+> [!IMPORTANT]
+> **Telegram Refactor Note:** On branch `refactor/telegram-notification-only`, Telegram has been intentionally reduced to outbound notification-only mode. Historical command-related validation in this report belongs to the older runtime and should not be used as the current Telegram behavior. Sections referencing `INTERNAL_COMMAND_SECRET`, `telegram_commands`, and `/api/mqtt/command-test` (in Telegram context) are obsolete for this branch.
+
 ## Baseline Check
 - **Branch:** develop
 - **Latest Commit:** `c744f4b` (Merge pull request #21)

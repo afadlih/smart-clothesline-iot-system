@@ -25,7 +25,6 @@ This document covers the target platform, environment configuration, and securit
 
 ### A. Credential Rotation
 - Rotate MQTT passwords and Telegram tokens if exposure is suspected.
-- Verify `INTERNAL_COMMAND_SECRET` is strong and set in Vercel.
 
 ### B. Access Control
 - Verify broker ACL for browser credentials is **low privilege** (limited subscribe/publish).
@@ -48,7 +47,7 @@ Telegram supports only **one** active webhook per bot token.
 - **Sync Command:**
   ```bash
   curl -X POST https://<APP_BASE_URL>/api/telegram/webhook-sync \
-    -H "x-internal-command-secret: <INTERNAL_COMMAND_SECRET>" \
+    -H "Content-Type: application/json" \
     -d '{"repair":true,"force":false,"dropPendingUpdates":true}'
   ```
 

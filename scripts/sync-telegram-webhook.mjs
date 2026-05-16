@@ -6,7 +6,6 @@
  */
 
 let APP_BASE_URL = process.env.APP_BASE_URL;
-const INTERNAL_COMMAND_SECRET = process.env.INTERNAL_COMMAND_SECRET;
 
 if (!APP_BASE_URL) {
   console.error("Error: APP_BASE_URL is not set.");
@@ -22,11 +21,6 @@ if (!APP_BASE_URL.startsWith('http://') && !APP_BASE_URL.startsWith('https://'))
 // Trim trailing slash
 APP_BASE_URL = APP_BASE_URL.replace(/\/$/, '');
 
-if (!INTERNAL_COMMAND_SECRET) {
-  console.error("Error: INTERNAL_COMMAND_SECRET is not set.");
-  process.exit(1);
-}
-
 const syncUrl = `${APP_BASE_URL}/api/telegram/webhook-sync`;
 
 console.log(`[SYNC] Triggering webhook sync for: ${APP_BASE_URL}`);
@@ -38,7 +32,6 @@ async function runSync() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-internal-command-secret': INTERNAL_COMMAND_SECRET
       },
       body: JSON.stringify({
         repair: true,
