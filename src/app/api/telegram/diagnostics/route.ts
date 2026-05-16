@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
     const isLocalPollingEnabled = TelegramEnvConfigService.isLocalPollingEnabled();
 
     if (!botConfigured) unconfiguredReasons.push("missing TELEGRAM_BOT_TOKEN");
-    if (webhookEnabled && !process.env.APP_BASE_URL) unconfiguredReasons.push("APP_BASE_URL missing");
+    if (webhookEnabled && !process.env.APP_BASE_URL && vercelEnv !== "preview") unconfiguredReasons.push("APP_BASE_URL missing");
     if (vercelEnv !== "development" && !webhookEnabled) unconfiguredReasons.push("webhook disabled on Vercel");
     if (webhookEnabled && !syncStatus.webhookUrlMatch) unconfiguredReasons.push("webhook URL mismatch");
 
@@ -92,21 +92,24 @@ export async function GET(request: NextRequest) {
     }
 
     const outboundTelegramCanWork = botConfigured;
-    const inboundCommandsCanWork = botConfigured && (runtimeMode === "webhook" ? (webhookEnabled && syncStatus.webhookUrlMatch) : true);
+    const inboundCommandsCanWork = botConfigured && (runtimeMode === "webhook" ? (webhookEnabled && syncStatus.webhookUrlMatch && !syncStatus.telegramLastErrorMessage) : true);
 
     let commandBlockerReason: string | null = null;
     if (botConfigured && !inboundCommandsCanWork) {
       if (runtimeMode === "webhook" && !syncStatus.webhookUrlMatch) {
-        commandBlockerReason = "Bot can send notifications, but commands cannot reach this deployment because Telegram has no webhook registered OR the URL mismatch.";
+        commandBlockerReason = "Bot can send notifications, but commands cannot reach this deployment because Telegram webhook URL differs from this deployment.";
+      } else if (runtimeMode === "webhook" && syncStatus.telegramLastErrorMessage) {
+        commandBlockerReason = `Telegram reports webhook delivery error: ${syncStatus.telegramLastErrorMessage}`;
       }
     }
 
     const webhookSelfTestUrl = `${appBaseUrl}/api/telegram/webhook-self-test`;
     const webhookSyncEndpoint = `${appBaseUrl}/api/telegram/webhook-sync`;
+    const diagnosticsOk = syncStatus.ok && outboundTelegramCanWork && inboundCommandsCanWork && firestoreOk;
 
     return NextResponse.json({
       ...syncStatus,
-      ok: true,
+      ok: diagnosticsOk,
       runtimeMode,
       vercelEnv,
       webhookSelfTestUrl,
