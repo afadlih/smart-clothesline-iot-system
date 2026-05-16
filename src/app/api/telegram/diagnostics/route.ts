@@ -10,7 +10,7 @@ import { TelegramOpsService } from "@/services/TelegramOpsService";
 import { logger } from "@/lib/logger";
 import { ensureTelegramPollingStarted, getTelegramPollingDiagnostics } from "@/lib/telegramSingleton";
 import { db } from "@/lib/firebase";
-import { getResolvedServerMqttCommandPublisherStatus } from "@/services/mqtt/ServerMqttCommandPublisher";
+import { getTelegramMqttCommandPublisherStatus } from "@/services/mqtt/TelegramMqttCommandPublisher";
 import { TelegramWebhookSyncService } from "@/services/telegram/TelegramWebhookSyncService";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,6 @@ function safeMillis(value: unknown): number | null {
 export async function GET(request: NextRequest) {
   try {
     const syncStatus = await TelegramWebhookSyncService.getStatus(request);
-    
     const botToken = TelegramEnvConfigService.getBotToken();
     const allowedUserIds = TelegramEnvConfigService.getAllowedUserIds();
     const allowedGroupIds = TelegramEnvConfigService.getAllowedGroupIds();
@@ -69,7 +68,8 @@ export async function GET(request: NextRequest) {
     const bridgeLastSeenAt = safeMillis(bridgeRaw?.lastSeenAt);
     const bridgeAgeMs = bridgeLastSeenAt ? Math.max(0, Date.now() - bridgeLastSeenAt) : null;
     const bridgeAlive = bridgeAgeMs !== null && bridgeAgeMs <= 15_000;
-    const mqttPublisherStatus = await getResolvedServerMqttCommandPublisherStatus();
+
+    const mqttPublisherStatus = await getTelegramMqttCommandPublisherStatus();
     const directMqttConfigured = mqttPublisherStatus.configured;
     const telegramCommandMode = directMqttConfigured ? "server-direct-with-bridge-fallback" : "browser-bridge-only";
 
@@ -82,13 +82,13 @@ export async function GET(request: NextRequest) {
     if (webhookEnabled && !process.env.APP_BASE_URL) unconfiguredReasons.push("APP_BASE_URL missing");
     if (vercelEnv !== "development" && !webhookEnabled) unconfiguredReasons.push("webhook disabled on Vercel");
     if (webhookEnabled && !syncStatus.webhookUrlMatch) unconfiguredReasons.push("webhook URL mismatch");
-    
+
     if (!directMqttConfigured) {
       warnings.push("Server-side MQTT command publish is not configured. Telegram hardware commands will fall back to dashboard bridge.");
     }
 
-    if (directMqttConfigured && !mqttPublisherStatus.targetDeviceId) {
-      warnings.push("Server-side MQTT is configured, but no active IoT Hub device or MQTT_TARGET_DEVICE_ID fallback is available.");
+    if (directMqttConfigured && mqttPublisherStatus.targetSource === "legacy-global-fallback") {
+      warnings.push("No active IoT Hub device is selected. Telegram commands will use legacy smart-clothesline/command fallback until a device is paired.");
     }
 
     const outboundTelegramCanWork = botConfigured;
@@ -117,15 +117,16 @@ export async function GET(request: NextRequest) {
       commandBlockerReason,
       botConfigured,
       directMqttConfigured,
-      directMqttBrokerConfigured: Boolean(mqttPublisherStatus.brokerUrlMasked && mqttPublisherStatus.brokerUrlMasked !== "unconfigured"),
-      directMqttUsernameConfigured: mqttPublisherStatus.hasUsername,
-      directMqttPasswordConfigured: mqttPublisherStatus.hasPassword,
+      directMqttBrokerConfigured: directMqttConfigured,
+      directMqttUsernameConfigured: directMqttConfigured,
+      directMqttPasswordConfigured: directMqttConfigured,
       directMqttCommandTopic: mqttPublisherStatus.commandTopic,
       directMqttConfiguredCommandTopic: mqttPublisherStatus.configuredCommandTopic,
       directMqttTargetDeviceConfigured: mqttPublisherStatus.targetDeviceId !== null,
       directMqttTargetDeviceId: mqttPublisherStatus.targetDeviceId,
       directMqttTargetSource: mqttPublisherStatus.targetSource,
-      activeCommandDevice: mqttPublisherStatus.activeDevice,
+      directMqttLegacyFallback: mqttPublisherStatus.targetSource === "legacy-global-fallback",
+      activeCommandDevice: mqttPublisherStatus.targetDeviceId ? { deviceId: mqttPublisherStatus.targetDeviceId, source: mqttPublisherStatus.targetSource } : null,
       telegramCommandMode,
       allowedUserIdsCount: allowedUserIds.length,
       allowedGroupsCount: allowedGroupIds.length,
