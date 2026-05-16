@@ -232,8 +232,7 @@ function RegisterContent() {
                 <Wind className="h-6 w-6 text-teal-300" aria-hidden="true" />
               </div>
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-teal-400/80">Premium</p>
-                <p className="text-xl font-bold leading-tight text-white">IoT Dashboard</p>
+                <p className="text-xl font-bold leading-tight text-white">Smart Clothesline</p>
               </div>
             </div>
 
@@ -255,10 +254,6 @@ function RegisterContent() {
 
             {/* Bottom copy */}
             <div className="space-y-6">
-              <div className="flex items-center gap-3">
-                <div className="h-1 w-10 rounded-full bg-teal-400" />
-                <span className="text-xs font-bold uppercase tracking-widest text-teal-400/60">Version 2.0.4</span>
-              </div>
               <h2 className="text-4xl font-extrabold leading-tight text-white">
                 Smart laundry,
                 <br />
