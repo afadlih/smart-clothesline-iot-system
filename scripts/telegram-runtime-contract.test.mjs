@@ -15,6 +15,27 @@ test("IoT Hub persists the selected paired device as the Telegram command target
   assert.match(userDeviceService, /selectedByUid/);
 });
 
+test("Pairing a device primes telemetry startup before stream subscription", () => {
+  const pairing = read("src/features/settings/PairingDeviceSettings.tsx");
+
+  assert.match(pairing, /ACTIVE_DEVICE_STORAGE_KEY/);
+  assert.match(pairing, /smart-clothesline-active-device-id-v1/);
+  assert.match(pairing, /localStorage\.setItem\(ACTIVE_DEVICE_STORAGE_KEY, deviceId\)/);
+  assert.match(pairing, /smart-clothesline-active-device-changed/);
+  assert.match(pairing, /window\.location\.reload\(\)/);
+});
+
+test("Dashboard stream subscribes to selected per-device telemetry topics", () => {
+  const source = read("src/hooks/useSensor.ts");
+
+  assert.match(source, /getActiveDeviceId/);
+  assert.match(source, /getDeviceSensorTopic\(activeDeviceId\)/);
+  assert.match(source, /getDeviceStatusTopic\(activeDeviceId\)/);
+  assert.match(source, /getDeviceConfigAckTopic\(activeDeviceId\)/);
+  assert.match(source, /mqttService\.subscribeTopic\(sensorTopic, handleTopicMessage\)/);
+  assert.match(source, /mqttService\.subscribeTopic\(statusTopic, handleTopicMessage\)/);
+});
+
 test("server-side Telegram commands prefer active IoT Hub device over env fallback", () => {
   const source = read("src/services/mqtt/ServerMqttCommandPublisher.ts");
   assert.match(source, /resolveActiveCommandDevice/);
@@ -25,6 +46,15 @@ test("server-side Telegram commands prefer active IoT Hub device over env fallba
   assert.match(source, /targetDeviceId/);
   assert.match(source, /deviceId/);
   assert.match(source, /commandTopic/);
+});
+
+test("server-side Telegram MQTT payload matches dashboard command contract", () => {
+  const source = read("src/services/mqtt/ServerMqttCommandPublisher.ts");
+
+  assert.match(source, /Dashboard sendCommand publishes exactly/);
+  assert.match(source, /deviceId: targetDeviceId/);
+  assert.match(source, /command: input\.command/);
+  assert.match(source, /smart-clothesline\/\$\{target\}\/command/);
 });
 
 test("Telegram webhook path audits received and processed commands", () => {
@@ -41,6 +71,8 @@ test("Telegram diagnostics expose command readiness separately from notification
   assert.match(source, /directMqttConfigured/);
   assert.match(source, /telegramCommandMode/);
   assert.match(source, /webhookUrlMatch/);
+  assert.match(source, /directMqttTargetDeviceId/);
+  assert.match(source, /activeCommandDevice/);
 });
 
 test("Telegram notification endpoint is server-side and requires bot token plus chat target", () => {
