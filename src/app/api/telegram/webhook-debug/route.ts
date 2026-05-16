@@ -12,7 +12,6 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const botToken = TelegramEnvConfigService.getBotToken();
-    const runtimeMode = TelegramEnvConfigService.getRuntimeMode();
     const webhookEnabled = isTelegramWebhookEnabled();
     const appBaseUrl = resolveAppBaseUrl();
     const resolvedWebhookUrl = resolveTelegramWebhookUrl();
@@ -30,16 +29,17 @@ export async function GET() {
 
     return NextResponse.json({
       ok: true,
-      runtimeMode,
+      telegramMode: "notification-only",
       webhookEnabled,
       appBaseUrl,
       resolvedWebhookUrl,
       telegramWebhookUrl,
       webhookUrlMatch,
       botConfigured,
-      nextAction: !webhookUrlMatch ? "Run POST /api/telegram/setup with mode=webhook and repair=true" : "Webhook is healthy",
+      nextAction: !webhookUrlMatch ? "Run POST /api/telegram/setup with repair=true" : "Webhook is synchronized for audit logging",
     });
   } catch (error) {
     return NextResponse.json({ ok: false, error: String(error) }, { status: 500 });
   }
 }
+

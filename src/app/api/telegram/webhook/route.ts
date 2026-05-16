@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TelegramEnvConfigService } from "@/services/telegram/TelegramEnvConfigService";
-import { TelegramCommandRouter } from "@/services/telegram/TelegramCommandRouter";
 import { TelegramOpsService } from "@/services/TelegramOpsService";
+import { TelegramBotApiService } from "@/services/TelegramBotApiService";
 import { logger } from "@/lib/logger";
 
 type TelegramUpdate = {
@@ -11,13 +11,20 @@ type TelegramUpdate = {
     chat?: { id: number; type?: "private" | "group" | "supergroup"; title?: string };
     from?: { id: number; username?: string };
   };
-  edited_message?: {
-    text?: string;
-    chat?: { id: number; type?: "private" | "group" | "supergroup" };
-    from?: { id: number; username?: string };
-  };
-  channel_post?: unknown;
 };
+
+const AUTO_REPLY_COOLDOWN_MS = 60_000;
+declare global {
+  // eslint-disable-next-line no-var
+  var __telegramWebhookReplyCooldown__: Map<number, number> | undefined;
+}
+
+function getReplyCooldownMap(): Map<number, number> {
+  if (!globalThis.__telegramWebhookReplyCooldown__) {
+    globalThis.__telegramWebhookReplyCooldown__ = new Map<number, number>();
+  }
+  return globalThis.__telegramWebhookReplyCooldown__;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,50 +54,44 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Write receive audit
     const msg = payload.message;
-    const command = msg?.text?.split(" ")[0] || "n/a";
-    
-    await TelegramOpsService.addAuditLog({
-      userId: msg?.from?.id,
-      username: msg?.from?.username,
-      command: "webhook_received",
-      result: "success",
-      detail: `Update ${payload.update_id} from chat ${msg?.chat?.id}. Command: ${command}`,
-      source: "telegram-webhook"
-    });
-
-    // Ignore channel_post entirely
-    if (payload.channel_post) {
-      return NextResponse.json({ ok: true, skipped: "channel_post ignored" });
-    }
-
     if (!msg) {
       return NextResponse.json({ ok: true, skipped: "No message to process" });
     }
 
-    const result = await TelegramCommandRouter.handle({
-      text: msg.text,
-      chatId: msg.chat?.id,
-      chatType: msg.chat?.type,
-      chatTitle: msg.chat?.title,
-      userId: msg.from?.id,
-      username: msg.from?.username,
-    });
+    const userId = msg.from?.id;
+    const chatId = msg.chat?.id;
+    const text = msg.text || "";
 
-    // Write result audit
+    // Audit receive
     await TelegramOpsService.addAuditLog({
-      userId: msg.from?.id,
+      userId,
       username: msg.from?.username,
-      command: "command_processed",
-      result: result.ok ? "success" : "failed",
-      detail: `Command: ${command}. Result: ${result.ok ? (result.dispatched ? "dispatched" : "queued") : (result.error || "failed")}`,
+      command: "webhook_received",
+      result: "success",
+      detail: `Inbound message from ${userId} in chat ${chatId}. Length: ${text.length}`,
       source: "telegram-webhook"
     });
 
-    return NextResponse.json(result);
+    // Send notification-only message with cooldown
+    if (userId && chatId) {
+      const cooldownMap = getReplyCooldownMap();
+      const last = cooldownMap.get(chatId) ?? 0;
+      
+      if (Date.now() - last > AUTO_REPLY_COOLDOWN_MS) {
+        await TelegramBotApiService.sendMessage(
+          botToken,
+          chatId,
+          "Smart Clothesline Bot is notification-only. Device control is available from the dashboard."
+        );
+        cooldownMap.set(chatId, Date.now());
+      }
+    }
+
+    return NextResponse.json({ ok: true, info: "notification-only" });
   } catch (error) {
     logger.error("telegram", "Webhook handler error", error);
     return NextResponse.json({ ok: false, error: "Internal server error" }, { status: 500 });
   }
 }
+

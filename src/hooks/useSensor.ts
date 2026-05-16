@@ -26,7 +26,6 @@ import { SmartAlertsService } from "@/services/SmartAlertsService";
 import { ScheduleService } from "@/services/ScheduleService";
 import { TelemetryNormalizerService } from "@/services/TelemetryNormalizerService";
 import { OperationalStateResolver } from "@/services/OperationalStateResolver";
-import { TelegramOpsService } from "@/services/TelegramOpsService";
 import { MqttDiagnosticsService, type DeviceStateSource } from "@/services/MqttDiagnosticsService";
 import { useSensorStore } from "@/stores/sensorStore";
 import { logger } from "@/lib/logger";
@@ -272,8 +271,6 @@ const lastTelegramAlertAtByKey: Record<string, number> = {};
 const alertConditionState: Record<string, boolean> = {};
 let lastSensorStoredAt = 0;
 let lastStatusPayloadAt = 0;
-let lastBridgeDispatchedCommandId: string | null = null;
-let lastBridgeError: string | null = null;
 
 function loadCacheDeviceConfig(): Partial<DeviceConfig> | null {
     if (typeof window === "undefined") return null;
@@ -431,135 +428,6 @@ function parseSensorPayload(raw: string, receivedAt: number): MqttSensorPayload 
         logger.warn("mqtt", "Failed to parse sensor payload", raw);
         MqttDiagnosticsService.recordRejected("Failed to parse sensor payload");
         return null;
-    }
-}
-
-async function notifyCommandResult(commandId: string, result: "done" | "failed" | "pending", message: string): Promise<void> {
-    try {
-        await fetch("/api/telegram/command-result", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ commandId, result, message }),
-        });
-    } catch (error) {
-        logger.warn("telegram", "Failed to notify command result", error);
-    }
-}
-
-async function updateBridgeHeartbeat(): Promise<void> {
-    try {
-        const stats = sharedState.queueStats;
-        const bridgeRef = doc(db, "system_settings", "telegram_bridge");
-        await setDoc(bridgeRef, {
-            bridgeActive: true,
-            lastSeenAt: serverTimestamp(),
-            mqttConnected: mqttService.isConnected(),
-            streamState: sharedState.uiState.stream,
-            queueBacklog: stats.total,
-            lastDispatchedCommandId: lastBridgeDispatchedCommandId,
-            lastError: lastBridgeError,
-        }, { merge: true });
-    } catch {
-        // Silent fail for heartbeat
-    }
-}
-
-async function processPendingTelegramCommands(): Promise<void> {
-    try {
-        await TelegramOpsService.expireStalePendingCommands();
-    } catch {
-        // Continue even if cleanup fails
-    }
-
-    const pending = await TelegramOpsService.fetchPendingCommands(2);
-    if (pending.length === 0) return;
-
-    for (const commandJob of pending) {
-        try {
-            const now = Date.now();
-            const minCreatedAt = now - 5 * 60 * 1000;
-            const isStale = (commandJob.createdAt < minCreatedAt) || (commandJob.expiresAt && commandJob.expiresAt < now);
-
-            if (isStale) {
-                await TelegramOpsService.markCommandStatus(commandJob.id, "failed", "Command expired before bridge dispatch");
-                continue;
-            }
-
-            const isMqttConnected = mqttService.isConnected();
-            if (!isMqttConnected) {
-                lastBridgeError = "Dashboard bridge waiting for MQTT connection";
-                // Do not update doc if we already updated it recently to avoid write spam
-                if (commandJob.updatedAt < now - 5000) {
-                    await TelegramOpsService.markCommandStatus(commandJob.id, "pending", lastBridgeError);
-                }
-                continue;
-            }
-
-            logger.info("telegram", "Telegram bridge processing command", {
-                commandId: commandJob.id,
-                command: commandJob.command
-            });
-
-            await TelegramOpsService.markCommandStatus(commandJob.id, "processing", "Processing by dashboard bridge");
-            let dispatched = false;
-
-            if (commandJob.command === "/open") dispatched = sendCommand("OPEN");
-            else if (commandJob.command === "/close") dispatched = sendCommand("CLOSE");
-            else if (commandJob.command === "/mode_auto") dispatched = sendCommand("AUTO");
-            else if (commandJob.command === "/mode_manual") dispatched = sendCommand("MANUAL");
-            else if (commandJob.command === "/restart") dispatched = sendCommand("RESTART");
-
-            if (!dispatched) {
-                lastBridgeError = "Dashboard bridge publish skipped; MQTT not ready or rate limited";
-                await TelegramOpsService.markCommandStatus(commandJob.id, "pending", lastBridgeError);
-                await TelegramOpsService.addAuditLog({
-                    userId: commandJob.userId,
-                    username: commandJob.username,
-                    command: commandJob.command,
-                    result: "pending",
-                    detail: lastBridgeError,
-                    source: "telegram-bridge",
-                });
-
-                void notifyCommandResult(commandJob.id, "pending", lastBridgeError);
-                continue;
-            }
-
-            const successDetail = "MQTT publish attempted by dashboard bridge";
-            await TelegramOpsService.markCommandStatus(commandJob.id, "done", successDetail);
-            lastBridgeDispatchedCommandId = commandJob.id;
-            lastBridgeError = null;
-            await TelegramOpsService.addAuditLog({
-                userId: commandJob.userId,
-                username: commandJob.username,
-                command: commandJob.command,
-                result: "success",
-                detail: successDetail,
-                source: "telegram-bridge",
-            });
-
-            void notifyCommandResult(commandJob.id, "done", successDetail);
-
-            pushSystemEvent({
-                type: "COMMAND",
-                title: "Telegram command executed",
-                description: `${commandJob.command} dispatched by ${commandJob.username ?? commandJob.userId}`,
-                timestamp: Date.now(),
-            });
-        } catch (error) {
-            const errorMsg = String(error);
-            lastBridgeError = errorMsg;
-            await TelegramOpsService.markCommandStatus(commandJob.id, "failed", errorMsg);
-            await TelegramOpsService.addAuditLog({
-                userId: commandJob.userId,
-                username: commandJob.username,
-                command: commandJob.command,
-                result: "failed",
-                detail: errorMsg,
-                source: "telegram-bridge",
-            });
-            void notifyCommandResult(commandJob.id, "failed", `Execution error: ${errorMsg}`);
-        }
     }
 }
 
@@ -1518,14 +1386,6 @@ export function useSensor() {
             void refreshSchedules();
         }, 5000);
 
-        const telegramBridgeTimer = window.setInterval(() => {
-            void processPendingTelegramCommands();
-        }, 2000);
-        const telegramBridgeHeartbeatTimer = window.setInterval(() => {
-            void updateBridgeHeartbeat();
-        }, 5000);
-        void updateBridgeHeartbeat();
-
         void refreshSchedules();
 
         const timer = window.setInterval(() => {
@@ -1563,8 +1423,6 @@ export function useSensor() {
             window.clearInterval(timer);
             window.clearInterval(scheduleRefreshTimer);
             window.clearInterval(queueSyncTimer);
-            window.clearInterval(telegramBridgeTimer);
-            window.clearInterval(telegramBridgeHeartbeatTimer);
             window.removeEventListener("schedule-updated", onScheduleUpdated);
         };
     }, []);

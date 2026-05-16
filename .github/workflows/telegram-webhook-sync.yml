@@ -22,5 +22,4 @@ jobs:
       - name: Sync Telegram Webhook
         env:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
-          INTERNAL_COMMAND_SECRET: ${{ secrets.INTERNAL_COMMAND_SECRET }}
         run: npm run telegram:sync-webhook

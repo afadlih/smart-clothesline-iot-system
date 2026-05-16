@@ -6,7 +6,7 @@ import PageContainer from "@/components/layout/PageContainer";
 import PairingDeviceSettings, { type PairableDevice } from "@/features/settings/PairingDeviceSettings";
 import { useSystemState } from "@/hooks/useSystemState";
 import { getDeviceDiscoveryTopic, mqttService, type PairingDiscoveryMessage } from "@/services/MQTTService";
-import TelegramBridgeStatus from "@/features/dashboard/TelegramBridgeStatus";
+import TelegramNotificationStatus from "@/features/dashboard/TelegramNotificationStatus";
 import { useAuth } from "@/hooks/useAuth";
 import { listUserDevices, pairUserDevice } from "@/services/UserDeviceService";
 
@@ -222,7 +222,7 @@ export default function IoTHubPage() {
                 </span>
               </div>
               <h1 className="text-4xl font-black text-slate-800 dark:text-white tracking-tight">IoT Hub Management</h1>
-              <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Pairing, orchestration, and real-time synchronization bridge.</p>
+              <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Pairing, orchestration, and real-time telemetry synchronization.</p>
             </div>
 
             <div className={`px-6 py-3 rounded-2xl flex items-center gap-3 font-black text-xs tracking-widest ${mqttConnected ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'}`}>
@@ -281,7 +281,7 @@ export default function IoTHubPage() {
           </div>
 
           <aside className="space-y-8 xl:col-span-4">
-            <TelegramBridgeStatus />
+            <TelegramNotificationStatus />
 
             <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-8 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
               <div className="flex items-center gap-3 mb-6">
