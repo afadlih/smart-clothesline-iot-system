@@ -11,7 +11,7 @@
     "test:telegram": "node --test scripts/telegram-runtime-contract.test.mjs",
     "validate": "npm run lint && npm run typecheck && npm run test:telegram && npm run build",
     "telegram:sync-webhook": "node scripts/sync-telegram-webhook.mjs",
-    "telegram:sync-webhook:auto": "node scripts/sync-telegram-webhook.mjs || node -e \"if (process.env.TELEGRAM_WEBHOOK_SYNC_REQUIRED === 'true') process.exit(1); console.warn('[telegram:webhook] auto sync failed but build continues. Set TELEGRAM_WEBHOOK_SYNC_REQUIRED=true to make this fatal.');\""
+    "telegram:sync-webhook:auto": "node scripts/sync-telegram-webhook.mjs || node -e \"if (process.env.TELEGRAM_WEBHOOK_ENABLED === 'true' || process.env.TELEGRAM_WEBHOOK_SYNC_REQUIRED === 'true') process.exit(1); console.warn('[telegram:webhook] auto sync failed but build continues because webhook is disabled.');\""
   },
   "dependencies": {
     "autoprefixer": "^10.5.0",
