@@ -26,7 +26,7 @@ export type ActiveCommandDevice = {
     source: UserDeviceSource;
     selectedByUid: string;
     selectedAt?: unknown;
-    lastSeenAt?: number;
+    lastSeenAt?: number | null;
     status?: "online" | "offline" | "unknown";
 };
 
@@ -42,6 +42,22 @@ function activeCommandDeviceDoc() {
     return doc(db, "system_settings", "active_device");
 }
 
+function normalizeDeviceStatus(status: UserDevice["status"]): "online" | "offline" | "unknown" {
+    return status === "online" || status === "offline" ? status : "unknown";
+}
+
+function toFirestoreUserDevice(device: UserDevice): UserDevice {
+    return {
+        deviceId: device.deviceId,
+        deviceName: device.deviceName,
+        source: device.source,
+        pairingCode: device.pairingCode,
+        pairedAt: typeof device.pairedAt === "number" ? device.pairedAt : Date.now(),
+        lastSeenAt: typeof device.lastSeenAt === "number" ? device.lastSeenAt : null as never,
+        status: normalizeDeviceStatus(device.status),
+    };
+}
+
 export async function listUserDevices(uid:string): Promise<UserDevice[]> {
     const snapshot = await getDocs(userDeviceCollection(uid));
 
@@ -55,16 +71,13 @@ export async function listUserDevices(uid:string): Promise<UserDevice[]> {
             pairingCode: data.pairingCode ?? "",
             pairedAt: typeof data.pairedAt === "number" ? data.pairedAt : Date.now(),
             lastSeenAt: typeof data.lastSeenAt === "number" ? data.lastSeenAt : undefined,
-            status:
-                data.status === "online" || data.status === "offline"
-                    ? data.status
-                    : "unknown",
+            status: normalizeDeviceStatus(data.status),
         };
     });
 }
 
 export async function pairUserDevice(uid:string, device:UserDevice): Promise<void> {
-    await setDoc(userDeviceDoc(uid, device.deviceId), device, { merge: true});
+    await setDoc(userDeviceDoc(uid, device.deviceId), toFirestoreUserDevice(device), { merge: true});
 }
 
 export async function setActiveCommandDevice(uid: string, device: UserDevice): Promise<void> {
@@ -76,8 +89,8 @@ export async function setActiveCommandDevice(uid: string, device: UserDevice): P
             source: device.source,
             selectedByUid: uid,
             selectedAt: serverTimestamp(),
-            lastSeenAt: device.lastSeenAt ?? null,
-            status: device.status ?? "unknown",
+            lastSeenAt: typeof device.lastSeenAt === "number" ? device.lastSeenAt : null,
+            status: normalizeDeviceStatus(device.status),
         },
         { merge: true },
     );
