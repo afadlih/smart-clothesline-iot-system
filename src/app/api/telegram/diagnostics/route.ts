@@ -10,7 +10,7 @@ import { TelegramOpsService } from "@/services/TelegramOpsService";
 import { logger } from "@/lib/logger";
 import { ensureTelegramPollingStarted, getTelegramPollingDiagnostics } from "@/lib/telegramSingleton";
 import { db } from "@/lib/firebase";
-import { getServerMqttCommandPublisherStatus } from "@/services/mqtt/ServerMqttCommandPublisher";
+import { getResolvedServerMqttCommandPublisherStatus } from "@/services/mqtt/ServerMqttCommandPublisher";
 import { TelegramWebhookSyncService } from "@/services/telegram/TelegramWebhookSyncService";
 
 export const dynamic = "force-dynamic";
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     const bridgeLastSeenAt = safeMillis(bridgeRaw?.lastSeenAt);
     const bridgeAgeMs = bridgeLastSeenAt ? Math.max(0, Date.now() - bridgeLastSeenAt) : null;
     const bridgeAlive = bridgeAgeMs !== null && bridgeAgeMs <= 15_000;
-    const mqttPublisherStatus = getServerMqttCommandPublisherStatus();
+    const mqttPublisherStatus = await getResolvedServerMqttCommandPublisherStatus();
     const directMqttConfigured = mqttPublisherStatus.configured;
     const telegramCommandMode = directMqttConfigured ? "server-direct-with-bridge-fallback" : "browser-bridge-only";
 
@@ -85,6 +85,10 @@ export async function GET(request: NextRequest) {
     
     if (!directMqttConfigured) {
       warnings.push("Server-side MQTT command publish is not configured. Telegram hardware commands will fall back to dashboard bridge.");
+    }
+
+    if (directMqttConfigured && !mqttPublisherStatus.targetDeviceId) {
+      warnings.push("Server-side MQTT is configured, but no active IoT Hub device or MQTT_TARGET_DEVICE_ID fallback is available.");
     }
 
     const outboundTelegramCanWork = botConfigured;
@@ -117,7 +121,11 @@ export async function GET(request: NextRequest) {
       directMqttUsernameConfigured: mqttPublisherStatus.hasUsername,
       directMqttPasswordConfigured: mqttPublisherStatus.hasPassword,
       directMqttCommandTopic: mqttPublisherStatus.commandTopic,
+      directMqttConfiguredCommandTopic: mqttPublisherStatus.configuredCommandTopic,
       directMqttTargetDeviceConfigured: mqttPublisherStatus.targetDeviceId !== null,
+      directMqttTargetDeviceId: mqttPublisherStatus.targetDeviceId,
+      directMqttTargetSource: mqttPublisherStatus.targetSource,
+      activeCommandDevice: mqttPublisherStatus.activeDevice,
       telegramCommandMode,
       allowedUserIdsCount: allowedUserIds.length,
       allowedGroupsCount: allowedGroupIds.length,
