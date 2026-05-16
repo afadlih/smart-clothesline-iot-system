@@ -3,83 +3,71 @@
  *
  * Resolves the canonical Telegram webhook URL for this deployment.
  *
- * Problem solved:
- *   Vercel generates a unique URL per deploy (e.g. smart-clothesline-xxxx.vercel.app).
- *   Using that URL as TELEGRAM_WEBHOOK_URL causes an endless env-change loop, and
- *   each preview branch would steal the production webhook (Telegram allows only one
- *   webhook per bot token).
+ * Production should use APP_BASE_URL or TELEGRAM_WEBHOOK_BASE_URL with a stable
+ * domain. Preview testing can opt into the current request origin by setting:
  *
- * Solution:
- *   - Use APP_BASE_URL (or NEXT_PUBLIC_APP_URL) as the stable canonical domain.
- *   - Gate webhook registration with TELEGRAM_WEBHOOK_ENABLED=true.
- *   - Preview/fix branches should have TELEGRAM_WEBHOOK_ENABLED=false (or unset).
- *   - Production uses the stable custom domain or assigned Vercel production alias.
+ *   TELEGRAM_ALLOW_EPHEMERAL_WEBHOOK=true
  *
- * Environment setup guide:
- *   Production:
- *     APP_BASE_URL=https://smart-clothesline-iot-system.vercel.app
- *     TELEGRAM_WEBHOOK_ENABLED=true
- *
- *   Staging (separate bot token required):
- *     APP_BASE_URL=https://your-stable-staging.vercel.app
- *     TELEGRAM_WEBHOOK_ENABLED=true
- *     TELEGRAM_BOT_TOKEN=staging_bot_token
- *
- *   Preview/fix branches:
- *     TELEGRAM_WEBHOOK_ENABLED=false   (or simply unset)
- *
- * Server-side only — never import from browser/client components.
+ * This prevents a preview deployment from registering the webhook to an older
+ * production/stable URL that does not contain the PR route, which Telegram then
+ * reports as: Wrong response from the webhook: 404 Not Found.
  */
 
 import type { NextRequest } from "next/server";
 
 export type WebhookEnvironmentLabel = "production" | "preview" | "development" | "unknown";
 
+function normalizeBaseUrl(value: string): string {
+  return value.replace(/\/$/, "");
+}
+
+function requestOrigin(request?: NextRequest): string | null {
+  if (!request) return null;
+  const proto = request.headers.get("x-forwarded-proto") ?? "https";
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  if (!host) return null;
+  return `${proto}://${host}`;
+}
+
+export function shouldAllowEphemeralWebhook(): boolean {
+  return process.env.TELEGRAM_ALLOW_EPHEMERAL_WEBHOOK?.toLowerCase() === "true";
+}
+
 /**
  * Resolve the stable base URL for this deployment.
  *
  * Priority:
- *   1. APP_BASE_URL env var (recommended — set once per environment in Vercel)
- *   2. NEXT_PUBLIC_APP_URL env var (legacy fallback)
- *   3. x-forwarded-host / host from request headers (last resort for edge/middleware)
- *   4. http://localhost:3000 (local dev only)
+ *   1. TELEGRAM_WEBHOOK_BASE_URL, if set, because it is explicit for Telegram
+ *   2. Preview request origin when TELEGRAM_ALLOW_EPHEMERAL_WEBHOOK=true
+ *   3. APP_BASE_URL / NEXT_PUBLIC_APP_URL
+ *   4. Request origin
+ *   5. localhost fallback
  */
 export function resolveAppBaseUrl(request?: NextRequest): string {
-  // Preferred: explicit stable base URL set in Vercel Environment Variables
-  const explicit = process.env.APP_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
-  if (explicit) return explicit.replace(/\/$/, "");
+  const telegramExplicit = process.env.TELEGRAM_WEBHOOK_BASE_URL;
+  if (telegramExplicit) return normalizeBaseUrl(telegramExplicit);
 
-  // Last resort from request headers (useful in edge middleware)
-  if (request) {
-    const proto = request.headers.get("x-forwarded-proto") ?? "https";
-    const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-    if (host) return `${proto}://${host}`;
+  const origin = requestOrigin(request);
+  if (process.env.VERCEL_ENV === "preview" && shouldAllowEphemeralWebhook() && origin) {
+    return normalizeBaseUrl(origin);
   }
 
-  // Local dev fallback
+  const explicit = process.env.APP_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
+  if (explicit) return normalizeBaseUrl(explicit);
+
+  if (origin) return normalizeBaseUrl(origin);
+
   return "http://localhost:3000";
 }
 
-/**
- * Build the full webhook URL: baseUrl + /api/telegram/webhook
- */
 export function resolveTelegramWebhookUrl(request?: NextRequest): string {
   return `${resolveAppBaseUrl(request)}/api/telegram/webhook`;
 }
 
-/**
- * Whether webhook registration is enabled for this environment.
- *
- * Must be explicitly opt-in: TELEGRAM_WEBHOOK_ENABLED=true
- * Preview/fix branches should NOT set this to avoid stealing the production webhook.
- */
 export function isTelegramWebhookEnabled(): boolean {
   return process.env.TELEGRAM_WEBHOOK_ENABLED?.toLowerCase() === "true";
 }
 
-/**
- * Human-readable label for the current Vercel environment.
- */
 export function getWebhookEnvironmentLabel(): WebhookEnvironmentLabel {
   const v = process.env.VERCEL_ENV;
   if (v === "production") return "production";
