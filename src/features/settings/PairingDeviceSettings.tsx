@@ -29,6 +29,8 @@ type PairingDeviceSettingsProps = {
   onSelectDevice: (deviceId: string) => void;
 };
 
+const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
+
 const pairingSteps = [
   {
     id: 'step-1',
@@ -67,6 +69,26 @@ export default function PairingDeviceSettings({
         : activeDeviceStatus === "offline"
           ? "Offline"
           : "Unknown";
+
+  const handleSelectDevice = (deviceId: string) => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(ACTIVE_DEVICE_STORAGE_KEY, deviceId);
+      window.dispatchEvent(new CustomEvent("smart-clothesline-active-device-changed", { detail: { deviceId } }));
+    }
+
+    onSelectDevice(deviceId);
+
+    // useSensor subscribes to per-device telemetry during startup. When the
+    // page was first opened without an active device, the stream can stay in
+    // NO_DATA even after pairing. A lightweight reload makes the selected
+    // device available before useSensor starts, so it subscribes to:
+    // smart-clothesline/{deviceId}/sensor and /status immediately.
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        window.location.reload();
+      }, 900);
+    }
+  };
 
   return (
     <div className="space-y-8 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -227,7 +249,7 @@ export default function PairingDeviceSettings({
                       </span>
                       <button
                         type="button"
-                        onClick={() => onSelectDevice(device.id)}
+                        onClick={() => handleSelectDevice(device.id)}
                         className={`rounded-lg px-4 py-2 text-xs font-semibold text-white transition-colors ${selected ? 'bg-green-700 hover:bg-green-800' : 'bg-slate-900 hover:bg-slate-700'
                           }`}
                       >
