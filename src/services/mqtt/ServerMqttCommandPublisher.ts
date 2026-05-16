@@ -40,6 +40,12 @@ type ActiveCommandDevice = {
   deviceName?: string;
 };
 
+type CommandTargetResolution = {
+  deviceId: string | null;
+  source: "iot-hub-active-device" | "env-fallback" | null;
+  activeDevice: ActiveCommandDevice | null;
+};
+
 function maskBrokerUrl(url: string | undefined): string {
   if (!url) return "unconfigured";
   try {
@@ -71,7 +77,34 @@ async function resolveActiveCommandDevice(): Promise<ActiveCommandDevice | null>
   }
 }
 
-export function resolveServerCommandTopic(configuredTopic: string, targetDeviceId?: string): string {
+async function resolveCommandTarget(): Promise<CommandTargetResolution> {
+  const activeDevice = await resolveActiveCommandDevice();
+
+  if (activeDevice?.deviceId) {
+    return {
+      deviceId: activeDevice.deviceId,
+      source: "iot-hub-active-device",
+      activeDevice,
+    };
+  }
+
+  const envTarget = ENV.targetDeviceId?.trim();
+  if (envTarget) {
+    return {
+      deviceId: envTarget,
+      source: "env-fallback",
+      activeDevice: null,
+    };
+  }
+
+  return {
+    deviceId: null,
+    source: null,
+    activeDevice: null,
+  };
+}
+
+export function resolveServerCommandTopic(configuredTopic: string, targetDeviceId?: string | null): string {
   const target = targetDeviceId?.trim();
 
   // Dashboard command path uses getDeviceCommandTopic(deviceId), which resolves
@@ -98,10 +131,27 @@ export function getServerMqttCommandPublisherStatus() {
     brokerUrlMasked: maskBrokerUrl(ENV.brokerUrl),
     hasUsername: Boolean(ENV.username),
     hasPassword: Boolean(ENV.password),
-    commandTopic: resolveServerCommandTopic(configuredCommandTopic, fallbackTargetDeviceId ?? undefined),
+    commandTopic: resolveServerCommandTopic(configuredCommandTopic, fallbackTargetDeviceId),
     configuredCommandTopic,
     targetDeviceId: fallbackTargetDeviceId,
     targetSource: fallbackTargetDeviceId ? "env-fallback" : null,
+  };
+}
+
+export async function getResolvedServerMqttCommandPublisherStatus() {
+  const configuredCommandTopic = ENV.commandTopic;
+  const target = await resolveCommandTarget();
+
+  return {
+    configured: isServerMqttCommandPublisherConfigured(),
+    brokerUrlMasked: maskBrokerUrl(ENV.brokerUrl),
+    hasUsername: Boolean(ENV.username),
+    hasPassword: Boolean(ENV.password),
+    commandTopic: resolveServerCommandTopic(configuredCommandTopic, target.deviceId),
+    configuredCommandTopic,
+    targetDeviceId: target.deviceId,
+    targetSource: target.source,
+    activeDevice: target.activeDevice,
   };
 }
 
@@ -113,9 +163,9 @@ export async function publishDeviceCommand(input: ServerCommandInput): Promise<S
   const brokerUrl = ENV.brokerUrl;
   const username = ENV.username;
   const password = ENV.password;
-  const activeDevice = await resolveActiveCommandDevice();
-  const targetDeviceId = activeDevice?.deviceId || ENV.targetDeviceId;
-  const targetSource = activeDevice ? "iot-hub-active-device" : "env-fallback";
+  const target = await resolveCommandTarget();
+  const targetDeviceId = target.deviceId;
+  const targetSource = target.source;
   const commandTopic = resolveServerCommandTopic(ENV.commandTopic, targetDeviceId);
 
   if (!brokerUrl || !username || !password) {
