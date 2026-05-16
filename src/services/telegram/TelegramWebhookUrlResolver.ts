@@ -8,9 +8,11 @@
  *
  *   TELEGRAM_ALLOW_EPHEMERAL_WEBHOOK=true
  *
- * This prevents a preview deployment from registering the webhook to an older
- * production/stable URL that does not contain the PR route, which Telegram then
- * reports as: Wrong response from the webhook: 404 Not Found.
+ * If Vercel Deployment Protection is still enabled, set TELEGRAM_WEBHOOK_URL to
+ * the full externally accessible webhook URL, including any Vercel share/bypass
+ * query string, for example:
+ *
+ *   https://preview.vercel.app/api/telegram/webhook?_vercel_share=...
  */
 
 import type { NextRequest } from "next/server";
@@ -33,6 +35,12 @@ export function shouldAllowEphemeralWebhook(): boolean {
   return process.env.TELEGRAM_ALLOW_EPHEMERAL_WEBHOOK?.toLowerCase() === "true";
 }
 
+export function resolveExplicitTelegramWebhookUrl(): string | null {
+  const explicit = process.env.TELEGRAM_WEBHOOK_URL?.trim();
+  if (!explicit) return null;
+  return explicit;
+}
+
 /**
  * Resolve the stable base URL for this deployment.
  *
@@ -46,6 +54,16 @@ export function shouldAllowEphemeralWebhook(): boolean {
 export function resolveAppBaseUrl(request?: NextRequest): string {
   const telegramExplicit = process.env.TELEGRAM_WEBHOOK_BASE_URL;
   if (telegramExplicit) return normalizeBaseUrl(telegramExplicit);
+
+  const fullWebhookUrl = resolveExplicitTelegramWebhookUrl();
+  if (fullWebhookUrl) {
+    try {
+      const parsed = new URL(fullWebhookUrl);
+      return `${parsed.protocol}//${parsed.host}`;
+    } catch {
+      // Fall through to the normal resolver; diagnostics will expose the bad URL.
+    }
+  }
 
   const origin = requestOrigin(request);
   if (process.env.VERCEL_ENV === "preview" && shouldAllowEphemeralWebhook() && origin) {
@@ -61,6 +79,8 @@ export function resolveAppBaseUrl(request?: NextRequest): string {
 }
 
 export function resolveTelegramWebhookUrl(request?: NextRequest): string {
+  const explicit = resolveExplicitTelegramWebhookUrl();
+  if (explicit) return explicit;
   return `${resolveAppBaseUrl(request)}/api/telegram/webhook`;
 }
 
