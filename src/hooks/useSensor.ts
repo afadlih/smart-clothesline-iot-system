@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DecisionEngine } from "@/features/dashboard/DecisionEngine";
 import {
     getFinalState,
+    isWithinSchedule,
     type ScheduleDecision,
     type StoredScheduleItem,
 } from "@/features/system/ScheduleEngine";
@@ -11,26 +12,31 @@ import { EventLogService } from "@/services/EventLogService";
 import { FirestoreService, sensorDataQueue } from "@/services/FirestoreService";
 import {
     STATUS_TOPIC,
-    getDeviceConfigAckTopic,
-    getDeviceCommandTopic,
-    getDeviceConfigTopic,
-    getDeviceSensorTopic,
-    getDeviceStatusTopic,
     mqttService,
 } from "@/services/MQTTService";
 import { pushSystemEvent } from "@/hooks/useNotificationEngine";
 import { commandRateLimiter } from "@/utils/rateLimiter";
 import { DeviceHealthService } from "@/services/DeviceHealthService";
 import { SmartAlertsService } from "@/services/SmartAlertsService";
-import { ScheduleService } from "@/services/ScheduleService";
+import { ScheduleService, type FirebaseScheduleItem } from "@/services/ScheduleService";
 import { TelemetryNormalizerService } from "@/services/TelemetryNormalizerService";
 import { OperationalStateResolver } from "@/services/OperationalStateResolver";
 import { MqttDiagnosticsService, type DeviceStateSource } from "@/services/MqttDiagnosticsService";
 import { useSensorStore } from "@/stores/sensorStore";
+import { useAuthStore } from "@/stores/authStore";
+import { evaluateScheduleTransition } from "@/services/ScheduleRuntimeService";
 import { logger } from "@/lib/logger";
+import {
+    WOKWI_DEFAULT_DEVICE_ID,
+    getCommandPublishTopics,
+    getDeviceStatusTopics,
+    getDeviceTelemetryTopics,
+    getDeviceConfigTopic,
+    getDeviceConfigAckTopic,
+} from "@/services/mqttTopics";
 
 type ConnectionState = "connecting" | "online" | "reconnecting" | "offline" | "error";
-type DeviceStatus = "OPEN" | "CLOSED" | "RESTARTING";
+type DeviceStatus = "OPEN" | "CLOSED" | "MOVING" | "FAULT" | "RESTARTING" | "UNKNOWN";
 type DeviceMode = "AUTO" | "MANUAL";
 type DeviceCommand = "OPEN" | "CLOSE" | "AUTO" | "MANUAL" | "RESTART";
 type UiConnectionState = "DISCONNECTED" | "CONNECTED";
@@ -146,6 +152,17 @@ export type LastMqttMessage = {
     receivedAt: number;
 };
 
+export type ScheduleRuntimeState = {
+    loaded: boolean;
+    source: "firestore" | "cache" | "none";
+    deviceId: string | null;
+    activeScheduleId: string | null;
+    isActiveNow: boolean;
+    lastCommand: "OPEN" | "CLOSE" | null;
+    lastCommandAt: number | null;
+    lastReason: string;
+};
+
 type SensorSnapshot = {
     sensorData: SensorData | null;
     deviceState: DeviceState;
@@ -169,6 +186,7 @@ type SensorSnapshot = {
         dedupedStatusCount: number;
         deviceStateSource: DeviceStateSource;
         mqttDiagnostics: ReturnType<typeof MqttDiagnosticsService.snapshot>;
+        scheduleRuntime: ScheduleRuntimeState;
     };
     events: EventLog[];
     connection: ConnectionSnapshot;
@@ -177,6 +195,12 @@ type SensorSnapshot = {
         readyToSync: number;
         failed: number;
         oldestItemAge: number | null;
+    };
+    commandGuard: {
+        state: string;
+        canSendCommand: boolean;
+        disabledCommands: string[];
+        reason: string;
     };
 };
 
@@ -190,9 +214,8 @@ const FRESHNESS_MS = 15_000;
 const STATUS_DEBOUNCE_MS = 1_000;
 const OFFLINE_ALERT_INTERVAL_MS = 10_000;
 const TELEGRAM_ALERT_COOLDOWN_MS = 30_000;
-const SENSOR_STORAGE_SAMPLING_MS = 30_000;
+const SENSOR_SAMPLE_INTERVAL_MS = 5 * 60 * 1000;
 const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
-const WOKWI_DEVICE_ID = "wokwi-default";
 
 const sharedState: SensorSnapshot = {
     sensorData: null,
@@ -236,6 +259,16 @@ const sharedState: SensorSnapshot = {
         dedupedStatusCount: 0,
         deviceStateSource: "UNKNOWN",
         mqttDiagnostics: MqttDiagnosticsService.snapshot(),
+        scheduleRuntime: {
+            loaded: false,
+            source: "none",
+            deviceId: null,
+            activeScheduleId: null,
+            isActiveNow: false,
+            lastCommand: null,
+            lastCommandAt: null,
+            lastReason: "Initialized schedule runtime",
+        },
     },
     events: [],
     connection: {
@@ -255,12 +288,20 @@ const sharedState: SensorSnapshot = {
         failed: 0,
         oldestItemAge: null,
     },
+    commandGuard: {
+        state: "UNKNOWN",
+        canSendCommand: false,
+        disabledCommands: [],
+        reason: "Awaiting telemetry.",
+    },
 };
 
 const listeners = new Set<(snapshot: SensorSnapshot) => void>();
 let streamStarted = false;
 let eventHydrated = false;
 let lastOfflineAlertAt = 0;
+let activeUnsubscribers: (() => void)[] = [];
+let currentSubscribedDeviceId: string | null = null;
 let previousDeviceStatus: DeviceStatus | null = null;
 let offlineAlertRaised = false;
 let lastConfigPublishAt = 0;
@@ -269,6 +310,9 @@ const lastTelegramAlertAtByKey: Record<string, number> = {};
 const alertConditionState: Record<string, boolean> = {};
 let lastSensorStoredAt = 0;
 let lastStatusPayloadAt = 0;
+
+let lastPublishedScheduleState: "ACTIVE" | "INACTIVE" | null = null;
+let sharedSchedules: StoredScheduleItem[] = [];
 
 function loadCacheDeviceConfig(): Partial<DeviceConfig> | null {
     if (typeof window === "undefined") return null;
@@ -350,6 +394,18 @@ function updateUiState(now: number = Date.now()): void {
     }
 
     sharedState.uiState = nextUiState;
+
+    sharedState.commandGuard = OperationalStateResolver.resolveOperationalState({
+        now,
+        mqttConnected: mqttService.isConnected(),
+        lastTelemetryAt: sharedState.lastSensorUpdate,
+        rain: sharedState.sensorData?.isRaining() ?? null,
+        status: sharedState.deviceState.status,
+        mode: sharedState.deviceState.mode,
+        commandInFlight: sharedState.commandStatus === "pending",
+        commandStartedAt: sharedState.commandSentAt,
+        fault: sharedState.connection.state === "error",
+    });
 }
 
 function updateConnectionStatus(
@@ -452,20 +508,27 @@ function shouldAcceptConfigAckPayload(payload: MqttConfigAckPayload): boolean {
 function shouldAcceptDevicePayload(payloadDeviceId?: string): boolean {
     const activeDeviceId = getActiveDeviceId();
 
-    if (!activeDeviceId) {
-        return false;
-    }
+    if (!activeDeviceId) return false;
 
-    // Allow legacy payloads without deviceId so production streams are not blocked.
     if (!payloadDeviceId) {
-        return false;
+        const accepted = activeDeviceId !== WOKWI_DEFAULT_DEVICE_ID;
+        if (!accepted) {
+            logger.info("mqtt", "Filtered payload for another device", {
+                activeDeviceId,
+                payloadDeviceId: null,
+            });
+        }
+        return accepted;
     }
 
-    if (activeDeviceId === WOKWI_DEVICE_ID) {
-        return payloadDeviceId === WOKWI_DEVICE_ID;
+    const accepted = payloadDeviceId === activeDeviceId;
+    if (!accepted) {
+        logger.info("mqtt", "Filtered payload for another device", {
+            activeDeviceId,
+            payloadDeviceId: payloadDeviceId ?? null,
+        });
     }
-
-    return payloadDeviceId === activeDeviceId;
+    return accepted;
 }
 
 function applyConfigAckPayload(payload: MqttConfigAckPayload, receivedAt: number): void {
@@ -551,21 +614,26 @@ function parseStatusPacket(raw: string): StatusPacket | null {
             };
         }
 
-        if (data.status === "RESTARTING" && data.lastCommand === "RESTART") {
+        let statusInput = typeof data.status === "string" ? data.status.toUpperCase() : "";
+        if (statusInput === "OPENING" || statusInput === "CLOSING") {
+            statusInput = "MOVING";
+        }
+
+        if (statusInput === "RESTARTING") {
             return {
                 kind: "device",
                 payload: {
                     deviceId: typeof data.deviceId === "string" ? data.deviceId : undefined,
                     status: "RESTARTING",
-                    mode: sharedState.deviceState.mode ?? "MANUAL",
-                    lastCommand: "RESTART",
+                    mode: (data.mode === "AUTO" || data.mode === "MANUAL") ? data.mode : (sharedState.deviceState.mode ?? "MANUAL"),
+                    lastCommand: data.lastCommand === "RESTART" ? "RESTART" : undefined,
                     timestamp: typeof data.timestamp === "number" ? data.timestamp : undefined,
                 },
             };
         }
 
         if (
-            (data.status !== "OPEN" && data.status !== "CLOSED") ||
+            (statusInput !== "OPEN" && statusInput !== "CLOSED" && statusInput !== "MOVING") ||
             (data.mode !== "AUTO" && data.mode !== "MANUAL")
         ) {
             logger.warn("mqtt", "Invalid status payload", raw);
@@ -576,7 +644,7 @@ function parseStatusPacket(raw: string): StatusPacket | null {
             kind: "device",
             payload: {
                 deviceId: typeof data.deviceId === "string" ? data.deviceId : undefined,
-                status: data.status,
+                status: statusInput as DeviceStatus,
                 mode: data.mode,
                 lastCommand:
                     data.lastCommand === "OPEN" || data.lastCommand === "CLOSE" || data.lastCommand === "AUTO" || data.lastCommand === "MANUAL" || data.lastCommand === "RESTART"
@@ -635,10 +703,15 @@ function cloneSnapshot(): SensorSnapshot {
         debug: {
             ...sharedState.debug,
             mqttDiagnostics: { ...sharedState.debug.mqttDiagnostics },
+            scheduleRuntime: { ...sharedState.debug.scheduleRuntime },
         },
         events: [...sharedState.events],
         connection: { ...sharedState.connection },
         queueStats: { ...sharedState.queueStats },
+        commandGuard: {
+            ...sharedState.commandGuard,
+            disabledCommands: [...sharedState.commandGuard.disabledCommands],
+        },
     };
 }
 
@@ -789,42 +862,22 @@ function detectOfflineAlert(now: number): void {
     );
 }
 
-function startStreamIfNeeded(): void {
-    if (streamStarted) {
+function resubscribeToActiveDevice(activeDeviceId: string | null): void {
+    if (currentSubscribedDeviceId === activeDeviceId) {
         return;
     }
 
-    streamStarted = true;
-    updateConnectionStatus({
-        state: "connecting",
-        isOnline: false,
-        lastError: null,
-    });
-    notifyListeners();
-
-    mqttService.onConnectionStatus((connection) => {
-        updateConnectionStatus({
-            state: connection.state,
-            isOnline: connection.isOnline,
-            lastError: connection.lastError,
-            lastMessageAt: connection.lastMessageAt,
-        });
-        notifyListeners();
-    });
-
-    if (!eventHydrated) {
-        eventHydrated = true;
-        void EventLogService.getRecentEvents(MAX_EVENT_ITEMS)
-            .then((events) => {
-                sharedState.events = events.slice(0, MAX_EVENT_ITEMS);
-                notifyListeners();
-            })
-            .catch((error) => {
-                logger.error("firestore", "Failed to fetch recent events", error);
-            });
+    // Unsubscribe from old topics
+    for (const unsub of activeUnsubscribers) {
+        try {
+            unsub();
+        } catch (e) {
+            logger.warn("mqtt", "Failed to unsubscribe", e);
+        }
     }
+    activeUnsubscribers = [];
+    currentSubscribedDeviceId = activeDeviceId;
 
-    const activeDeviceId = getActiveDeviceId();
     if (!activeDeviceId) {
         appendSerialLog("ALERT", "No active device selected; MQTT telemetry subscription skipped", Date.now(), "WARN");
         sharedState.loading = false;
@@ -832,9 +885,19 @@ function startStreamIfNeeded(): void {
         return;
     }
 
-    const sensorTopic = getDeviceSensorTopic(activeDeviceId);
-    const statusTopic = getDeviceStatusTopic(activeDeviceId);
+    const sensorTopics = getDeviceTelemetryTopics(activeDeviceId);
+    const statusTopics = getDeviceStatusTopics(activeDeviceId);
     const configAckTopic = getDeviceConfigAckTopic(activeDeviceId);
+
+    logger.info("mqtt", "Subscribing active device topics", {
+        activeDeviceId,
+        sensorTopics,
+        statusTopics,
+        configAckTopic,
+    });
+
+    const sensorTopicSet = new Set(sensorTopics);
+    const statusTopicSet = new Set(statusTopics);
 
     const handleTopicMessage = (rawPayload: string, topic: string) => {
         const receivedAt = Date.now();
@@ -844,7 +907,7 @@ function startStreamIfNeeded(): void {
             receivedAt,
         };
 
-        if (topic === sensorTopic) {
+        if (sensorTopicSet.has(topic)) {
             MqttDiagnosticsService.recordSensorPayload(rawPayload, receivedAt);
             const payload = parseSensorPayload(rawPayload, receivedAt);
             if (!payload) {
@@ -894,7 +957,7 @@ function startStreamIfNeeded(): void {
 
             const shouldStore =
                 !payload.duplicate ||
-                Date.now() - lastSensorStoredAt >= SENSOR_STORAGE_SAMPLING_MS;
+                Date.now() - lastSensorStoredAt >= SENSOR_SAMPLE_INTERVAL_MS;
             if (shouldStore) {
                 lastSensorStoredAt = Date.now();
                 const payloadForStorage = {
@@ -958,7 +1021,7 @@ function startStreamIfNeeded(): void {
             detectRealtimeAlerts(data, sharedState.deviceState.status, sensorTimestamp);
 
             logger.info("mqtt", "Sensor state update", {
-                topic: sensorTopic,
+                topic,
                 sensor: {
                     temperature: payload.temperature,
                     humidity: payload.humidity,
@@ -980,7 +1043,7 @@ function startStreamIfNeeded(): void {
             return;
         }
 
-        if (topic !== statusTopic) {
+        if (!statusTopicSet.has(topic)) {
             notifyListeners();
             return;
         }
@@ -1014,7 +1077,7 @@ function startStreamIfNeeded(): void {
             appendLegacyEvent({
                 type: "DEVICE",
                 action: "STATUS_ACK",
-                status: payload.status,
+                status: toInternalStatus(payload.status),
                 mode: payload.mode,
                 timestamp: statusTimestamp,
             });
@@ -1082,7 +1145,7 @@ function startStreamIfNeeded(): void {
         detectRealtimeAlerts(sharedState.sensorData, payload.status, statusTimestamp);
 
         logger.info("mqtt", "Status state update", {
-            topic: statusTopic,
+            topic,
             status: payload.status,
             mode: payload.mode,
             lastCommand: payload.lastCommand ?? null,
@@ -1090,14 +1153,75 @@ function startStreamIfNeeded(): void {
         notifyListeners();
     };
 
-    mqttService.subscribeTopic(sensorTopic, handleTopicMessage);
-    mqttService.subscribeTopic(statusTopic, handleTopicMessage);
-    mqttService.subscribeTopic(configAckTopic, handleTopicMessage);
+    for (const sensorTopic of sensorTopics) {
+        const unsub = mqttService.subscribeTopic(sensorTopic, handleTopicMessage);
+        activeUnsubscribers.push(unsub);
+    }
+    for (const statusTopic of statusTopics) {
+        const unsub = mqttService.subscribeTopic(statusTopic, handleTopicMessage);
+        activeUnsubscribers.push(unsub);
+    }
+    const unsub = mqttService.subscribeTopic(configAckTopic, handleTopicMessage);
+    activeUnsubscribers.push(unsub);
+}
+
+function startStreamIfNeeded(): void {
+    if (streamStarted) {
+        return;
+    }
+
+    streamStarted = true;
+    updateConnectionStatus({
+        state: "connecting",
+        isOnline: false,
+        lastError: null,
+    });
+    notifyListeners();
+
+    mqttService.onConnectionStatus((connection) => {
+        updateConnectionStatus({
+            state: connection.state,
+            isOnline: connection.isOnline,
+            lastError: connection.lastError,
+            lastMessageAt: connection.lastMessageAt,
+        });
+        notifyListeners();
+    });
+
+    if (!eventHydrated) {
+        eventHydrated = true;
+        void EventLogService.getRecentEvents(MAX_EVENT_ITEMS)
+            .then((events) => {
+                sharedState.events = events.slice(0, MAX_EVENT_ITEMS);
+                notifyListeners();
+            })
+            .catch((error) => {
+                logger.error("firestore", "Failed to fetch recent events", error);
+            });
+    }
+
+    const activeDeviceId = getActiveDeviceId();
+    resubscribeToActiveDevice(activeDeviceId);
 }
 
 export function sendCommand(command: DeviceCommand): boolean {
     const now = Date.now();
     updateUiState(now);
+    const guard = sharedState.commandGuard;
+    if (guard.disabledCommands.includes(command) || !guard.canSendCommand) {
+        logger.warn("mqtt", "Command blocked by operational guard", {
+            command,
+            state: guard.state,
+            reason: guard.reason,
+        });
+        pushSystemEvent({
+            type: "ALERT",
+            title: "Command blocked",
+            description: guard.reason,
+            timestamp: now,
+        });
+        return false;
+    }
     const isDeviceOnline = sharedState.uiState.connection === "CONNECTED";
 
     if (!isDeviceOnline) {
@@ -1155,43 +1279,10 @@ export function sendCommand(command: DeviceCommand): boolean {
         return false;
     }
 
-    const commandTopic = getDeviceCommandTopic(activeDeviceId);
     const commandPayload = {
         deviceId: activeDeviceId,
         command,
     };
-
-    if (command === "RESTART") {
-        commandRateLimiter.recordSend(command);
-        sharedState.pendingCommand = command;
-        sharedState.commandStatus = "pending";
-        sharedState.commandSentAt = now;
-        notifyListeners();
-
-        appendSerialLog("COMMAND", `${command} -> publish ${commandTopic} target=${activeDeviceId}`, now);
-
-        appendLegacyEvent({
-            type: "USER",
-            action: command,
-            timestamp: now,
-        });
-        pushSystemEvent({
-            type: "COMMAND",
-            title: "Command sent",
-            description: `USER -> ${command} (${activeDeviceId})`,
-            timestamp: now,
-        });
-
-        MqttDiagnosticsService.recordCommandPayload(JSON.stringify(commandPayload), now);
-        const published = mqttService.publish(commandTopic, commandPayload);
-        if (!published) {
-            sharedState.pendingCommand = null;
-            sharedState.commandStatus = "idle";
-            sharedState.commandSentAt = null;
-            notifyListeners();
-        }
-        return published;
-    }
 
     commandRateLimiter.recordSend(command);
 
@@ -1200,12 +1291,20 @@ export function sendCommand(command: DeviceCommand): boolean {
     sharedState.commandSentAt = now;
     notifyListeners();
 
-    appendSerialLog("COMMAND", `${command} -> publish ${commandTopic} target=${activeDeviceId}`, now);
+    const commandTopics = getCommandPublishTopics(activeDeviceId);
+
+    appendSerialLog(
+        "COMMAND",
+        `${command} -> publish ${commandTopics.join(", ")} target=${activeDeviceId}`,
+        now,
+    );
+
     appendLegacyEvent({
         type: "USER",
         action: command,
         timestamp: now,
     });
+
     pushSystemEvent({
         type: "COMMAND",
         title: "Command sent",
@@ -1214,7 +1313,11 @@ export function sendCommand(command: DeviceCommand): boolean {
     });
 
     MqttDiagnosticsService.recordCommandPayload(JSON.stringify(commandPayload), now);
-    const published = mqttService.publish(commandTopic, commandPayload);
+
+    const published = commandTopics
+        .map((topic) => mqttService.publish(topic, commandPayload))
+        .some(Boolean);
+
     if (!published) {
         sharedState.pendingCommand = null;
         sharedState.commandStatus = "idle";
@@ -1360,16 +1463,31 @@ export function useSensor() {
     useEffect(() => {
         let active = true;
         const refreshSchedules = async () => {
-            const result = await ScheduleService.loadSchedules();
+            const activeDeviceId = getActiveDeviceId();
+            const currentUser = useAuthStore.getState().user;
+            let result;
+            let source: "firestore" | "cache" | "none" = "none";
+            if (currentUser && activeDeviceId) {
+                result = await ScheduleService.loadDeviceSchedules({
+                    uid: currentUser.uid,
+                    deviceId: activeDeviceId
+                });
+                source = result.fromCache ? "cache" : "firestore";
+            } else {
+                result = await ScheduleService.loadSchedules();
+                source = result.fromCache ? "cache" : "firestore";
+            }
             if (!active) {
                 return;
             }
+            sharedSchedules = result.schedules;
             setSchedules(result.schedules);
+            sharedState.debug.scheduleRuntime = {
+                ...sharedState.debug.scheduleRuntime,
+                loaded: true,
+                source,
+            };
         };
-
-        void fetch("/api/telegram/polling").catch(() => {
-            // Polling bootstrap is best-effort for local development.
-        });
 
         void ScheduleService.migrateLegacyLocalSchedulesOnce().then(() => {
             void refreshSchedules();
@@ -1391,6 +1509,88 @@ export function useSensor() {
             setNow(nextNow);
             updateUiState(nextNow);
             detectOfflineAlert(nextNow);
+
+            // ===== SYNC ACTIVE DEVICE SUBSCRIPTIONS =====
+            const activeDeviceId = getActiveDeviceId();
+            resubscribeToActiveDevice(activeDeviceId);
+
+            // ===== SCHEDULE ENGINE EXECUTION =====
+            const isMqttConnected = mqttService.isConnected();
+            const isTelemetryStreaming = sharedState.uiState.stream === "STREAMING";
+            
+            // Determine active schedule for diagnostics
+            const dateObj = new Date(nextNow);
+            const currentHourFloat = dateObj.getHours() + dateObj.getMinutes() / 60 + dateObj.getSeconds() / 3600;
+            const currentActiveSchedule = sharedSchedules.find((s) => isWithinSchedule(s, currentHourFloat)) ?? null;
+            
+            sharedState.debug.scheduleRuntime = {
+                ...sharedState.debug.scheduleRuntime,
+                deviceId: activeDeviceId,
+                activeScheduleId: currentActiveSchedule ? currentActiveSchedule.id : null,
+                isActiveNow: currentActiveSchedule !== null,
+            };
+
+            if (activeDeviceId) {
+                const rain = sharedState.sensorData ? sharedState.sensorData.isRaining() : null;
+                
+                const decision = evaluateScheduleTransition({
+                    now: nextNow,
+                    schedules: sharedSchedules as FirebaseScheduleItem[],
+                    lastRuntimeState: lastPublishedScheduleState,
+                    currentStatus: sharedState.deviceState.status as "OPEN" | "CLOSED" | "MOVING" | "FAULT" | "RESTARTING" | "UNKNOWN" | null,
+                    mode: sharedState.deviceState.mode as "AUTO" | "MANUAL" | "SCHEDULE" | "UNKNOWN" | null,
+                    rain,
+                    mqttConnected: isMqttConnected,
+                    telemetryFresh: isTelemetryStreaming,
+                });
+                
+                sharedState.debug.scheduleRuntime.lastReason = decision.reason;
+
+                if (decision.shouldPublish && decision.command) {
+                    lastPublishedScheduleState = decision.nextState;
+                    
+                    sharedState.debug.scheduleRuntime.lastCommand = decision.command;
+                    sharedState.debug.scheduleRuntime.lastCommandAt = nextNow;
+                    sharedState.debug.scheduleRuntime.lastReason = decision.reason;
+                    
+                    const topics = getCommandPublishTopics(activeDeviceId);
+                    const payload = {
+                        deviceId: activeDeviceId,
+                        command: decision.command,
+                        source: "schedule",
+                        reason: decision.reason,
+                        timestamp: nextNow,
+                    };
+                    
+                    appendSerialLog(
+                        "COMMAND",
+                        `[Schedule] ${decision.command} -> publish ${topics.join(", ")} reason: ${decision.reason}`,
+                        nextNow,
+                    );
+                    
+                    pushSystemEvent({
+                        type: "COMMAND",
+                        title: "Schedule Command",
+                        description: decision.reason,
+                        timestamp: nextNow,
+                    });
+                    
+                    appendLegacyEvent({
+                        type: "SYSTEM",
+                        action: decision.command,
+                        timestamp: nextNow,
+                    });
+                    
+                    topics.forEach((topic) => {
+                        mqttService.publish(topic, payload);
+                    });
+                    
+                    console.info(`SCHEDULE ${decision.command} -> publish ${topics.join(", ")} target=${activeDeviceId}`);
+                }
+            } else {
+                sharedState.debug.scheduleRuntime.lastReason = "Blocked: No active device selected.";
+            }
+
             notifyListeners();
         }, 1000);
 
@@ -1564,6 +1764,7 @@ export function useSensor() {
         lastStatusUpdate: snapshot.lastStatusUpdate,
         lastMqttMessage: snapshot.lastMqttMessage,
         debug: snapshot.debug,
+        scheduleRuntime: snapshot.debug.scheduleRuntime,
         mqttConnected,
         isOnline,
         isStreaming,
@@ -1576,6 +1777,7 @@ export function useSensor() {
             ...snapshot.connection,
         },
         queueStats: snapshot.queueStats,
+        commandGuard: snapshot.commandGuard,
         deviceHealth,
         operationalHealth,
         smartAlerts,
@@ -1585,3 +1787,4 @@ export function useSensor() {
 }
 
 export type UseSensorDecision = ScheduleDecision;
+

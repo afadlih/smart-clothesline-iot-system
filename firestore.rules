@@ -14,6 +14,23 @@ service cloud.firestore {
       return isNumber(v) && v > 0 && v < 4102444800000; // < year 2100
     }
 
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidSchedule(data) {
+      return data.name is string
+        && data.enabled is bool
+        && (
+          (data.timeOpen is string && data.timeClose is string) ||
+          (isNumber(data.startHour) && isNumber(data.endHour))
+        );
+    }
+
     function isValidSensorPayload(data) {
       return isNumber(data.temperature)
         && data.temperature >= -50
@@ -29,27 +46,14 @@ service cloud.firestore {
         && (data.rainRaw == null || (isNumber(data.rainRaw) && data.rainRaw >= 0))
         && (data.lightRaw == null || (isNumber(data.lightRaw) && data.lightRaw >= 0))
         && (data.lightThreshold == null || (isNumber(data.lightThreshold) && data.lightThreshold >= 0))
-        && (data.status == 'OPEN' || data.status == 'CLOSED' || data.status == 'RESTARTING')
+        && (data.status == null || data.status in ['OPEN', 'CLOSED', 'MOVING', 'OPENING', 'CLOSING', 'RESTARTING', 'FAULT', 'UNKNOWN'])
         && (data.deviceId == null || (data.deviceId is string && data.deviceId.size() > 0))
-        && (data.mode == null || data.mode == 'AUTO' || data.mode == 'MANUAL')
-        && (data.source == null || data.source in ['STATUS_TOPIC', 'SENSOR_FALLBACK', 'UNKNOWN'])
+        && (data.mode == null || data.mode in ['AUTO', 'MANUAL', 'SCHEDULE', 'UNKNOWN'])
+        && (data.source == null || data.source in ['STATUS_TOPIC', 'SENSOR_FALLBACK', 'UNKNOWN', 'MQTT', 'WOKWI', 'DEVICE', 'DASHBOARD', 'SCHEDULE'])
         && (data.receivedAt == null || isValidTimestampMs(data.receivedAt))
         && (data.deviceTimestamp == null || isValidTimestampMs(data.deviceTimestamp))
         && (data.deviceUptimeMs == null || (isNumber(data.deviceUptimeMs) && data.deviceUptimeMs >= 0))
-        && (data.createdAt != null || isValidTimestampMs(data.timestamp));
-    }
-
-    function isValidTelegramCommand(data) {
-      return data.command in ['/open', '/close', '/mode_auto', '/mode_manual', '/restart']
-        && data.status in ['pending', 'processing', 'done', 'failed']
-        && isNumber(data.userId)
-        && isValidTimestampMs(data.createdAt)
-        && isValidTimestampMs(data.updatedAt)
-        && (data.expiresAt == null || isValidTimestampMs(data.expiresAt))
-        && (data.dispatchMode == null || data.dispatchMode in ['bridge-fallback', 'server-direct'])
-        && (data.attemptCount == null || isNumber(data.attemptCount))
-        && (data.directDispatchAt == null || isValidTimestampMs(data.directDispatchAt))
-        && (data.directDispatchResult == null || data.directDispatchResult is string);
+        && (data.createdAt == null || data.createdAt is timestamp || isValidTimestampMs(data.createdAt));
     }
 
     match /sensor_data/{docId} {
@@ -65,15 +69,22 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    match /schedules/{docId} {
-      allow read: if true;
-      allow create, update: if request.resource.data.name is string
-        && request.resource.data.enabled is bool
+    match /users/{userId}/devices/{deviceId}/schedules/{scheduleId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && isValidSchedule(request.resource.data)
         && (
-          (request.resource.data.timeOpen is string && request.resource.data.timeClose is string) ||
-          (isNumber(request.resource.data.startHour) && isNumber(request.resource.data.endHour))
+          request.resource.data.deviceId == null
+          || request.resource.data.deviceId == deviceId
         );
-      allow delete: if true;
+      allow delete: if isOwner(userId);
+    }
+
+    match /schedules/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && isValidSchedule(request.resource.data);
+      allow delete: if isSignedIn();
     }
 
     match /system_settings/{docId} {
@@ -87,9 +98,7 @@ service cloud.firestore {
     }
 
     match /telegram_commands/{docId} {
-      allow read: if true;
-      allow create, update: if isValidTelegramCommand(request.resource.data);
-      allow delete: if false;
+      allow read, write: if false;
     }
 
     match /telegram_audit/{docId} {

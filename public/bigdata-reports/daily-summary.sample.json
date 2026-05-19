@@ -1,0 +1,13 @@
+[
+  {
+    "date": "2026-05-16",
+    "deviceId": "ESP32-01",
+    "totalRecords": 1440,
+    "avgTemperature": 30.4,
+    "avgHumidity": 72.8,
+    "avgLight": 6200,
+    "rainCount": 18,
+    "openCount": 820,
+    "closedCount": 620
+  }
+]

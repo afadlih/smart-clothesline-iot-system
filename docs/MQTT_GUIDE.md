@@ -82,6 +82,7 @@ Firmware must respond to commands on `smart-clothesline/command` and acknowledge
 - **Connectivity:** Upon reconnection, publish the current `status` immediately to sync the dashboard.
 - **Wokwi ADC Map:** Use `map(adc, 4095, 0, 0, 10000)` to normalize light values.
 - **Numeric Compliance:** Ensure all telemetry values are numbers, not strings, to support Firestore indexing.
+- **Wokwi Compatibility Guide:** For detailed per-device configuration, topic contract, and environment parameters, see the [Wokwi MQTT Compatibility Guide](./WOKWI_MQTT_COMPATIBILITY.md).
 
 ---
 
@@ -104,18 +105,12 @@ Any value in `NEXT_PUBLIC_*` is visible in the browser. Browser MQTT credentials
 
 ---
 
-## 6. Big Data & Analytics Roadmap (Future Readiness)
+## 6. Big Data & Analytics Roadmap
 
-The current release focuses on stable realtime operations and Firestore persistence. For future Hadoop/Spark integration:
+The Hadoop roadmap now lives in [`docs/BIG_DATA_ROADMAP.md`](./BIG_DATA_ROADMAP.md).
 
-### A. Telemetry Baseline
-The canonical source for ingestion is the `sensor_data` collection in Firestore.
-- **Metrics**: `temperature`, `humidity`, `light`, `rain`.
-- **Metadata**: `deviceId`, `receivedAt` (epoch ms), `createdAt` (Firestore timestamp).
-
-### B. Export & Ingestion Strategy
-- **Batch Export:** Periodic export from Firestore to NDJSON or CSV, partitioned by day.
-- **Sanitization:** Strip secrets (`password`, `token`, etc.) and pseudonymize IDs if sharing datasets externally.
-
-### C. Analytics Schema
-- **Structure:** `event_id`, `device_id`, `topic`, `event_time`, `metrics` (struct), `source`.
+Use that document for:
+- Telemetry baseline and export assumptions.
+- Batch ingestion strategy.
+- Hadoop MVP jobs.
+- Manual checklist and demo flow.

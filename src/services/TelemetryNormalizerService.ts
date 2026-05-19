@@ -9,6 +9,7 @@ export type NormalizedTelemetry = ValidTelemetryPayload & {
   receivedAt: number;
   incomplete: boolean;
   stale: boolean;
+  source: string;
 };
 
 export type NormalizeResult =
@@ -22,8 +23,43 @@ function isNearEqual(a: number, b: number): boolean {
 export class TelemetryNormalizerService {
   private static previous: NormalizedTelemetry | null = null;
 
+  private static aliasToRawTelemetry(raw: RawTelemetryPayload): RawTelemetryPayload {
+    const input = raw as Record<string, unknown>;
+    const rainCandidate = input.rain ?? input.rainDetected ?? input.isRaining ?? input.rainVal;
+    const statusCandidate = input.status ?? input.state ?? input.clotheslineStatus;
+    const modeCandidate = input.mode ?? input.operationMode;
+
+    const normalizedRain =
+      typeof rainCandidate === "boolean"
+        ? rainCandidate
+        : typeof rainCandidate === "number"
+          ? rainCandidate > 0
+          : typeof rainCandidate === "string"
+            ? ["1", "true", "yes", "rain"].includes(rainCandidate.trim().toLowerCase())
+            : false;
+
+    return {
+      deviceId: input.deviceId ?? input.device_id ?? input.device,
+      temperature: input.temperature ?? input.temp,
+      humidity: input.humidity ?? input.hum,
+      light: input.light ?? input.lightValue ?? input.ldr ?? input.lightRaw,
+      lightRaw: input.lightRaw ?? input.ldr,
+      lightThreshold: input.lightThreshold,
+      rain: normalizedRain,
+      rainVal: input.rainVal ?? input.rainDetected ?? input.isRaining,
+      rainRaw: input.rainRaw ?? input.rainVal,
+      timestamp: input.timestamp ?? input.receivedAt ?? input.createdAt,
+      heartbeat: input.heartbeat ?? input.timestamp ?? input.receivedAt,
+      mode: typeof modeCandidate === "string" ? modeCandidate.toUpperCase() : modeCandidate,
+      status: typeof statusCandidate === "string" ? statusCandidate.toUpperCase() : statusCandidate,
+      lastCommand: input.lastCommand,
+    };
+  }
+
   static normalize(raw: RawTelemetryPayload, receivedAt: number): NormalizeResult {
-    const validation = SensorValidationLayer.validate(raw, receivedAt);
+    const sourceRaw = raw as Record<string, unknown>;
+    const source = String(sourceRaw.source ?? sourceRaw.stateSource ?? sourceRaw.state_source ?? "mqtt");
+    const validation = SensorValidationLayer.validate(this.aliasToRawTelemetry(raw), receivedAt);
     if (!validation.ok) {
       return validation;
     }
@@ -33,6 +69,7 @@ export class TelemetryNormalizerService {
       receivedAt,
       incomplete: validation.incomplete,
       stale: receivedAt - validation.value.heartbeat > TelemetryHeartbeatService.OFFLINE_TIMEOUT_MS,
+      source,
     };
 
     const prev = TelemetryNormalizerService.previous;

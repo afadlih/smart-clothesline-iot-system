@@ -31,7 +31,7 @@ export type ValidTelemetryPayload = {
   deviceUptimeMs?: number;
   heartbeatAt: number;
   mode?: "AUTO" | "MANUAL";
-  deviceState?: "OPEN" | "CLOSED" | "RESTARTING";
+  deviceState?: "OPEN" | "CLOSED" | "MOVING" | "FAULT" | "RESTARTING" | "UNKNOWN";
   lastCommand?: "OPEN" | "CLOSE" | "AUTO" | "MANUAL" | "RESTART";
 };
 
@@ -121,10 +121,18 @@ export class SensorValidationLayer {
     const heartbeat = toSafeTimestamp(heartbeatInfo.effectiveAt, timestamp);
 
     const mode = raw.mode === "AUTO" || raw.mode === "MANUAL" ? raw.mode : undefined;
+    const statusUpper = typeof raw.status === "string" ? raw.status.toUpperCase() : undefined;
     const deviceState =
-      raw.status === "OPEN" || raw.status === "CLOSED" || raw.status === "RESTARTING"
-        ? raw.status
-        : undefined;
+      statusUpper === "OPEN" ||
+      statusUpper === "CLOSED" ||
+      statusUpper === "MOVING" ||
+      statusUpper === "FAULT" ||
+      statusUpper === "RESTARTING" ||
+      statusUpper === "UNKNOWN"
+        ? statusUpper
+        : statusUpper === "OPENING" || statusUpper === "CLOSING"
+          ? "MOVING"
+          : undefined;
 
     const lastCommand =
       raw.lastCommand === "OPEN" ||

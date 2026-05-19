@@ -1,0 +1,2 @@
+2026-05-16,RAIN_DETECTED,warning,ESP32-01,Rain detected while extended
+2026-05-16,DEVICE_OFFLINE,critical,ESP32-01,No telemetry over threshold

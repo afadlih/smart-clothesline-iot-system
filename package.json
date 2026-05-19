@@ -8,9 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
-    "validate": "npm run lint && npm run typecheck && npm run test:telegram && npm run build",
+    "validate": "npm run lint && npm run typecheck && npm run test:telegram && npm run test:architecture && npm run build",
     "telegram:sync-webhook": "node scripts/sync-telegram-webhook.mjs",
-    "test:telegram": "node --test scripts/telegram-notification-only.test.mjs"
+    "test:telegram": "node --test scripts/telegram-notification-only.test.mjs",
+    "test:architecture": "node --test scripts/iot-architecture-contract.test.mjs"
   },
   "dependencies": {
     "autoprefixer": "^10.5.0",
