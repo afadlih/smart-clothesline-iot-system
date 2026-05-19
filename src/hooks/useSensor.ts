@@ -14,8 +14,6 @@ import {
     getDeviceConfigAckTopic,
     getDeviceCommandTopic,
     getDeviceConfigTopic,
-    getDeviceSensorTopic,
-    getDeviceStatusTopic,
     mqttService,
 } from "@/services/MQTTService";
 import { pushSystemEvent } from "@/hooks/useNotificationEngine";
@@ -28,9 +26,10 @@ import { OperationalStateResolver } from "@/services/OperationalStateResolver";
 import { MqttDiagnosticsService, type DeviceStateSource } from "@/services/MqttDiagnosticsService";
 import { useSensorStore } from "@/stores/sensorStore";
 import { logger } from "@/lib/logger";
+import { getDeviceStatusTopics, getDeviceTelemetryTopics } from "@/services/mqttTopics";
 
 type ConnectionState = "connecting" | "online" | "reconnecting" | "offline" | "error";
-type DeviceStatus = "OPEN" | "CLOSED" | "RESTARTING";
+type DeviceStatus = "OPEN" | "CLOSED" | "MOVING" | "FAULT" | "RESTARTING" | "UNKNOWN";
 type DeviceMode = "AUTO" | "MANUAL";
 type DeviceCommand = "OPEN" | "CLOSE" | "AUTO" | "MANUAL" | "RESTART";
 type UiConnectionState = "DISCONNECTED" | "CONNECTED";
@@ -178,6 +177,12 @@ type SensorSnapshot = {
         failed: number;
         oldestItemAge: number | null;
     };
+    commandGuard: {
+        state: string;
+        canSendCommand: boolean;
+        disabledCommands: string[];
+        reason: string;
+    };
 };
 
 const MAX_HISTORY_ITEMS = 20;
@@ -190,7 +195,7 @@ const FRESHNESS_MS = 15_000;
 const STATUS_DEBOUNCE_MS = 1_000;
 const OFFLINE_ALERT_INTERVAL_MS = 10_000;
 const TELEGRAM_ALERT_COOLDOWN_MS = 30_000;
-const SENSOR_STORAGE_SAMPLING_MS = 30_000;
+const SENSOR_SAMPLE_INTERVAL_MS = 5 * 60 * 1000;
 const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
 const WOKWI_DEVICE_ID = "wokwi-default";
 
@@ -254,6 +259,12 @@ const sharedState: SensorSnapshot = {
         readyToSync: 0,
         failed: 0,
         oldestItemAge: null,
+    },
+    commandGuard: {
+        state: "UNKNOWN",
+        canSendCommand: false,
+        disabledCommands: [],
+        reason: "Awaiting telemetry.",
     },
 };
 
@@ -350,6 +361,18 @@ function updateUiState(now: number = Date.now()): void {
     }
 
     sharedState.uiState = nextUiState;
+
+    sharedState.commandGuard = OperationalStateResolver.resolveOperationalState({
+        now,
+        mqttConnected: mqttService.isConnected(),
+        lastTelemetryAt: sharedState.lastSensorUpdate,
+        rain: sharedState.sensorData?.isRaining() ?? null,
+        status: sharedState.deviceState.status,
+        mode: sharedState.deviceState.mode,
+        commandInFlight: sharedState.commandStatus === "pending",
+        commandStartedAt: sharedState.commandSentAt,
+        fault: sharedState.connection.state === "error",
+    });
 }
 
 function updateConnectionStatus(
@@ -639,6 +662,10 @@ function cloneSnapshot(): SensorSnapshot {
         events: [...sharedState.events],
         connection: { ...sharedState.connection },
         queueStats: { ...sharedState.queueStats },
+        commandGuard: {
+            ...sharedState.commandGuard,
+            disabledCommands: [...sharedState.commandGuard.disabledCommands],
+        },
     };
 }
 
@@ -832,9 +859,11 @@ function startStreamIfNeeded(): void {
         return;
     }
 
-    const sensorTopic = getDeviceSensorTopic(activeDeviceId);
-    const statusTopic = getDeviceStatusTopic(activeDeviceId);
+    const sensorTopics = getDeviceTelemetryTopics(activeDeviceId);
+    const statusTopics = getDeviceStatusTopics(activeDeviceId);
     const configAckTopic = getDeviceConfigAckTopic(activeDeviceId);
+    const sensorTopicSet = new Set(sensorTopics);
+    const statusTopicSet = new Set(statusTopics);
 
     const handleTopicMessage = (rawPayload: string, topic: string) => {
         const receivedAt = Date.now();
@@ -844,7 +873,7 @@ function startStreamIfNeeded(): void {
             receivedAt,
         };
 
-        if (topic === sensorTopic) {
+        if (sensorTopicSet.has(topic)) {
             MqttDiagnosticsService.recordSensorPayload(rawPayload, receivedAt);
             const payload = parseSensorPayload(rawPayload, receivedAt);
             if (!payload) {
@@ -894,7 +923,7 @@ function startStreamIfNeeded(): void {
 
             const shouldStore =
                 !payload.duplicate ||
-                Date.now() - lastSensorStoredAt >= SENSOR_STORAGE_SAMPLING_MS;
+                Date.now() - lastSensorStoredAt >= SENSOR_SAMPLE_INTERVAL_MS;
             if (shouldStore) {
                 lastSensorStoredAt = Date.now();
                 const payloadForStorage = {
@@ -958,7 +987,7 @@ function startStreamIfNeeded(): void {
             detectRealtimeAlerts(data, sharedState.deviceState.status, sensorTimestamp);
 
             logger.info("mqtt", "Sensor state update", {
-                topic: sensorTopic,
+                topic,
                 sensor: {
                     temperature: payload.temperature,
                     humidity: payload.humidity,
@@ -980,7 +1009,7 @@ function startStreamIfNeeded(): void {
             return;
         }
 
-        if (topic !== statusTopic) {
+        if (!statusTopicSet.has(topic)) {
             notifyListeners();
             return;
         }
@@ -1014,7 +1043,7 @@ function startStreamIfNeeded(): void {
             appendLegacyEvent({
                 type: "DEVICE",
                 action: "STATUS_ACK",
-                status: payload.status,
+                status: toInternalStatus(payload.status),
                 mode: payload.mode,
                 timestamp: statusTimestamp,
             });
@@ -1082,7 +1111,7 @@ function startStreamIfNeeded(): void {
         detectRealtimeAlerts(sharedState.sensorData, payload.status, statusTimestamp);
 
         logger.info("mqtt", "Status state update", {
-            topic: statusTopic,
+            topic,
             status: payload.status,
             mode: payload.mode,
             lastCommand: payload.lastCommand ?? null,
@@ -1090,14 +1119,33 @@ function startStreamIfNeeded(): void {
         notifyListeners();
     };
 
-    mqttService.subscribeTopic(sensorTopic, handleTopicMessage);
-    mqttService.subscribeTopic(statusTopic, handleTopicMessage);
+    for (const sensorTopic of sensorTopics) {
+        mqttService.subscribeTopic(sensorTopic, handleTopicMessage);
+    }
+    for (const statusTopic of statusTopics) {
+        mqttService.subscribeTopic(statusTopic, handleTopicMessage);
+    }
     mqttService.subscribeTopic(configAckTopic, handleTopicMessage);
 }
 
 export function sendCommand(command: DeviceCommand): boolean {
     const now = Date.now();
     updateUiState(now);
+    const guard = sharedState.commandGuard;
+    if (guard.disabledCommands.includes(command) || !guard.canSendCommand) {
+        logger.warn("mqtt", "Command blocked by operational guard", {
+            command,
+            state: guard.state,
+            reason: guard.reason,
+        });
+        pushSystemEvent({
+            type: "ALERT",
+            title: "Command blocked",
+            description: guard.reason,
+            timestamp: now,
+        });
+        return false;
+    }
     const isDeviceOnline = sharedState.uiState.connection === "CONNECTED";
 
     if (!isDeviceOnline) {
@@ -1576,6 +1624,7 @@ export function useSensor() {
             ...snapshot.connection,
         },
         queueStats: snapshot.queueStats,
+        commandGuard: snapshot.commandGuard,
         deviceHealth,
         operationalHealth,
         smartAlerts,

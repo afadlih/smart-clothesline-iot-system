@@ -1,6 +1,12 @@
 import mqtt, { type MqttClient } from "mqtt";
 import { SensorValidationLayer, type RawTelemetryPayload } from "./SensorValidationLayer";
 import { logger } from "@/lib/logger";
+import {
+  LEGACY_TOPICS,
+  getDeviceCommandTopic as buildDeviceCommandTopic,
+  getDeviceConfigAckTopic as buildDeviceConfigAckTopic,
+  getDeviceConfigTopic as buildDeviceConfigTopic,
+} from "@/services/mqttTopics";
 
 export const MQTT_BROKER_URL = process.env.NEXT_PUBLIC_MQTT_BROKER_URL ?? "wss://broker.hivemq.com:8884/mqtt";
 // SECURITY NOTE:
@@ -8,12 +14,12 @@ export const MQTT_BROKER_URL = process.env.NEXT_PUBLIC_MQTT_BROKER_URL ?? "wss:/
 // Never use privileged broker credentials here.
 const MQTT_USER = process.env.NEXT_PUBLIC_MQTT_USERNAME;
 const MQTT_PASS = process.env.NEXT_PUBLIC_MQTT_PASSWORD;
-export const SENSOR_TOPIC = process.env.NEXT_PUBLIC_MQTT_TOPIC_SENSOR ?? "smart-clothesline/sensor";
-export const STATUS_TOPIC = process.env.NEXT_PUBLIC_MQTT_TOPIC_STATUS ?? "smart-clothesline/status";
-export const COMMAND_TOPIC = process.env.NEXT_PUBLIC_MQTT_TOPIC_COMMAND ?? "smart-clothesline/command";
-export const CONFIG_TOPIC = "smart-clothesline/config";
-export const CONFIG_ACK_TOPIC = "smart-clothesline/config/ack";
-export const PAIRING_DISCOVERY_TOPIC = "smart-clothesline/pairing/discovery";
+export const SENSOR_TOPIC = LEGACY_TOPICS.sensor;
+export const STATUS_TOPIC = LEGACY_TOPICS.status;
+export const COMMAND_TOPIC = LEGACY_TOPICS.command;
+export const CONFIG_TOPIC = LEGACY_TOPICS.config;
+export const CONFIG_ACK_TOPIC = LEGACY_TOPICS.configAck;
+export const PAIRING_DISCOVERY_TOPIC = LEGACY_TOPICS.pairingDiscovery;
 
 if (typeof window !== "undefined" && (MQTT_USER || MQTT_PASS) && process.env.NODE_ENV !== "production") {
   logger.warn("mqtt", "Using browser-exposed MQTT credentials. Ensure broker ACL is low privilege.");
@@ -41,7 +47,7 @@ export type SensorMessage = {
   rainVal?: number;
   rainRaw?: number;
   rain: boolean;
-  status?: "OPEN" | "CLOSED";
+  status?: "OPEN" | "CLOSED" | "MOVING" | "FAULT" | "UNKNOWN";
   mode?: "AUTO" | "MANUAL";
   timestamp?: number;
 };
@@ -125,15 +131,15 @@ export function getDeviceStatusTopic(deviceId: string): string {
 }
 
 export function getDeviceCommandTopic(deviceId: string): string {
-  return `smart-clothesline/${deviceId}/command`;
+  return buildDeviceCommandTopic(deviceId);
 }
 
 export function getDeviceConfigTopic(deviceId: string): string {
-  return `smart-clothesline/${deviceId}/config`;
+  return buildDeviceConfigTopic(deviceId);
 }
 
 export function getDeviceConfigAckTopic(deviceId: string): string {
-  return `smart-clothesline/${deviceId}/config/ack`;
+  return buildDeviceConfigAckTopic(deviceId);
 }
 
 

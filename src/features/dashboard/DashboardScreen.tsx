@@ -51,6 +51,7 @@ export default function DashboardScreen() {
   const {
     runtime,
     sendCommand,
+    commandGuard,
     operationalHealth,
     uiState,
     decision,
@@ -100,7 +101,10 @@ export default function DashboardScreen() {
   const lastUpdated = formatClock(lastUpdate);
   const isCommandPending = uiState.deviceSync === "WAITING_ACK";
   const canSendCommand =
-    runtime.streamState === "STREAMING" && !isCommandPending;
+    runtime.streamState === "STREAMING" && !isCommandPending && commandGuard.canSendCommand;
+  const openDisabled = !canSendCommand || commandGuard.disabledCommands.includes("OPEN");
+  const closeDisabled = !canSendCommand || commandGuard.disabledCommands.includes("CLOSE");
+  const autoDisabled = !canSendCommand || commandGuard.disabledCommands.includes("AUTO");
 
   const commandStatusLabel =
     uiState.deviceSync === "WAITING_ACK"
@@ -268,25 +272,31 @@ export default function DashboardScreen() {
                    Commands blocked: Device is currently offline.
                 </div>
               )}
+              {!canSendCommand && (
+                <div className="mb-6 flex items-center gap-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 p-4 text-sm font-bold text-amber-700 dark:text-amber-300">
+                   <AlertCircle className="h-5 w-5" />
+                   {commandGuard.reason}
+                </div>
+              )}
 
               <div className="flex flex-wrap gap-4">
                 <button
                   onClick={() => sendCommand("OPEN")}
-                  disabled={!canSendCommand}
+                  disabled={openDisabled}
                   className="flex-1 min-w-[120px] rounded-2xl bg-teal-600 py-4 text-sm font-black text-white shadow-lg shadow-teal-600/20 transition-all hover:bg-teal-700 hover:-translate-y-0.5 active:scale-95 disabled:opacity-40 disabled:hover:translate-y-0 uppercase tracking-widest"
                 >
                   Open
                 </button>
                 <button
                   onClick={() => sendCommand("CLOSE")}
-                  disabled={!canSendCommand}
+                  disabled={closeDisabled}
                   className="flex-1 min-w-[120px] rounded-2xl bg-slate-800 py-4 text-sm font-black text-white shadow-lg shadow-slate-800/20 transition-all hover:bg-slate-900 hover:-translate-y-0.5 active:scale-95 disabled:opacity-40 disabled:hover:translate-y-0 uppercase tracking-widest"
                 >
                   Close
                 </button>
                 <button
                   onClick={() => sendCommand("AUTO")}
-                  disabled={!canSendCommand}
+                  disabled={autoDisabled}
                   className="flex-1 min-w-[120px] rounded-2xl bg-emerald-600 py-4 text-sm font-black text-white shadow-lg shadow-emerald-600/20 transition-all hover:bg-emerald-700 hover:-translate-y-0.5 active:scale-95 disabled:opacity-40 disabled:hover:translate-y-0 uppercase tracking-widest"
                 >
                   Auto
