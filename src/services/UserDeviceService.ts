@@ -19,6 +19,12 @@ export type UserDevice = {
     status?: "online" | "offline" | "unknown";
 };
 
+function removeUndefinedFields<T extends Record<string, unknown>>(value: T): Partial<T> {
+    return Object.fromEntries(
+        Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined),
+    ) as Partial<T>;
+}
+
 function userDeviceCollection(uid: string) {
     return collection(db, "users", uid, "devices");
 }
@@ -39,8 +45,8 @@ export async function listUserDevices(uid:string): Promise<UserDevice[]> {
             source: data.source === "wokwi" ? "wokwi" : "esp32",
             pairingCode: data.pairingCode ?? "",
             pairedAt: typeof data.pairedAt === "number" ? data.pairedAt : Date.now(),
-            lastKnownSeenAt: typeof data.lastSeenAt === "number" ? data.lastSeenAt : undefined,
-            lastKnownStatus:
+            lastSeenAt: typeof data.lastSeenAt === "number" ? data.lastSeenAt : undefined,
+            status:
                 data.status === "online" || data.status === "offline"
                     ? data.status
                     : "unknown",
@@ -49,7 +55,17 @@ export async function listUserDevices(uid:string): Promise<UserDevice[]> {
 }
 
 export async function pairUserDevice(uid:string, device:UserDevice): Promise<void> {
-    await setDoc(userDeviceDoc(uid, device.deviceId), device, { merge: true});
+    const payload = removeUndefinedFields({
+        deviceId: device.deviceId,
+        deviceName: device.deviceName,
+        source: device.source,
+        pairingCode: device.pairingCode,
+        pairedAt: device.pairedAt,
+        lastSeenAt: device.lastSeenAt,
+        status: device.status,
+    });
+
+    await setDoc(userDeviceDoc(uid, device.deviceId), payload, { merge: true});
 }
 
 export async function unpairUserDevice(uid:string, deviceId:string): Promise<void> {

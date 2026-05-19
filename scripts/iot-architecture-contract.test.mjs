@@ -61,3 +61,17 @@ test("design states telegram notification-only", () => {
   assert.ok(content.includes("dashboard is the only application-level control surface"));
 });
 
+test("user device firestore payload sanitizes undefined fields", () => {
+  const content = read("src/services/UserDeviceService.ts");
+  assert.ok(content.includes("removeUndefinedFields"), "Expected removeUndefinedFields helper");
+  assert.ok(
+    !content.includes("setDoc(userDeviceDoc(uid, device.deviceId), device, { merge: true })"),
+    "Unsafe raw device setDoc call should not exist",
+  );
+  assert.ok(
+    content.includes("setDoc(userDeviceDoc(uid, device.deviceId), payload, { merge: true})")
+      || content.includes("setDoc(userDeviceDoc(uid, device.deviceId), payload, { merge: true })"),
+    "pairUserDevice should write sanitized payload",
+  );
+});
+
