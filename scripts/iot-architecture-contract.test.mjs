@@ -145,6 +145,8 @@ test("schedule synchronization contract validation", () => {
   // 8. firestore.rules validation
   const rulesContent = read("firestore.rules");
   assert.ok(rulesContent.includes("users/{userId}/devices/{deviceId}/schedules/{scheduleId}"), "firestore.rules must contain the per-device schedules path match");
+  assert.ok(rulesContent.includes("match /users/{userId}"), "firestore.rules must contain the users profile path match");
+  assert.ok(rulesContent.includes("match /users/{userId}/devices/{deviceId}"), "firestore.rules must contain the user paired devices path match");
   assert.ok(rulesContent.includes("match /telegram_commands/{docId}"), "firestore.rules must match telegram_commands path");
   // Ensure telegram_commands blocks reads/writes
   const commandLines = rulesContent.split("\n");
