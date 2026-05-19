@@ -1,32 +1,9 @@
-﻿# Big Data Hadoop Integration
+# Big Data Hadoop Integration
 
-Hadoop in this project is batch analytics only.
+This content has been consolidated into [`docs/BIG_DATA_ROADMAP.md`](./BIG_DATA_ROADMAP.md).
 
-Pipeline:
-
-```txt
-Firestore sensor_data
--> export sensor_YYYY-MM-DD.csv
--> SCP to Hadoop NameNode
--> hadoop fs -put to HDFS
--> MapReduce DailySensorSummaryJob
--> output part-00000 in HDFS
--> convert output to JSON
--> dashboard /big-data
-```
-
-Implementation notes:
-- Dashboard remains the control surface for device commands.
-- Telegram is notification-only.
-- `/big-data` uses sample JSON and does not require Hadoop at runtime.
-- `/big-data` is a sample Hadoop MapReduce report generated from sample output.
-- Production export is a follow-up implementation task.
-- Use `scripts/bigdata/export-firestore-sensor-data.mjs` for scaffold export.
-- Use `scripts/bigdata/convert-mapreduce-output-to-json.mjs` to convert MapReduce output.
-
-Recommended MVP jobs:
-- DailySensorSummaryJob
-- RainEventAggregationJob
-- DeviceHealthJob
-- AlertSummaryJob
-
+Use the roadmap as the single source for:
+- Hadoop scope and runtime assumptions.
+- Firestore export strategy.
+- MapReduce MVP jobs.
+- Manual checklist and demo flow.

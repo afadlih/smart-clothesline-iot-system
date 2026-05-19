@@ -47,4 +47,4 @@ Preview branches (`feature/*`, `fix/*`) should use separate bot tokens or disabl
 
 ## 5. Roadmap
 - **Analytics:** Integration of historical trend analysis using Firestore partitions.
-- **Big Data:** Preparation for Hadoop/Spark telemetry archival (see [MQTT_GUIDE.md](./docs/MQTT_GUIDE.md#6-big-data--analytics-roadmap-future-readiness)).
+- **Big Data:** Preparation for Hadoop/Spark telemetry archival (see [BIG_DATA_ROADMAP.md](./docs/BIG_DATA_ROADMAP.md)).

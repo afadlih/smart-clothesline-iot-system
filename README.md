@@ -1,6 +1,6 @@
 # Smart Clothesline IoT System
 
-Smart Clothesline IoT System is a Next.js 14 dashboard for realtime monitoring, automation, and Telegram-based remote operations.
+Smart Clothesline IoT System is a Next.js 14 dashboard for realtime monitoring, automation, and Telegram notifications.
 
 ---
 

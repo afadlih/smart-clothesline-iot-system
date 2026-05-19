@@ -104,18 +104,12 @@ Any value in `NEXT_PUBLIC_*` is visible in the browser. Browser MQTT credentials
 
 ---
 
-## 6. Big Data & Analytics Roadmap (Future Readiness)
+## 6. Big Data & Analytics Roadmap
 
-The current release focuses on stable realtime operations and Firestore persistence. For future Hadoop/Spark integration:
+The Hadoop roadmap now lives in [`docs/BIG_DATA_ROADMAP.md`](./BIG_DATA_ROADMAP.md).
 
-### A. Telemetry Baseline
-The canonical source for ingestion is the `sensor_data` collection in Firestore.
-- **Metrics**: `temperature`, `humidity`, `light`, `rain`.
-- **Metadata**: `deviceId`, `receivedAt` (epoch ms), `createdAt` (Firestore timestamp).
-
-### B. Export & Ingestion Strategy
-- **Batch Export:** Periodic export from Firestore to NDJSON or CSV, partitioned by day.
-- **Sanitization:** Strip secrets (`password`, `token`, etc.) and pseudonymize IDs if sharing datasets externally.
-
-### C. Analytics Schema
-- **Structure:** `event_id`, `device_id`, `topic`, `event_time`, `metrics` (struct), `source`.
+Use that document for:
+- Telemetry baseline and export assumptions.
+- Batch ingestion strategy.
+- Hadoop MVP jobs.
+- Manual checklist and demo flow.
