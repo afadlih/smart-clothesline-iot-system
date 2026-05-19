@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Clock, Loader2, Plus, Power, RefreshCw, ShieldCheck, Trash2, Calendar, AlertCircle, Zap, Shield } from "lucide-react";
-import { useSystemState } from "@/hooks/useSystemState";
+import { Clock, Loader2, Plus, Power, ShieldCheck, Trash2, Calendar, AlertCircle, Zap, Shield } from "lucide-react";
 import { isWithinSchedule } from "@/features/system/ScheduleEngine";
 import { ScheduleService, type FirebaseScheduleItem } from "@/services/ScheduleService";
 import { mqttService } from "@/services/MQTTService"; 
@@ -23,26 +22,19 @@ function formatWindow(startHour: number, endHour: number): string {
 }
 
 export default function SchedulePage() {
-  const { isOnline } = useSystemState(); 
   const [loading, setLoading] = useState(true);
   const [schedules, setSchedules] = useState<FirebaseScheduleItem[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [form, setForm] = useState<FormState>(initialForm);
   const [errorMessage, setErrorMessage] = useState("");
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
-  const [userAllowedAuto, setUserAllowedAuto] = useState(false);
-  const [isSettingOverride, setIsSettingOverride] = useState(false);
   
   const wasActiveRef = useRef<boolean | null>(null);
 
   const loadScheduleData = async () => {
     try {
-      const [scheduleResult, override] = await Promise.all([
-        ScheduleService.loadSchedules(),
-        ScheduleService.getSystemOverride(),
-      ]);
+      const scheduleResult = await ScheduleService.loadSchedules();
       setSchedules(scheduleResult.schedules);
-      setUserAllowedAuto(override);
     } catch (err) {
       console.error("Load error:", err);
     } finally {
@@ -91,26 +83,14 @@ export default function SchedulePage() {
 
     if (!wasActiveRef.current && isCurrentlyActiveGlobal) {
       void ScheduleService.setSystemOverride(true);
-      setUserAllowedAuto(true);
     }
 
     if (wasActiveRef.current && !isCurrentlyActiveGlobal) {
       void ScheduleService.setSystemOverride(false);
-      setUserAllowedAuto(false);
     }
     
     wasActiveRef.current = isCurrentlyActiveGlobal;
   }, [isCurrentlyActiveGlobal, loading, schedules.length]);
-
-  const onResetToAuto = async () => {
-    setIsSettingOverride(true);
-    try { 
-      await ScheduleService.setSystemOverride(true); 
-      setUserAllowedAuto(true); 
-    } finally { 
-      setIsSettingOverride(false); 
-    }
-  };
 
   const onSubmitSchedule = async () => {
     setErrorMessage("");
@@ -174,20 +154,9 @@ export default function SchedulePage() {
                 </span>
               </div>
               <h1 className="text-5xl md:text-6xl font-black text-slate-800 dark:text-white tracking-tighter">Schedule Manager</h1>
-              <div className="flex items-center gap-3 mt-4">
-                 <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${isOnline ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : 'bg-slate-500/10 text-slate-600 border-slate-500/20'}`}>
-                   {isOnline ? "OPERATIONAL" : "OFFLINE"}
-                 </div>
-                 <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${userAllowedAuto ? 'bg-teal-500/10 text-teal-600 border-teal-500/20' : 'bg-amber-500/10 text-amber-600 border-amber-500/20'}`}>
-                   {userAllowedAuto ? "AUTO MODE" : "MANUAL MODE"}
-                 </div>
-              </div>
             </div>
 
             <div className="flex items-center gap-4">
-              <button onClick={onResetToAuto} disabled={isSettingOverride} className="p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 shadow-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 transition-all active:scale-95">
-                <RefreshCw size={22} className={isSettingOverride ? "animate-spin" : ""} />
-              </button>
               <button onClick={() => setIsFormOpen(!isFormOpen)} className="flex items-center gap-4 px-8 py-4 rounded-2xl bg-teal-600 text-white font-black text-xs tracking-widest shadow-xl shadow-teal-600/20 hover:opacity-90 active:scale-95 transition-all">
                 <Plus size={20} /> {isFormOpen ? "CLOSE PANEL" : "NEW SCHEDULE"}
               </button>
@@ -312,7 +281,6 @@ export default function SchedulePage() {
                 <div className="space-y-4">
                    <InsightRow label="Queue Density" value={`${schedules.length} Active`} icon={<Calendar size={16}/>} />
                    <InsightRow label="Conflict Check" value="Validated" icon={<Shield size={16}/>} color="emerald" />
-                   <InsightRow label="System Mode" value={userAllowedAuto ? "AUTO" : "MANUAL"} icon={<Zap size={16}/>} color={userAllowedAuto ? "emerald" : "amber"} />
                 </div>
              </section>
 
