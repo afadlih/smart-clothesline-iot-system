@@ -27,6 +27,10 @@ function endpoint(token: string, method: string): string {
   return `https://api.telegram.org/bot${token}/${method}`;
 }
 
+export type SendMessageOptions = {
+  disableWebPagePreview?: boolean;
+};
+
 export class TelegramBotApiService {
   private static async safeRequest<T>(url: string, init: RequestInit): Promise<TelegramApiResponse<T>> {
     try {
@@ -45,6 +49,7 @@ export class TelegramBotApiService {
     token: string,
     chatId: string | number,
     text: string,
+    options?: SendMessageOptions,
   ): Promise<{ ok: boolean; description?: string }> {
     const data = await this.safeRequest<unknown>(endpoint(token, "sendMessage"), {
       method: "POST",
@@ -52,13 +57,19 @@ export class TelegramBotApiService {
       body: JSON.stringify({
         chat_id: chatId,
         text,
+        disable_web_page_preview: options?.disableWebPagePreview ?? undefined,
       }),
     });
     return { ok: data.ok, description: data.description };
   }
 
-  static async sendMessage(token: string, chatId: string | number, text: string): Promise<boolean> {
-    const result = await this.sendMessageWithResult(token, chatId, text);
+  static async sendMessage(
+    token: string,
+    chatId: string | number,
+    text: string,
+    options?: SendMessageOptions,
+  ): Promise<boolean> {
+    const result = await this.sendMessageWithResult(token, chatId, text, options);
     return result.ok;
   }
 
