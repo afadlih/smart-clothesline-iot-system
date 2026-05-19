@@ -273,3 +273,97 @@ test("8. Docs do not advertise Telegram hardware commands", () => {
     }
   }
 });
+
+test("Test A: Notification service supports richer contract", () => {
+  const path = join(ROOT, "src/services/telegram/TelegramNotificationService.ts");
+  assert.ok(existsSync(path), "TelegramNotificationService.ts should exist");
+  const content = readFileSync(path, "utf-8");
+
+  const terms = [
+    "TelegramNotificationType",
+    "recommendedAction",
+    "dashboardPath",
+    "metadata",
+    "rain_detected",
+    "device_offline",
+    "telemetry_stale",
+    "dry_candidate",
+    "hadoop_batch_report",
+    "buildDashboardUrl",
+    "inferRecommendedAction"
+  ];
+
+  for (const term of terms) {
+    assert.ok(content.includes(term), `Service should contain: ${term}`);
+  }
+});
+
+test("Test B: Notification messages must not suggest Telegram commands", () => {
+  const path = join(ROOT, "src/services/telegram/TelegramNotificationService.ts");
+  assert.ok(existsSync(path), "TelegramNotificationService.ts should exist");
+  const content = readFileSync(path, "utf-8");
+
+  const forbidden = [
+    "Send /open",
+    "Send /close",
+    "Use /open",
+    "Use /close",
+    "Control from Telegram",
+    "Telegram command"
+  ];
+
+  for (const term of forbidden) {
+    assert.ok(!content.includes(term), `Service should not suggest command-like term: ${term}`);
+  }
+});
+
+test("Test C: Notify route preserves skipped ok", () => {
+  const path = join(ROOT, "src/app/api/telegram/notify/route.ts");
+  assert.ok(existsSync(path), "route.ts should exist");
+  const content = readFileSync(path, "utf-8");
+
+  const terms = [
+    "ok: result.ok",
+    "skipped: true",
+    "sentCount",
+    "targetsCount"
+  ];
+
+  for (const term of terms) {
+    assert.ok(content.includes(term), `Route should contain: ${term}`);
+  }
+});
+
+test("Test D: Bot API supports send options", () => {
+  const path = join(ROOT, "src/services/TelegramBotApiService.ts");
+  assert.ok(existsSync(path), "TelegramBotApiService.ts should exist");
+  const content = readFileSync(path, "utf-8");
+
+  const terms = [
+    "disableWebPagePreview",
+    "disable_web_page_preview",
+    "SendMessageOptions"
+  ];
+
+  for (const term of terms) {
+    assert.ok(content.includes(term), `Bot API should contain: ${term}`);
+  }
+});
+
+test("Test E: Docs include notification examples", () => {
+  const path = join(ROOT, "docs/TELEGRAM_NOTIFICATION_ONLY.md");
+  assert.ok(existsSync(path), "TELEGRAM_NOTIFICATION_ONLY.md should exist");
+  const content = readFileSync(path, "utf-8");
+
+  const terms = [
+    "rain_detected",
+    "device_offline",
+    "hadoop_batch_report",
+    "Recommended dashboard action",
+    "Telegram never accepts hardware control commands"
+  ];
+
+  for (const term of terms) {
+    assert.ok(content.includes(term), `Docs should contain: ${term}`);
+  }
+});

@@ -56,3 +56,68 @@ You can also run the validation script:
 
 > [!NOTE]
 > The previous Telegram command diagnostics path (`/api/mqtt/command-test`) is intentionally removed. Telegram no longer has any command-dispatch path. MQTT/device control diagnostics, if needed, must be handled separately from Telegram using browser-side MQTT controls in the dashboard.
+
+## Notification Message Contract
+
+Telegram messages follow this structure:
+
+- Severity and title
+- Device identity
+- Event type/source
+- Latest telemetry context
+- Human-readable reason
+- Recommended dashboard action
+- Dashboard link
+- Timestamp
+- Alert key
+
+> [!IMPORTANT]
+> Telegram never accepts hardware control commands. If action is needed, open the dashboard.
+
+### Rain detected example
+
+```bash
+curl -X POST "$APP_BASE_URL/api/telegram/notify" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "rain_detected",
+    "severity": "warning",
+    "title": "Rain detected",
+    "description": "Rain sensor reports wet condition while the clothesline is open.",
+    "deviceId": "ESP32-01",
+    "alertKey": "rain-detected-ESP32-01",
+    "dashboardPath": "/dashboard"
+  }'
+```
+
+### Device offline example
+
+```bash
+curl -X POST "$APP_BASE_URL/api/telegram/notify" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "device_offline",
+    "severity": "critical",
+    "title": "Device offline",
+    "description": "No telemetry has been received for more than 5 minutes.",
+    "deviceId": "ESP32-01",
+    "alertKey": "device-offline-ESP32-01",
+    "dashboardPath": "/dashboard?panel=diagnostics"
+  }'
+```
+
+### Hadoop batch report example
+
+```bash
+curl -X POST "$APP_BASE_URL/api/telegram/notify" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "hadoop_batch_report",
+    "severity": "info",
+    "title": "Daily Hadoop analytics completed",
+    "description": "Daily sensor summary and rain event aggregation were generated successfully.",
+    "source": "hadoop",
+    "alertKey": "hadoop-daily-summary-2026-05-16",
+    "dashboardPath": "/big-data"
+  }'
+```
