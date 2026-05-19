@@ -12,8 +12,6 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { normalizeSchedules, isWithinSchedule, SCHEDULE_STORAGE_KEY } from "@/features/system/ScheduleEngine";
-import { mqttService } from "@/services/MQTTService"; 
-import { getCommandPublishTopics } from "@/services/mqttTopics";
 
 const SCHEDULE_COLLECTION = "schedules";
 const SYSTEM_SETTINGS_COLLECTION = "system_settings";
@@ -22,7 +20,16 @@ const SCHEDULE_MIGRATION_KEY = "smart-clothesline-schedule-migrated-v1";
 const SCHEDULE_CACHE_KEY = "smart-clothesline-schedules-cache-v1";
 const SCHEDULE_CACHE_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 14; // 14 days
 
-export type FirebaseScheduleItem = { id: string; name: string; startHour: number; endHour: number; enabled: boolean; };
+export type FirebaseScheduleItem = {
+  id: string;
+  deviceId?: string;
+  name: string;
+  startHour: number;
+  endHour: number;
+  enabled: boolean;
+  createdAt?: number;
+  updatedAt?: number;
+};
 
 export interface ScheduleSummary {
   totalCount: number;
@@ -61,7 +68,7 @@ function readScheduleCache(): FirebaseScheduleItem[] | null {
     if (!Array.isArray(parsed.schedules)) return null;
 
     return parsed.schedules
-      .map((item) => {
+      .map((item): FirebaseScheduleItem | null => {
         if (!item || typeof item !== "object") return null;
         const candidate = item as Partial<FirebaseScheduleItem>;
         if (typeof candidate.id !== "string") return null;
@@ -71,11 +78,12 @@ function readScheduleCache(): FirebaseScheduleItem[] | null {
         if (typeof candidate.enabled !== "boolean") return null;
         return {
           id: candidate.id,
+          deviceId: candidate.deviceId,
           name: candidate.name,
           startHour: candidate.startHour,
           endHour: candidate.endHour,
           enabled: candidate.enabled,
-        } satisfies FirebaseScheduleItem;
+        };
       })
       .filter((item): item is FirebaseScheduleItem => item !== null);
   } catch {
@@ -121,12 +129,20 @@ function userDeviceScheduleCollection(uid: string, deviceId: string) {
   return collection(db, "users", uid, "devices", deviceId, "schedules");
 }
 
+function userDeviceScheduleDoc(uid: string, deviceId: string, scheduleId: string) {
+  return doc(db, "users", uid, "devices", deviceId, "schedules", scheduleId);
+}
+
+function getScheduleCacheKey(uid: string, deviceId: string) {
+  return `smart-clothesline-schedules-cache-v1:${uid}:${deviceId}`;
+}
+
 function readDeviceScheduleCache(uid: string, deviceId: string): FirebaseScheduleItem[] | null {
   const storage = safeGetLocalStorage();
   if (!storage) return null;
 
   try {
-    const key = `${SCHEDULE_CACHE_KEY}:${uid}:${deviceId}`;
+    const key = getScheduleCacheKey(uid, deviceId);
     const raw = storage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as {
@@ -138,7 +154,7 @@ function readDeviceScheduleCache(uid: string, deviceId: string): FirebaseSchedul
     if (!Array.isArray(parsed.schedules)) return null;
 
     return parsed.schedules
-      .map((item) => {
+      .map((item): FirebaseScheduleItem | null => {
         if (!item || typeof item !== "object") return null;
         const candidate = item as Partial<FirebaseScheduleItem>;
         if (typeof candidate.id !== "string") return null;
@@ -148,11 +164,14 @@ function readDeviceScheduleCache(uid: string, deviceId: string): FirebaseSchedul
         if (typeof candidate.enabled !== "boolean") return null;
         return {
           id: candidate.id,
+          deviceId: candidate.deviceId,
           name: candidate.name,
           startHour: candidate.startHour,
           endHour: candidate.endHour,
           enabled: candidate.enabled,
-        } satisfies FirebaseScheduleItem;
+          createdAt: candidate.createdAt,
+          updatedAt: candidate.updatedAt,
+        };
       })
       .filter((item): item is FirebaseScheduleItem => item !== null);
   } catch {
@@ -164,7 +183,7 @@ function writeDeviceScheduleCache(uid: string, deviceId: string, schedules: Fire
   const storage = safeGetLocalStorage();
   if (!storage) return;
   try {
-    const key = `${SCHEDULE_CACHE_KEY}:${uid}:${deviceId}`;
+    const key = getScheduleCacheKey(uid, deviceId);
     storage.setItem(
       key,
       JSON.stringify({
@@ -180,7 +199,7 @@ function writeDeviceScheduleCache(uid: string, deviceId: string, schedules: Fire
 async function getFirestoreDeviceSchedulesRaw(uid: string, deviceId: string): Promise<FirebaseScheduleItem[]> {
   const q = query(userDeviceScheduleCollection(uid, deviceId), orderBy("name", "asc"));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((item) => {
+  return snapshot.docs.map((item): FirebaseScheduleItem | null => {
     const value = item.data() as Record<string, unknown>;
     const normalized = normalizeSchedules([{
       id: item.id, startHour: value.startHour, endHour: value.endHour, enabled: value.enabled,
@@ -189,9 +208,14 @@ async function getFirestoreDeviceSchedulesRaw(uid: string, deviceId: string): Pr
     if (!normalized) return null;
     return {
       id: item.id,
+      deviceId: typeof value.deviceId === "string" ? value.deviceId : deviceId,
       name: typeof value.name === "string" && value.name.trim() ? value.name.trim() : `Schedule ${item.id.slice(0, 4)}`,
-      startHour: normalized.startHour, endHour: normalized.endHour, enabled: normalized.enabled,
-    } satisfies FirebaseScheduleItem;
+      startHour: normalized.startHour,
+      endHour: normalized.endHour,
+      enabled: normalized.enabled,
+      createdAt: typeof value.createdAt === "number" ? value.createdAt : undefined,
+      updatedAt: typeof value.updatedAt === "number" ? value.updatedAt : undefined,
+    };
   }).filter((item): item is FirebaseScheduleItem => item !== null);
 }
 
@@ -265,13 +289,15 @@ export class ScheduleService {
   }): Promise<void> {
     const isEnabled = input.enabled ?? true;
     await addDoc(userDeviceScheduleCollection(input.uid, input.deviceId), {
+      deviceId: input.deviceId,
       name: input.name.trim(),
       startHour: input.startHour,
       endHour: input.endHour,
       enabled: isEnabled,
       timeOpen: hourLabel(input.startHour),
       timeClose: hourLabel(input.endHour),
-      isActive: isEnabled,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
     });
     window.dispatchEvent(new Event("schedule-updated"));
   }
@@ -297,9 +323,9 @@ export class ScheduleService {
   }): Promise<void> {
     try {
       const newStatus = !input.currentEnabled;
-      await updateDoc(doc(db, "users", input.uid, "devices", input.deviceId, "schedules", input.scheduleId), { 
+      await updateDoc(userDeviceScheduleDoc(input.uid, input.deviceId, input.scheduleId), { 
         enabled: newStatus, 
-        isActive: newStatus 
+        updatedAt: Date.now()
       });
       window.dispatchEvent(new Event("schedule-updated"));
     } catch (err) {
@@ -317,7 +343,7 @@ export class ScheduleService {
     deviceId: string;
     scheduleId: string;
   }): Promise<void> {
-    await deleteDoc(doc(db, "users", input.uid, "devices", input.deviceId, "schedules", input.scheduleId));
+    await deleteDoc(userDeviceScheduleDoc(input.uid, input.deviceId, input.scheduleId));
     window.dispatchEvent(new Event("schedule-updated"));
   }
 
@@ -329,6 +355,7 @@ export class ScheduleService {
   }
 
   static async setSystemOverride(status: boolean): Promise<void> {
+    // Legacy only. Do not use for per-device runtime command execution.
     const wokwiCommand = status ? "AUTO" : "CLOSE";
     
     await setDoc(doc(db, SYSTEM_SETTINGS_COLLECTION, SYSTEM_SETTINGS_DOC), { 
@@ -339,28 +366,6 @@ export class ScheduleService {
     
     window.dispatchEvent(new Event("schedule-updated"));
     console.info(`[ScheduleService] setSystemOverride updated userAllowedAuto to ${status}`);
-  }
-
-  static publishScheduleCommand(input: {
-    deviceId: string;
-    command: "OPEN" | "CLOSE" | "AUTO" | "MANUAL";
-    reason: string;
-  }): boolean {
-    if (!input.deviceId) {
-      console.warn("[ScheduleService] publishScheduleCommand called without deviceId");
-      return false;
-    }
-    const topics = getCommandPublishTopics(input.deviceId);
-    const payload = {
-      deviceId: input.deviceId,
-      command: input.command,
-      source: "schedule",
-      reason: input.reason,
-      timestamp: Date.now(),
-    };
-    return topics
-      .map((topic) => mqttService.publish(topic, payload))
-      .some(Boolean);
   }
 
   static async migrateLegacyLocalSchedulesOnce(): Promise<void> {

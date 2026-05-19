@@ -118,7 +118,10 @@ export default function SchedulePage() {
         });
       }
       setForm(initialForm); setIsFormOpen(false); void loadScheduleData();
-    } catch { setErrorMessage("Save failed"); }
+    } catch (error) {
+      setErrorMessage("Schedule could not be saved. Check login, active device, and Firestore rules.");
+      console.error("[Schedule] Save failed", error);
+    }
   };
 
   const onToggleSchedule = async (scheduleId: string, currentEnabled: boolean) => {
@@ -161,10 +164,11 @@ export default function SchedulePage() {
                 <AlertCircle className="h-6 w-6" />
               </div>
               <div>
-                 <p className="text-[10px] font-black text-teal-700 dark:text-teal-400 uppercase tracking-widest mb-1">Automation-first workflow</p>
+                 <p className="text-[10px] font-black text-teal-700 dark:text-teal-400 uppercase tracking-widest mb-1">Schedule details</p>
                  <p className="text-sm font-bold text-slate-600 dark:text-slate-400 leading-relaxed">
                    Use <Link href="/automation" className="text-teal-600 dark:text-teal-400 font-black underline decoration-teal-500/30 hover:decoration-teal-500 transition-all">Automation Control Center</Link> for policy and mode controls.
-                   This page is dedicated to detailed schedule operations.
+                   Schedules defined here will automatically target the active device.
+                   Note: Current schedule execution is dashboard-runtime scheduling. The browser/app must be running for schedule commands to publish.
                  </p>
               </div>
            </div>
@@ -321,12 +325,13 @@ export default function SchedulePage() {
                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
                         <ShieldCheck className="h-5 w-5" />
                      </div>
-                     <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Policy Insights</h2>
+                     <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Active device</h2>
                   </div>
                   
                   <div className="space-y-4">
-                     <InsightRow label="Schedules Count" value={`${schedules.length} Active`} icon={<Calendar size={16}/>} />
-                     <InsightRow label="Conflict Check" value="Validated" icon={<Shield size={16}/>} color="emerald" />
+                     <InsightRow label="Active Device" value={activeDeviceId || "None"} icon={<Calendar size={16}/>} />
+                     <InsightRow label="Storage Path" value={`users/${user?.uid ? user.uid.slice(0, 6) : "..."}.../${activeDeviceId}/schedules`} icon={<Shield size={16}/>} color="slate" />
+                     <InsightRow label="Schedule Status" value="Dashboard runtime scheduling" icon={<Shield size={16}/>} color="emerald" />
                   </div>
                </section>
 
@@ -334,7 +339,7 @@ export default function SchedulePage() {
                   <div className="absolute -right-10 -bottom-10 h-32 w-32 rounded-full bg-teal-500/20 blur-2xl" />
                   <div className="relative z-10">
                      <Clock className="h-10 w-10 text-teal-400 mb-6 opacity-40" />
-                     <h3 className="text-2xl font-black mb-3">Cycle Logic</h3>
+                     <h3 className="text-2xl font-black mb-3">Schedule window</h3>
                      <p className="text-sm font-medium text-slate-400 leading-relaxed mb-10">
                        Schedules defined here will automatically target the active device. 
                        Ensure your automation parameters are tuned to support scheduled operations.

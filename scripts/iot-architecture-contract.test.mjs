@@ -103,40 +103,52 @@ test("schedule synchronization contract validation", () => {
   const serviceContent = read("src/services/ScheduleService.ts");
   assert.ok(!serviceContent.includes("COMMAND_TOPIC"), "ScheduleService.ts must not import or use COMMAND_TOPIC");
   
-  // 2. ScheduleService.ts must not publish raw command without deviceId
-  assert.ok(serviceContent.includes("publishScheduleCommand"), "ScheduleService.ts must define publishScheduleCommand");
-  assert.ok(serviceContent.includes("!input.deviceId"), "ScheduleService.ts must guard against missing deviceId");
+  // 2. ScheduleService.ts must not call mqttService.publish(COMMAND_TOPIC
+  assert.ok(!serviceContent.includes("mqttService.publish(COMMAND_TOPIC"), "ScheduleService.ts must not publish to global COMMAND_TOPIC");
 
   // 3. ScheduleService.ts includes per-device schedule path under users/{uid}/devices/{deviceId}/schedules
-  assert.ok(serviceContent.includes('"users", input.uid, "devices", input.deviceId, "schedules"'), "ScheduleService.ts must use per-device schedules path");
+  assert.ok(
+    serviceContent.includes('"users", uid, "devices", deviceId, "schedules"') ||
+    serviceContent.includes('"users", input.uid, "devices", input.deviceId, "schedules"'),
+    "ScheduleService.ts must use per-device schedules path"
+  );
 
-  // 4. useSensor.ts uses getCommandPublishTopics for schedule-driven commands
-  const useSensorContent = read("src/hooks/useSensor.ts");
+  // 4. ScheduleRuntimeService.ts exists and exports evaluateScheduleTransition
   const runtimeContent = read("src/services/ScheduleRuntimeService.ts");
+  assert.ok(runtimeContent.includes("export function evaluateScheduleTransition"), "ScheduleRuntimeService.ts must export evaluateScheduleTransition");
+
+  // 5. useSensor.ts uses getCommandPublishTopics for schedule commands
+  const useSensorContent = read("src/hooks/useSensor.ts");
   assert.ok(
     useSensorContent.includes("getCommandPublishTopics(activeDeviceId)"),
     "Expected active device getCommandPublishTopics in schedule commands routing in useSensor.ts"
   );
 
-  // 5. Schedule page does not directly call setSystemOverride(true) / setSystemOverride(false) on time transition
+  // 6. src/features/schedule/screen.tsx does not call ScheduleService.setSystemOverride
   const screenContent = read("src/features/schedule/screen.tsx");
-  const screenLines = screenContent.split("\n");
-  const hasTransitionOverrideCall = screenLines.some(line => 
-    (line.includes("setSystemOverride(true)") || line.includes("setSystemOverride(false)")) && 
-    !line.includes("static")
-  );
-  assert.ok(!hasTransitionOverrideCall, "Schedule page must not directly call setSystemOverride on transition");
+  assert.ok(!screenContent.includes("setSystemOverride("), "Schedule screen must not call setSystemOverride directly");
 
-  // 6. Schedule runtime includes transition dedupe so it does not publish every second
-  assert.ok(
-    runtimeContent.includes("lastPublishedScheduleState === currentScheduleState") || 
-    useSensorContent.includes("lastPublishedScheduleState"),
-    "Schedule runtime must implement transition dedupe"
-  );
-
-  // 7. Schedule UI copy does not include "Temporal Engine", "Synchronizing Sequence", "Provisioning", "Commence", or "Conclude"
-  const slopWords = ["Temporal Engine", "Synchronizing Sequence", "Provisioning", "Commence", "Conclude"];
+  // 7. Schedule UI copy does not include those slop words
+  const slopWords = [
+    "Temporal Engine",
+    "Synchronizing Sequence",
+    "Provisioning",
+    "Commence",
+    "Conclude",
+    "Commit Schedule",
+    "Operational Queue"
+  ];
   for (const word of slopWords) {
     assert.ok(!screenContent.includes(word), `Schedule UI must not contain AI-slop copy: ${word}`);
   }
+
+  // 8. firestore.rules validation
+  const rulesContent = read("firestore.rules");
+  assert.ok(rulesContent.includes("users/{userId}/devices/{deviceId}/schedules/{scheduleId}"), "firestore.rules must contain the per-device schedules path match");
+  assert.ok(rulesContent.includes("match /telegram_commands/{docId}"), "firestore.rules must match telegram_commands path");
+  // Ensure telegram_commands blocks reads/writes
+  const commandLines = rulesContent.split("\n");
+  const tgCommandIndex = commandLines.findIndex(line => line.includes("match /telegram_commands/{docId}"));
+  assert.ok(tgCommandIndex !== -1, "telegram_commands path not found in firestore.rules");
+  assert.ok(commandLines[tgCommandIndex + 1].includes("allow read, write: if false;"), "telegram_commands must block all reads and writes");
 });

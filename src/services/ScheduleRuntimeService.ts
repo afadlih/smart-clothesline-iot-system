@@ -1,35 +1,71 @@
-import { StoredScheduleItem, isWithinSchedule } from "@/features/system/ScheduleEngine";
+import type { FirebaseScheduleItem } from "@/services/ScheduleService";
+import { isWithinSchedule } from "@/features/system/ScheduleEngine";
+
+export type ScheduleRuntimeState = "ACTIVE" | "INACTIVE";
 
 export type ScheduleRuntimeDecision = {
   shouldPublish: boolean;
   command: "OPEN" | "CLOSE" | null;
-  reason: string;
+  nextState: ScheduleRuntimeState;
   activeScheduleId: string | null;
+  reason: string;
 };
+
+export function getCurrentHourFloat(now: Date): number {
+  return now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+}
 
 export function evaluateScheduleTransition(input: {
   now: number;
+  schedules: FirebaseScheduleItem[];
+  lastRuntimeState: ScheduleRuntimeState | null;
   currentStatus: "OPEN" | "CLOSED" | "MOVING" | "FAULT" | "RESTARTING" | "UNKNOWN" | null;
-  mode: "AUTO" | "MANUAL" | null;
-  schedules: StoredScheduleItem[];
-  sensorRain: boolean;
-  isDark: boolean;
-  lastPublishedScheduleState: "ACTIVE" | "INACTIVE" | null;
+  mode: "AUTO" | "MANUAL" | "SCHEDULE" | "UNKNOWN" | null;
+  rain: boolean | null;
+  mqttConnected: boolean;
+  telemetryFresh: boolean;
 }): ScheduleRuntimeDecision {
   const date = new Date(input.now);
-  const currentHour = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
+  const currentHour = getCurrentHourFloat(date);
   
-  const activeSchedule = input.schedules.find((s) => isWithinSchedule(s, currentHour)) ?? null;
-  const scheduleActive = activeSchedule !== null;
-  const activeScheduleId = activeSchedule ? activeSchedule.id : null;
-  const currentScheduleState = scheduleActive ? "ACTIVE" : "INACTIVE";
+  // Find an active enabled schedule
+  const activeSchedule = input.schedules.find(s => 
+    s.enabled && isWithinSchedule({ id: s.id, startHour: s.startHour, endHour: s.endHour, enabled: s.enabled }, currentHour)
+  ) ?? null;
 
+  const nextState: ScheduleRuntimeState = activeSchedule ? "ACTIVE" : "INACTIVE";
+  const activeScheduleId = activeSchedule ? activeSchedule.id : null;
+
+  // Rule: If mode is MANUAL, do not schedule-publish.
+  // Return reason: "Schedule active, but device is in MANUAL mode."
   if (input.mode === "MANUAL") {
     return {
       shouldPublish: false,
       command: null,
-      reason: "Blocked: Device is in MANUAL mode.",
+      nextState,
       activeScheduleId,
+      reason: "Schedule active, but device is in MANUAL mode."
+    };
+  }
+
+  // Guards for blocking command publishing:
+  if (!input.mqttConnected) {
+    return {
+      shouldPublish: false,
+      command: null,
+      nextState,
+      activeScheduleId,
+      reason: "MQTT disconnected; schedule command not sent."
+    };
+  }
+
+  if (!input.telemetryFresh) {
+    return {
+      shouldPublish: false,
+      command: null,
+      nextState,
+      activeScheduleId,
+      reason: "Telemetry stale; schedule command not sent."
     };
   }
 
@@ -41,61 +77,60 @@ export function evaluateScheduleTransition(input: {
     return {
       shouldPublish: false,
       command: null,
-      reason: `Blocked: Device status is ${input.currentStatus || "UNKNOWN"}.`,
+      nextState,
       activeScheduleId,
+      reason: `Device status is ${input.currentStatus || "UNKNOWN"}; schedule command blocked.`
     };
   }
 
-  // Deduplication check: only act on state transitions (ACTIVE <-> INACTIVE)
-  if (input.lastPublishedScheduleState === currentScheduleState) {
+  // Deduplication check: transition check
+  if (input.lastRuntimeState === nextState) {
     return {
       shouldPublish: false,
       command: null,
-      reason: `No transition. Schedule remains ${currentScheduleState}.`,
+      nextState,
       activeScheduleId,
+      reason: "No schedule transition detected."
     };
   }
 
-  // Transition: Inactive -> Active
-  if (input.lastPublishedScheduleState !== "ACTIVE" && scheduleActive) {
-    if (input.sensorRain) {
+  // Transition: INACTIVE -> ACTIVE (Schedule Window Started)
+  if (nextState === "ACTIVE" && (input.lastRuntimeState === "INACTIVE" || input.lastRuntimeState === null)) {
+    // If rain is true, command would be OPEN but is blocked.
+    if (input.rain === true) {
       return {
-        shouldPublish: true,
-        command: "CLOSE",
-        reason: `Schedule active, but command forced CLOSE because rain is detected.`,
+        shouldPublish: false,
+        command: null,
+        nextState,
         activeScheduleId,
-      };
-    }
-    if (input.isDark) {
-      return {
-        shouldPublish: true,
-        command: "CLOSE",
-        reason: `Schedule active, but command forced CLOSE because low light (darkness) is detected.`,
-        activeScheduleId,
+        reason: "Rain detected; OPEN blocked."
       };
     }
     return {
       shouldPublish: true,
       command: "OPEN",
-      reason: `Schedule active. Command OPEN sent.`,
+      nextState,
       activeScheduleId,
+      reason: "Schedule window started."
     };
   }
 
-  // Transition: Active -> Inactive
-  if (input.lastPublishedScheduleState === "ACTIVE" && !scheduleActive) {
+  // Transition: ACTIVE -> INACTIVE (Schedule Window Ended)
+  if (nextState === "INACTIVE" && input.lastRuntimeState === "ACTIVE") {
     return {
       shouldPublish: true,
       command: "CLOSE",
-      reason: `Schedule became inactive. Command CLOSE sent.`,
+      nextState,
       activeScheduleId,
+      reason: "Schedule window ended."
     };
   }
 
   return {
     shouldPublish: false,
     command: null,
-    reason: "No transition or action required.",
+    nextState,
     activeScheduleId,
+    reason: "No active schedule command triggered."
   };
 }
