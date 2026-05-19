@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 
@@ -27,9 +27,9 @@ export default function BigDataPage() {
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10 dark:bg-slate-950">
       <div className="mx-auto max-w-5xl space-y-6">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Big Data Analytics</h1>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Sample Hadoop MapReduce Report</h1>
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          This page shows sample JSON generated from Hadoop MapReduce output. Hadoop is batch-only and not required for runtime.
+          Generated from sample output. Hadoop runtime is not required for this page, and production export is a follow-up task.
         </p>
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <table className="min-w-full text-sm">
@@ -54,3 +54,4 @@ export default function BigDataPage() {
     </main>
   );
 }
+

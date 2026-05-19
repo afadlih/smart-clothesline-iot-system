@@ -1,8 +1,8 @@
-# Telegram Notification-Only Integration
+﻿# Telegram Notification-Only Integration
 
 As of refactor `refactor/telegram-notification-only`, the Telegram integration has been transitioned to a **notification-only** model.
 
-## ⚠️ Architectural Change
+## Architectural Change
 
 Telegram is no longer used for:
 - Device control (commands like `/open`, `/close`, etc.)
@@ -12,7 +12,7 @@ Telegram is no longer used for:
 
 Telegram is now strictly a **unidirectional channel** for outbound system notifications.
 
-## 📡 Supported Notifications
+## Supported Notifications
 
 The system sends notifications for the following events:
 - **Rain Warnings**: When rain is detected while the clothesline is open.
@@ -20,7 +20,7 @@ The system sends notifications for the following events:
 - **Device Offline**: When no telemetry has been received for a sustained period.
 - **System Health**: Critical operational alerts.
 
-## ⚙️ Configuration
+## Configuration
 
 The following environment variables are required for notifications:
 
@@ -39,14 +39,14 @@ The following variables are no longer used and should be removed from your envir
 - `TELEGRAM_COMMAND_TTL_MS`
 - `TELEGRAM_COMMAND_MAX_AGE_MS`
 
-## 🛡️ Security
+## Security
 
 Since inbound commands are ignored, the security model has been simplified:
 - The webhook remains active but only returns a static "notification-only" message.
 - Webhook requests are still audit-logged for traceability.
 - Rate limiting (60s cooldown) is applied to webhook auto-replies to prevent bot spam.
 
-## 🧪 Testing
+## Testing
 
 To validate the notification integration, use the diagnostic endpoint:
 `GET /api/telegram/diagnostics`
@@ -121,3 +121,4 @@ curl -X POST "$APP_BASE_URL/api/telegram/notify" \
     "dashboardPath": "/big-data"
   }'
 ```
+

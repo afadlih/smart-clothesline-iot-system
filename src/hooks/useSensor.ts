@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { DecisionEngine } from "@/features/dashboard/DecisionEngine";
 import {
     getFinalState,
@@ -479,9 +479,10 @@ function shouldAcceptDevicePayload(payloadDeviceId?: string): boolean {
         return false;
     }
 
-    // Allow legacy payloads without deviceId so production streams are not blocked.
+    // Allow legacy payloads without deviceId for non-Wokwi active devices.
+    // This keeps backward compatibility with older firmware payloads.
     if (!payloadDeviceId) {
-        return false;
+        return activeDeviceId !== WOKWI_DEVICE_ID;
     }
 
     if (activeDeviceId === WOKWI_DEVICE_ID) {
@@ -1634,3 +1635,4 @@ export function useSensor() {
 }
 
 export type UseSensorDecision = ScheduleDecision;
+

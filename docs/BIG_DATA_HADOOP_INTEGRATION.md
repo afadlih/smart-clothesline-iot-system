@@ -1,4 +1,4 @@
-# Big Data Hadoop Integration
+﻿# Big Data Hadoop Integration
 
 Hadoop in this project is batch analytics only.
 
@@ -19,6 +19,8 @@ Implementation notes:
 - Dashboard remains the control surface for device commands.
 - Telegram is notification-only.
 - `/big-data` uses sample JSON and does not require Hadoop at runtime.
+- `/big-data` is a sample Hadoop MapReduce report generated from sample output.
+- Production export is a follow-up implementation task.
 - Use `scripts/bigdata/export-firestore-sensor-data.mjs` for scaffold export.
 - Use `scripts/bigdata/convert-mapreduce-output-to-json.mjs` to convert MapReduce output.
 
@@ -27,3 +29,4 @@ Recommended MVP jobs:
 - RainEventAggregationJob
 - DeviceHealthJob
 - AlertSummaryJob
+

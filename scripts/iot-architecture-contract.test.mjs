@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
@@ -56,7 +56,8 @@ test("big-data page does not depend on hadoop runtime", () => {
 
 test("design states telegram notification-only", () => {
   const designPath = existsSync(join(ROOT, "docs/DESIGN.md")) ? "docs/DESIGN.md" : "docs/design.md";
-  const content = read(designPath);
-  assert.ok(content.includes("Telegram role: notification-only."));
-  assert.ok(content.includes("Dashboard is the only application-level control surface."));
+  const content = read(designPath).toLowerCase();
+  assert.ok(content.includes("telegram role: notification-only"));
+  assert.ok(content.includes("dashboard is the only application-level control surface"));
 });
+
