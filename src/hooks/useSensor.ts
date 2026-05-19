@@ -1707,7 +1707,10 @@ export function useSensor() {
                 : snapshot.pendingCommand === "MANUAL"
                     ? null
                     : snapshot.pendingCommand,
-        currentHour: new Date(now).getHours(),
+        currentHour: (() => {
+            const d = new Date(now);
+            return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+        })(),
         safetyConfig: {
             lightThreshold: snapshot.deviceConfig.lightThreshold,
             rainThreshold: snapshot.deviceConfig.rainThreshold,

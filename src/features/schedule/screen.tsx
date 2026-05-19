@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
-import { Clock, Loader2, Plus, Power, ShieldCheck, Trash2, Calendar, AlertCircle, Zap, Shield } from "lucide-react";
+import { Clock, Loader2, Plus, Power, ShieldCheck, Trash2, Calendar, AlertCircle, Zap, Shield, Edit2 } from "lucide-react";
 import { isWithinSchedule } from "@/features/system/ScheduleEngine";
 import { ScheduleService, type FirebaseScheduleItem } from "@/services/ScheduleService";
 import { mqttService } from "@/services/MQTTService"; 
@@ -28,6 +28,7 @@ export default function SchedulePage() {
   const [loading, setLoading] = useState(true);
   const [schedules, setSchedules] = useState<FirebaseScheduleItem[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(initialForm);
   const [errorMessage, setErrorMessage] = useState("");
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
@@ -100,24 +101,46 @@ export default function SchedulePage() {
 
     try {
       const activeDevId = typeof window !== "undefined" ? localStorage.getItem("smart-clothesline-active-device-id-v1") : null;
-      if (user && activeDevId) {
-        await ScheduleService.addDeviceSchedule({
-          uid: user.uid,
-          deviceId: activeDevId,
-          name: form.name.trim(),
-          startHour,
-          endHour,
-          enabled: true,
-        });
+      if (editingScheduleId) {
+        if (user && activeDevId) {
+          await ScheduleService.updateDeviceSchedule({
+            uid: user.uid,
+            deviceId: activeDevId,
+            scheduleId: editingScheduleId,
+            name: form.name.trim(),
+            startHour,
+            endHour,
+          });
+        } else {
+          await ScheduleService.updateSchedule(editingScheduleId, {
+            name: form.name.trim(),
+            startHour,
+            endHour,
+          });
+        }
       } else {
-        await ScheduleService.addSchedule({
-          name: form.name.trim(),
-          startHour,
-          endHour,
-          enabled: true,
-        });
+        if (user && activeDevId) {
+          await ScheduleService.addDeviceSchedule({
+            uid: user.uid,
+            deviceId: activeDevId,
+            name: form.name.trim(),
+            startHour,
+            endHour,
+            enabled: true,
+          });
+        } else {
+          await ScheduleService.addSchedule({
+            name: form.name.trim(),
+            startHour,
+            endHour,
+            enabled: true,
+          });
+        }
       }
-      setForm(initialForm); setIsFormOpen(false); void loadScheduleData();
+      setForm(initialForm); 
+      setEditingScheduleId(null);
+      setIsFormOpen(false); 
+      void loadScheduleData();
     } catch (error) {
       setErrorMessage("Schedule could not be saved. Check login, active device, and Firestore rules.");
       console.error("[Schedule] Save failed", error);
@@ -194,8 +217,16 @@ export default function SchedulePage() {
 
             {activeDeviceId && (
               <div className="flex items-center gap-4">
-                <button onClick={() => setIsFormOpen(!isFormOpen)} className="flex items-center gap-4 px-8 py-4 rounded-2xl bg-teal-600 text-white font-black text-xs tracking-widest shadow-xl shadow-teal-600/20 hover:opacity-90 active:scale-95 transition-all">
-                  <Plus size={20} /> {isFormOpen ? "CLOSE PANEL" : "NEW SCHEDULE"}
+                <button onClick={() => {
+                  if (isFormOpen && !editingScheduleId) {
+                    setIsFormOpen(false);
+                  } else {
+                    setEditingScheduleId(null);
+                    setForm(initialForm);
+                    setIsFormOpen(true);
+                  }
+                }} className="flex items-center gap-4 px-8 py-4 rounded-2xl bg-teal-600 text-white font-black text-xs tracking-widest shadow-xl shadow-teal-600/20 hover:opacity-90 active:scale-95 transition-all">
+                  <Plus size={20} /> {isFormOpen && !editingScheduleId ? "CLOSE PANEL" : "NEW SCHEDULE"}
                 </button>
               </div>
             )}
@@ -223,7 +254,7 @@ export default function SchedulePage() {
                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
                         <Plus className="h-5 w-5" />
                      </div>
-                     <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">New schedule</h2>
+                     <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">{editingScheduleId ? "Edit schedule" : "New schedule"}</h2>
                   </div>
                   
                   <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
@@ -243,7 +274,14 @@ export default function SchedulePage() {
                   
                   {errorMessage && <p className="mt-6 text-[10px] font-black text-rose-500 uppercase tracking-widest">{errorMessage}</p>}
                   
-                  <div className="mt-10 flex justify-end">
+                  <div className="mt-10 flex justify-end gap-4">
+                     <button onClick={() => {
+                       setIsFormOpen(false);
+                       setEditingScheduleId(null);
+                       setForm(initialForm);
+                     }} className="px-10 py-5 rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 font-black text-xs tracking-widest hover:bg-slate-200 dark:hover:bg-white/10 active:scale-95 transition-all uppercase">
+                        Cancel
+                     </button>
                      <button onClick={onSubmitSchedule} className="px-10 py-5 rounded-2xl bg-slate-900 dark:bg-teal-600 text-white font-black text-xs tracking-widest shadow-xl shadow-teal-600/20 hover:opacity-90 active:scale-95 transition-all uppercase">
                         Save schedule
                      </button>
@@ -302,6 +340,27 @@ export default function SchedulePage() {
                                className={`flex items-center gap-4 px-8 py-4 rounded-2xl font-black text-[10px] tracking-[0.2em] uppercase transition-all active:scale-95 ${schedule.enabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-slate-100 dark:bg-white/5 text-slate-400 border border-slate-200 dark:border-white/5'}`}
                              >
                                 <Power size={16} /> {schedule.enabled ? "Enabled" : "Disabled"}
+                             </button>
+                             <button 
+                               onClick={() => {
+                                 const formatH = (h: number) => {
+                                    const hh = Math.floor(h);
+                                    const mm = Math.round((h - hh) * 60);
+                                    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+                                 };
+                                 setEditingScheduleId(schedule.id);
+                                 setForm({
+                                   name: schedule.name,
+                                   timeOpen: formatH(schedule.startHour),
+                                   timeClose: formatH(schedule.endHour),
+                                 });
+                                 setIsFormOpen(true);
+                                 window.scrollTo({ top: 0, behavior: 'smooth' });
+                               }} 
+                               className="p-4 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 hover:bg-blue-500 hover:text-white transition-all active:scale-95"
+                               title="Edit"
+                             >
+                                <Edit2 size={20} />
                              </button>
                              <button 
                                onClick={() => void onDeleteSchedule(schedule.id)} 
@@ -365,12 +424,12 @@ function InsightRow({ label, value, icon, color = "slate" }: { label: string; va
       amber: "text-amber-500",
    };
    return (
-      <div className="flex items-center justify-between p-6 rounded-[2rem] bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 group hover:border-blue-500/30 transition-all">
-         <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between gap-4 p-6 rounded-[2rem] bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 group hover:border-blue-500/30 transition-all">
+         <div className="flex items-center gap-3 shrink-0">
             <span className="text-slate-400 group-hover:text-blue-500 transition-colors">{icon}</span>
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</span>
          </div>
-         <span className={`text-[10px] font-black uppercase tracking-widest ${colors[color]}`}>{value}</span>
+         <span className={`text-[10px] font-black uppercase tracking-widest truncate text-right ${colors[color]}`} title={value}>{value}</span>
       </div>
    );
 }

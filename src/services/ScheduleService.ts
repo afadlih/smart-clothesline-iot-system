@@ -338,6 +338,36 @@ export class ScheduleService {
     window.dispatchEvent(new Event("schedule-updated"));
   }
 
+  static async updateSchedule(id: string, input: { name: string; startHour: number; endHour: number }): Promise<void> {
+    await updateDoc(doc(db, SCHEDULE_COLLECTION, id), {
+      name: input.name.trim(),
+      startHour: input.startHour,
+      endHour: input.endHour,
+      timeOpen: hourLabel(input.startHour),
+      timeClose: hourLabel(input.endHour),
+    });
+    window.dispatchEvent(new Event("schedule-updated"));
+  }
+
+  static async updateDeviceSchedule(input: {
+    uid: string;
+    deviceId: string;
+    scheduleId: string;
+    name: string;
+    startHour: number;
+    endHour: number;
+  }): Promise<void> {
+    await updateDoc(userDeviceScheduleDoc(input.uid, input.deviceId, input.scheduleId), {
+      name: input.name.trim(),
+      startHour: input.startHour,
+      endHour: input.endHour,
+      timeOpen: hourLabel(input.startHour),
+      timeClose: hourLabel(input.endHour),
+      updatedAt: Date.now()
+    });
+    window.dispatchEvent(new Event("schedule-updated"));
+  }
+
   static async deleteDeviceSchedule(input: {
     uid: string;
     deviceId: string;
