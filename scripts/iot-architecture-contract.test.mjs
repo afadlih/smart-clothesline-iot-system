@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
@@ -98,3 +98,45 @@ test("Wokwi per-device MQTT hotfix contract validation", () => {
   assert.ok(docsContent.toLowerCase().includes("device id must match"), "Expected Wokwi docs to state Device ID must match active device ID");
 });
 
+test("schedule synchronization contract validation", () => {
+  // 1. ScheduleService.ts must not import COMMAND_TOPIC
+  const serviceContent = read("src/services/ScheduleService.ts");
+  assert.ok(!serviceContent.includes("COMMAND_TOPIC"), "ScheduleService.ts must not import or use COMMAND_TOPIC");
+  
+  // 2. ScheduleService.ts must not publish raw command without deviceId
+  assert.ok(serviceContent.includes("publishScheduleCommand"), "ScheduleService.ts must define publishScheduleCommand");
+  assert.ok(serviceContent.includes("!input.deviceId"), "ScheduleService.ts must guard against missing deviceId");
+
+  // 3. ScheduleService.ts includes per-device schedule path under users/{uid}/devices/{deviceId}/schedules
+  assert.ok(serviceContent.includes('"users", input.uid, "devices", input.deviceId, "schedules"'), "ScheduleService.ts must use per-device schedules path");
+
+  // 4. useSensor.ts uses getCommandPublishTopics for schedule-driven commands
+  const useSensorContent = read("src/hooks/useSensor.ts");
+  const runtimeContent = read("src/services/ScheduleRuntimeService.ts");
+  assert.ok(
+    useSensorContent.includes("getCommandPublishTopics(activeDeviceId)"),
+    "Expected active device getCommandPublishTopics in schedule commands routing in useSensor.ts"
+  );
+
+  // 5. Schedule page does not directly call setSystemOverride(true) / setSystemOverride(false) on time transition
+  const screenContent = read("src/features/schedule/screen.tsx");
+  const screenLines = screenContent.split("\n");
+  const hasTransitionOverrideCall = screenLines.some(line => 
+    (line.includes("setSystemOverride(true)") || line.includes("setSystemOverride(false)")) && 
+    !line.includes("static")
+  );
+  assert.ok(!hasTransitionOverrideCall, "Schedule page must not directly call setSystemOverride on transition");
+
+  // 6. Schedule runtime includes transition dedupe so it does not publish every second
+  assert.ok(
+    runtimeContent.includes("lastPublishedScheduleState === currentScheduleState") || 
+    useSensorContent.includes("lastPublishedScheduleState"),
+    "Schedule runtime must implement transition dedupe"
+  );
+
+  // 7. Schedule UI copy does not include "Temporal Engine", "Synchronizing Sequence", "Provisioning", "Commence", or "Conclude"
+  const slopWords = ["Temporal Engine", "Synchronizing Sequence", "Provisioning", "Commence", "Conclude"];
+  for (const word of slopWords) {
+    assert.ok(!screenContent.includes(word), `Schedule UI must not contain AI-slop copy: ${word}`);
+  }
+});

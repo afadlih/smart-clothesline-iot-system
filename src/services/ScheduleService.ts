@@ -12,7 +12,8 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { normalizeSchedules, isWithinSchedule, SCHEDULE_STORAGE_KEY } from "@/features/system/ScheduleEngine";
-import { mqttService, COMMAND_TOPIC } from "@/services/MQTTService"; 
+import { mqttService } from "@/services/MQTTService"; 
+import { getCommandPublishTopics } from "@/services/mqttTopics";
 
 const SCHEDULE_COLLECTION = "schedules";
 const SYSTEM_SETTINGS_COLLECTION = "system_settings";
@@ -116,6 +117,84 @@ async function getFirestoreSchedulesRaw(): Promise<FirebaseScheduleItem[]> {
   }).filter((item): item is FirebaseScheduleItem => item !== null);
 }
 
+function userDeviceScheduleCollection(uid: string, deviceId: string) {
+  return collection(db, "users", uid, "devices", deviceId, "schedules");
+}
+
+function readDeviceScheduleCache(uid: string, deviceId: string): FirebaseScheduleItem[] | null {
+  const storage = safeGetLocalStorage();
+  if (!storage) return null;
+
+  try {
+    const key = `${SCHEDULE_CACHE_KEY}:${uid}:${deviceId}`;
+    const raw = storage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as {
+      savedAt?: number;
+      schedules?: unknown;
+    };
+    if (typeof parsed.savedAt !== "number") return null;
+    if (Date.now() - parsed.savedAt > SCHEDULE_CACHE_MAX_AGE_MS) return null;
+    if (!Array.isArray(parsed.schedules)) return null;
+
+    return parsed.schedules
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const candidate = item as Partial<FirebaseScheduleItem>;
+        if (typeof candidate.id !== "string") return null;
+        if (typeof candidate.name !== "string") return null;
+        if (typeof candidate.startHour !== "number") return null;
+        if (typeof candidate.endHour !== "number") return null;
+        if (typeof candidate.enabled !== "boolean") return null;
+        return {
+          id: candidate.id,
+          name: candidate.name,
+          startHour: candidate.startHour,
+          endHour: candidate.endHour,
+          enabled: candidate.enabled,
+        } satisfies FirebaseScheduleItem;
+      })
+      .filter((item): item is FirebaseScheduleItem => item !== null);
+  } catch {
+    return null;
+  }
+}
+
+function writeDeviceScheduleCache(uid: string, deviceId: string, schedules: FirebaseScheduleItem[]) {
+  const storage = safeGetLocalStorage();
+  if (!storage) return;
+  try {
+    const key = `${SCHEDULE_CACHE_KEY}:${uid}:${deviceId}`;
+    storage.setItem(
+      key,
+      JSON.stringify({
+        savedAt: Date.now(),
+        schedules,
+      }),
+    );
+  } catch {
+    // ignore cache errors
+  }
+}
+
+async function getFirestoreDeviceSchedulesRaw(uid: string, deviceId: string): Promise<FirebaseScheduleItem[]> {
+  const q = query(userDeviceScheduleCollection(uid, deviceId), orderBy("name", "asc"));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((item) => {
+    const value = item.data() as Record<string, unknown>;
+    const normalized = normalizeSchedules([{
+      id: item.id, startHour: value.startHour, endHour: value.endHour, enabled: value.enabled,
+      timeOpen: value.timeOpen, timeClose: value.timeClose, isActive: value.isActive,
+    }])[0];
+    if (!normalized) return null;
+    return {
+      id: item.id,
+      name: typeof value.name === "string" && value.name.trim() ? value.name.trim() : `Schedule ${item.id.slice(0, 4)}`,
+      startHour: normalized.startHour, endHour: normalized.endHour, enabled: normalized.enabled,
+    } satisfies FirebaseScheduleItem;
+  }).filter((item): item is FirebaseScheduleItem => item !== null);
+}
+
 export class ScheduleService {
   static parseTimeToFloat(value: string): number {
     const [h, m] = value.split(":").map(Number);
@@ -129,6 +208,20 @@ export class ScheduleService {
       return { schedules, fromCache: false };
     } catch {
       const cached = readScheduleCache();
+      return { schedules: cached ?? [], fromCache: true };
+    }
+  }
+
+  static async loadDeviceSchedules(input: {
+    uid: string;
+    deviceId: string;
+  }): Promise<{ schedules: FirebaseScheduleItem[]; fromCache: boolean }> {
+    try {
+      const schedules = await getFirestoreDeviceSchedulesRaw(input.uid, input.deviceId);
+      writeDeviceScheduleCache(input.uid, input.deviceId, schedules);
+      return { schedules, fromCache: false };
+    } catch {
+      const cached = readDeviceScheduleCache(input.uid, input.deviceId);
       return { schedules: cached ?? [], fromCache: true };
     }
   }
@@ -162,6 +255,27 @@ export class ScheduleService {
     window.dispatchEvent(new Event("schedule-updated"));
   }
 
+  static async addDeviceSchedule(input: {
+    uid: string;
+    deviceId: string;
+    name: string;
+    startHour: number;
+    endHour: number;
+    enabled?: boolean;
+  }): Promise<void> {
+    const isEnabled = input.enabled ?? true;
+    await addDoc(userDeviceScheduleCollection(input.uid, input.deviceId), {
+      name: input.name.trim(),
+      startHour: input.startHour,
+      endHour: input.endHour,
+      enabled: isEnabled,
+      timeOpen: hourLabel(input.startHour),
+      timeClose: hourLabel(input.endHour),
+      isActive: isEnabled,
+    });
+    window.dispatchEvent(new Event("schedule-updated"));
+  }
+
   static async toggleSchedule(id: string, currentEnabled: boolean): Promise<void> {
     try {
       const newStatus = !currentEnabled;
@@ -175,8 +289,35 @@ export class ScheduleService {
     }
   }
 
+  static async toggleDeviceSchedule(input: {
+    uid: string;
+    deviceId: string;
+    scheduleId: string;
+    currentEnabled: boolean;
+  }): Promise<void> {
+    try {
+      const newStatus = !input.currentEnabled;
+      await updateDoc(doc(db, "users", input.uid, "devices", input.deviceId, "schedules", input.scheduleId), { 
+        enabled: newStatus, 
+        isActive: newStatus 
+      });
+      window.dispatchEvent(new Event("schedule-updated"));
+    } catch (err) {
+      console.error("Failed to toggle device schedule:", err);
+    }
+  }
+
   static async deleteSchedule(id: string): Promise<void> {
     await deleteDoc(doc(db, SCHEDULE_COLLECTION, id));
+    window.dispatchEvent(new Event("schedule-updated"));
+  }
+
+  static async deleteDeviceSchedule(input: {
+    uid: string;
+    deviceId: string;
+    scheduleId: string;
+  }): Promise<void> {
+    await deleteDoc(doc(db, "users", input.uid, "devices", input.deviceId, "schedules", input.scheduleId));
     window.dispatchEvent(new Event("schedule-updated"));
   }
 
@@ -195,11 +336,31 @@ export class ScheduleService {
       command: wokwiCommand,
       updatedAt: new Date().toISOString() 
     }, { merge: true });
-
-    mqttService.publish(COMMAND_TOPIC, { command: wokwiCommand });
     
     window.dispatchEvent(new Event("schedule-updated"));
-    console.info(`[MQTT] Published ${wokwiCommand} to ${COMMAND_TOPIC}`);
+    console.info(`[ScheduleService] setSystemOverride updated userAllowedAuto to ${status}`);
+  }
+
+  static publishScheduleCommand(input: {
+    deviceId: string;
+    command: "OPEN" | "CLOSE" | "AUTO" | "MANUAL";
+    reason: string;
+  }): boolean {
+    if (!input.deviceId) {
+      console.warn("[ScheduleService] publishScheduleCommand called without deviceId");
+      return false;
+    }
+    const topics = getCommandPublishTopics(input.deviceId);
+    const payload = {
+      deviceId: input.deviceId,
+      command: input.command,
+      source: "schedule",
+      reason: input.reason,
+      timestamp: Date.now(),
+    };
+    return topics
+      .map((topic) => mqttService.publish(topic, payload))
+      .some(Boolean);
   }
 
   static async migrateLegacyLocalSchedulesOnce(): Promise<void> {

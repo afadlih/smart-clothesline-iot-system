@@ -1,7 +1,8 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DecisionEngine } from "@/features/dashboard/DecisionEngine";
 import {
     getFinalState,
+    isWithinSchedule,
     type ScheduleDecision,
     type StoredScheduleItem,
 } from "@/features/system/ScheduleEngine";
@@ -22,6 +23,8 @@ import { TelemetryNormalizerService } from "@/services/TelemetryNormalizerServic
 import { OperationalStateResolver } from "@/services/OperationalStateResolver";
 import { MqttDiagnosticsService, type DeviceStateSource } from "@/services/MqttDiagnosticsService";
 import { useSensorStore } from "@/stores/sensorStore";
+import { useAuthStore } from "@/stores/authStore";
+import { evaluateScheduleTransition } from "@/services/ScheduleRuntimeService";
 import { logger } from "@/lib/logger";
 import {
     WOKWI_DEFAULT_DEVICE_ID,
@@ -149,6 +152,17 @@ export type LastMqttMessage = {
     receivedAt: number;
 };
 
+export type ScheduleRuntimeState = {
+    loaded: boolean;
+    source: "firestore" | "cache" | "none";
+    deviceId: string | null;
+    activeScheduleId: string | null;
+    isActiveNow: boolean;
+    lastCommand: "OPEN" | "CLOSE" | null;
+    lastCommandAt: number | null;
+    lastReason: string;
+};
+
 type SensorSnapshot = {
     sensorData: SensorData | null;
     deviceState: DeviceState;
@@ -172,6 +186,7 @@ type SensorSnapshot = {
         dedupedStatusCount: number;
         deviceStateSource: DeviceStateSource;
         mqttDiagnostics: ReturnType<typeof MqttDiagnosticsService.snapshot>;
+        scheduleRuntime: ScheduleRuntimeState;
     };
     events: EventLog[];
     connection: ConnectionSnapshot;
@@ -244,6 +259,16 @@ const sharedState: SensorSnapshot = {
         dedupedStatusCount: 0,
         deviceStateSource: "UNKNOWN",
         mqttDiagnostics: MqttDiagnosticsService.snapshot(),
+        scheduleRuntime: {
+            loaded: false,
+            source: "none",
+            deviceId: null,
+            activeScheduleId: null,
+            isActiveNow: false,
+            lastCommand: null,
+            lastCommandAt: null,
+            lastReason: "Initialized schedule runtime",
+        },
     },
     events: [],
     connection: {
@@ -283,6 +308,9 @@ const lastTelegramAlertAtByKey: Record<string, number> = {};
 const alertConditionState: Record<string, boolean> = {};
 let lastSensorStoredAt = 0;
 let lastStatusPayloadAt = 0;
+
+let lastPublishedScheduleState: "ACTIVE" | "INACTIVE" | null = null;
+let sharedSchedules: StoredScheduleItem[] = [];
 
 function loadCacheDeviceConfig(): Partial<DeviceConfig> | null {
     if (typeof window === "undefined") return null;
@@ -673,6 +701,7 @@ function cloneSnapshot(): SensorSnapshot {
         debug: {
             ...sharedState.debug,
             mqttDiagnostics: { ...sharedState.debug.mqttDiagnostics },
+            scheduleRuntime: { ...sharedState.debug.scheduleRuntime },
         },
         events: [...sharedState.events],
         connection: { ...sharedState.connection },
@@ -1410,11 +1439,30 @@ export function useSensor() {
     useEffect(() => {
         let active = true;
         const refreshSchedules = async () => {
-            const result = await ScheduleService.loadSchedules();
+            const activeDeviceId = getActiveDeviceId();
+            const currentUser = useAuthStore.getState().user;
+            let result;
+            let source: "firestore" | "cache" | "none" = "none";
+            if (currentUser && activeDeviceId) {
+                result = await ScheduleService.loadDeviceSchedules({
+                    uid: currentUser.uid,
+                    deviceId: activeDeviceId
+                });
+                source = result.fromCache ? "cache" : "firestore";
+            } else {
+                result = await ScheduleService.loadSchedules();
+                source = result.fromCache ? "cache" : "firestore";
+            }
             if (!active) {
                 return;
             }
+            sharedSchedules = result.schedules;
             setSchedules(result.schedules);
+            sharedState.debug.scheduleRuntime = {
+                ...sharedState.debug.scheduleRuntime,
+                loaded: true,
+                source,
+            };
         };
 
         void ScheduleService.migrateLegacyLocalSchedulesOnce().then(() => {
@@ -1437,6 +1485,87 @@ export function useSensor() {
             setNow(nextNow);
             updateUiState(nextNow);
             detectOfflineAlert(nextNow);
+
+            // ===== SCHEDULE ENGINE EXECUTION =====
+            const activeDeviceId = getActiveDeviceId();
+            const isMqttConnected = mqttService.isConnected();
+            const isTelemetryStreaming = sharedState.uiState.stream === "STREAMING";
+            
+            // Determine active schedule for diagnostics
+            const dateObj = new Date(nextNow);
+            const currentHourFloat = dateObj.getHours() + dateObj.getMinutes() / 60 + dateObj.getSeconds() / 3600;
+            const currentActiveSchedule = sharedSchedules.find((s) => isWithinSchedule(s, currentHourFloat)) ?? null;
+            
+            sharedState.debug.scheduleRuntime = {
+                ...sharedState.debug.scheduleRuntime,
+                deviceId: activeDeviceId,
+                activeScheduleId: currentActiveSchedule ? currentActiveSchedule.id : null,
+                isActiveNow: currentActiveSchedule !== null,
+            };
+
+            const shouldRunSchedule = activeDeviceId && isMqttConnected && isTelemetryStreaming;
+            if (shouldRunSchedule) {
+                const rain = sharedState.sensorData?.isRaining() ?? false;
+                const isDark = sharedState.sensorData?.isDark(sharedState.deviceConfig.lightThreshold) ?? false;
+                
+                const decision = evaluateScheduleTransition({
+                    now: nextNow,
+                    currentStatus: sharedState.deviceState.status,
+                    mode: sharedState.deviceState.mode,
+                    schedules: sharedSchedules,
+                    sensorRain: rain,
+                    isDark,
+                    lastPublishedScheduleState,
+                });
+                
+                if (decision.shouldPublish && decision.command) {
+                    lastPublishedScheduleState = currentActiveSchedule !== null ? "ACTIVE" : "INACTIVE";
+                    
+                    sharedState.debug.scheduleRuntime.lastCommand = decision.command;
+                    sharedState.debug.scheduleRuntime.lastCommandAt = nextNow;
+                    sharedState.debug.scheduleRuntime.lastReason = decision.reason;
+                    
+                    const topics = getCommandPublishTopics(activeDeviceId);
+                    const payload = {
+                        deviceId: activeDeviceId,
+                        command: decision.command,
+                        source: "schedule",
+                        reason: decision.reason,
+                        timestamp: nextNow,
+                    };
+                    
+                    appendSerialLog(
+                        "COMMAND",
+                        `[Schedule] ${decision.command} -> publish ${topics.join(", ")} reason: ${decision.reason}`,
+                        nextNow,
+                    );
+                    
+                    pushSystemEvent({
+                        type: "COMMAND",
+                        title: "Schedule Command",
+                        description: decision.reason,
+                        timestamp: nextNow,
+                    });
+                    
+                    appendLegacyEvent({
+                        type: "SYSTEM",
+                        action: decision.command,
+                        timestamp: nextNow,
+                    });
+                    
+                    topics.forEach((topic) => {
+                        mqttService.publish(topic, payload);
+                    });
+                }
+            } else {
+                let blockReason = "Waiting for transition.";
+                if (!activeDeviceId) blockReason = "Blocked: No active device selected.";
+                else if (!isMqttConnected) blockReason = "Blocked: MQTT is disconnected.";
+                else if (!isTelemetryStreaming) blockReason = "Blocked: Telemetry not streaming.";
+                
+                sharedState.debug.scheduleRuntime.lastReason = blockReason;
+            }
+
             notifyListeners();
         }, 1000);
 
@@ -1610,6 +1739,7 @@ export function useSensor() {
         lastStatusUpdate: snapshot.lastStatusUpdate,
         lastMqttMessage: snapshot.lastMqttMessage,
         debug: snapshot.debug,
+        scheduleRuntime: snapshot.debug.scheduleRuntime,
         mqttConnected,
         isOnline,
         isStreaming,
