@@ -6,6 +6,7 @@ import { Bot, CloudRain, Settings2, Shield, Timer, Zap, History, ChevronRight } 
 import PageContainer from "@/components/layout/PageContainer";
 import { useSystemState } from "@/hooks/useSystemState";
 import { formatClock } from "@/utils/timeFormat";
+import { isWithinSchedule } from "@/features/system/ScheduleEngine";
 
 const SETTINGS_STORAGE_KEY = "smart-clothesline-settings-v1";
 
@@ -64,10 +65,29 @@ function calculateAutoThreshold(sensor: {
   };
 }
 
+function formatWindow(startHour: number, endHour: number): string {
+  const pad = (n: number) => String(Math.floor(n)).padStart(2, "0");
+  const hStart = Math.floor(startHour);
+  const mStart = Math.round((startHour - hStart) * 60);
+  const hEnd = Math.floor(endHour);
+  const mEnd = Math.round((endHour - hEnd) * 60);
+  return `${pad(hStart)}:${pad(mStart)} - ${pad(hEnd)}:${pad(mEnd)}`;
+}
+
 export default function AutomationPage() {
-  const { decision, sendCommand, publishConfig, events, sensorData } = useSystemState();
+  const { decision, sendCommand, publishConfig, events, sensorData, schedules } = useSystemState();
   const [settings, setSettings] = useState<AutomationSettings>(defaults);
   const [isSaving, setIsSaving] = useState(false);
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => { setCurrentTime(new Date()); }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const currentDecimalHour = useMemo(() => {
+    return currentTime.getHours() + currentTime.getMinutes() / 60 + currentTime.getSeconds() / 3600;
+  }, [currentTime]);
 
   useEffect(() => {
     try {
@@ -223,12 +243,41 @@ export default function AutomationPage() {
                     Configure <ChevronRight className="h-3 w-3" />
                   </Link>
                </div>
-               <div className="flex flex-col items-center justify-center py-20 bg-slate-50/50 dark:bg-white/5 rounded-[2rem] border border-dashed border-slate-200 dark:border-white/10">
-                  <div className="h-16 w-16 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center shadow-sm mb-6">
-                    <Timer className="h-8 w-8 text-slate-300 dark:text-slate-600" />
-                  </div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center leading-relaxed">No active override schedules found.<br/><span className="opacity-60">System currently follows default business rules.</span></p>
-               </div>
+               {schedules && schedules.length > 0 ? (
+                 <div className="space-y-4">
+                   {schedules.map((schedule) => {
+                     const isTimeMatch = isWithinSchedule(
+                       { id: schedule.id, startHour: schedule.startHour, endHour: schedule.endHour, enabled: true }, 
+                       currentDecimalHour
+                     );
+                     const isCurrentlyRunning = schedule.enabled && isTimeMatch;
+
+                     return (
+                       <div key={schedule.id} className={`flex items-center justify-between p-6 rounded-[2rem] bg-slate-50 dark:bg-white/5 border transition-all ${isCurrentlyRunning ? 'border-emerald-500/50 bg-emerald-500/5 dark:bg-emerald-500/5' : 'border-slate-200/50 dark:border-white/5'}`}>
+                         <div className="flex items-center gap-4">
+                           <div className={`p-3 rounded-xl ${isCurrentlyRunning ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-white/10 text-slate-500'}`}>
+                             <Timer className="h-4 w-4" />
+                           </div>
+                           <div>
+                             <p className="text-[10px] font-black text-slate-800 dark:text-white uppercase tracking-widest leading-none mb-1.5">{(schedule as Record<string, unknown>).name as string || `Schedule ${schedule.id.slice(0, 4)}`}</p>
+                             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{formatWindow(schedule.startHour, schedule.endHour)}</p>
+                           </div>
+                         </div>
+                         <span className={`text-[10px] font-black uppercase tracking-widest ${isCurrentlyRunning ? 'text-emerald-500 animate-pulse' : 'text-slate-400'}`}>
+                           {isCurrentlyRunning ? "RUNNING" : schedule.enabled ? "ENABLED" : "DISABLED"}
+                         </span>
+                       </div>
+                     );
+                   })}
+                 </div>
+               ) : (
+                 <div className="flex flex-col items-center justify-center py-20 bg-slate-50/50 dark:bg-white/5 rounded-[2rem] border border-dashed border-slate-200 dark:border-white/10">
+                    <div className="h-16 w-16 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center shadow-sm mb-6">
+                      <Timer className="h-8 w-8 text-slate-300 dark:text-slate-600" />
+                    </div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center leading-relaxed">No active override schedules found.<br/><span className="opacity-60">System currently follows default business rules.</span></p>
+                 </div>
+               )}
             </div>
           </div>
 

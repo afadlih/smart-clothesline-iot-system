@@ -282,6 +282,7 @@ Compatibility cautions:
 - Notification event catalog for Telegram.
 - Firestore collection/schema notes with compatibility guidance.
 - Hadoop batch runbook and output format notes.
+- [Schedule Synchronization Architecture](SCHEDULING_SYNC.md).
 
 ## 18. Definition of Done
 Design documentation is considered complete when:
@@ -296,3 +297,8 @@ Design documentation is considered complete when:
 - MQTT is selected because it is lightweight and suitable for realtime IoT messaging; actual latency must be measured during testing.
 - Reliability and performance claims should be backed by observed metrics in staging/production.
 - Any future architecture migration should be tracked as a separate implementation plan with rollback and compatibility strategy.
+
+## 20. Schedule Synchronization Design
+Schedules are stored per-device under `users/{uid}/devices/{deviceId}/schedules` and evaluated in the background via the browser runtime. This ensures that scheduled operations execute seamlessly without requiring the dashboard pages to remain open.
+For full details, see the [Schedule Synchronization Architecture](SCHEDULING_SYNC.md).
+
