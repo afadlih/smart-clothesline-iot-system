@@ -72,7 +72,8 @@ export class FirestoreService {
         try {
           await addDoc(collection(db, COLLECTION_NAME), this.toFirestoreDoc(item.data));
           sensorDataQueue.remove(item.id);
-        } catch {
+        } catch (error) {
+          console.warn("[Firestore] Failed to sync queued item:", item.id, error);
           // Stop trying if one fails
           break;
         }
@@ -194,7 +195,12 @@ export class FirestoreService {
     console.info("[Firestore] Syncing queued sensor data:", stats);
 
     const { synced } = await sensorDataQueue.syncWith(async (item: QueueItem<FirestoreSensorPayload>) => {
-      await addDoc(collection(db, COLLECTION_NAME), this.toFirestoreDoc(item.data));
+      try {
+        await addDoc(collection(db, COLLECTION_NAME), this.toFirestoreDoc(item.data));
+      } catch (error) {
+        console.warn("[Firestore] Individual queue item sync failed:", item.id, error);
+        throw error;
+      }
     });
 
     return synced;

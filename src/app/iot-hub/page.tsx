@@ -5,7 +5,8 @@ import { Activity, Cpu, RefreshCw, Wifi, Radio, Zap, ShieldAlert, Binary } from 
 import PageContainer from "@/components/layout/PageContainer";
 import PairingDeviceSettings, { type PairableDevice } from "@/features/settings/PairingDeviceSettings";
 import { useSystemState } from "@/hooks/useSystemState";
-import { getDeviceDiscoveryTopic, mqttService, type PairingDiscoveryMessage } from "@/services/MQTTService";
+import { mqttService, type PairingDiscoveryMessage } from "@/services/MQTTService";
+import { getPairingDiscoveryTopics } from "@/services/mqttTopics";
 import TelegramNotificationStatus from "@/features/dashboard/TelegramNotificationStatus";
 import { useAuth } from "@/hooks/useAuth";
 import { listUserDevices, pairUserDevice } from "@/services/UserDeviceService";
@@ -129,11 +130,11 @@ export default function IoTHubPage() {
   useEffect(() => {
     if (!pendingDeviceId) return;
 
-    const topic = getDeviceDiscoveryTopic(pendingDeviceId);
+    const topics = getPairingDiscoveryTopics(pendingDeviceId);
 
-    const unsubscribe = mqttService.subscribeTopic(topic, (rawPayload) => {
+    const handleDiscoveryPayload = (rawPayload: string) => {
       try {
-        const payload = JSON.parse(rawPayload) as Partial<PairingDiscoveryMessage>;
+        const payload = JSON.parse(rawPayload) as Partial<PairingDiscoveryMessage & { source?: string }>;
 
         if (typeof payload.deviceId !== "string" || typeof payload.deviceName !== "string") return;
         if (payload.deviceId !== pendingDeviceId) return;
@@ -143,7 +144,7 @@ export default function IoTHubPage() {
           name: payload.deviceName,
           signal: payload.ipAddress ? `IP: ${payload.ipAddress}` : "ESP32 discovery",
           status: typeof payload.status === "string" ? payload.status : "pairable",
-          source: "esp32",
+          source: payload.source === "wokwi" ? "wokwi" : "esp32",
           pairingCode: typeof payload.pairingCode === "string" ? payload.pairingCode : undefined,
           ipAddress: typeof payload.ipAddress === "string" ? payload.ipAddress : undefined,
           lastSeenAt: Date.now(),
@@ -154,9 +155,15 @@ export default function IoTHubPage() {
       } catch {
         // noop
       }
-    });
+    };
 
-    return unsubscribe;
+    const unsubscribers = topics.map((topic) =>
+      mqttService.subscribeTopic(topic, handleDiscoveryPayload)
+    );
+
+    return () => {
+      for (const unsubscribe of unsubscribers) unsubscribe();
+    };
   }, [pendingDeviceId]);
 
   const selectedDevice = devices.find((item) => item.id === selectedDeviceId) ?? null;

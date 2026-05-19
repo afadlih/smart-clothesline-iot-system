@@ -11,9 +11,6 @@ import { EventLogService } from "@/services/EventLogService";
 import { FirestoreService, sensorDataQueue } from "@/services/FirestoreService";
 import {
     STATUS_TOPIC,
-    getDeviceConfigAckTopic,
-    getDeviceCommandTopic,
-    getDeviceConfigTopic,
     mqttService,
 } from "@/services/MQTTService";
 import { pushSystemEvent } from "@/hooks/useNotificationEngine";
@@ -26,7 +23,14 @@ import { OperationalStateResolver } from "@/services/OperationalStateResolver";
 import { MqttDiagnosticsService, type DeviceStateSource } from "@/services/MqttDiagnosticsService";
 import { useSensorStore } from "@/stores/sensorStore";
 import { logger } from "@/lib/logger";
-import { getDeviceStatusTopics, getDeviceTelemetryTopics } from "@/services/mqttTopics";
+import {
+    WOKWI_DEFAULT_DEVICE_ID,
+    getCommandPublishTopics,
+    getDeviceStatusTopics,
+    getDeviceTelemetryTopics,
+    getDeviceConfigTopic,
+    getDeviceConfigAckTopic,
+} from "@/services/mqttTopics";
 
 type ConnectionState = "connecting" | "online" | "reconnecting" | "offline" | "error";
 type DeviceStatus = "OPEN" | "CLOSED" | "MOVING" | "FAULT" | "RESTARTING" | "UNKNOWN";
@@ -197,7 +201,6 @@ const OFFLINE_ALERT_INTERVAL_MS = 10_000;
 const TELEGRAM_ALERT_COOLDOWN_MS = 30_000;
 const SENSOR_SAMPLE_INTERVAL_MS = 5 * 60 * 1000;
 const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
-const WOKWI_DEVICE_ID = "wokwi-default";
 
 const sharedState: SensorSnapshot = {
     sensorData: null,
@@ -475,21 +478,27 @@ function shouldAcceptConfigAckPayload(payload: MqttConfigAckPayload): boolean {
 function shouldAcceptDevicePayload(payloadDeviceId?: string): boolean {
     const activeDeviceId = getActiveDeviceId();
 
-    if (!activeDeviceId) {
-        return false;
-    }
+    if (!activeDeviceId) return false;
 
-    // Allow legacy payloads without deviceId for non-Wokwi active devices.
-    // This keeps backward compatibility with older firmware payloads.
     if (!payloadDeviceId) {
-        return activeDeviceId !== WOKWI_DEVICE_ID;
+        const accepted = activeDeviceId !== WOKWI_DEFAULT_DEVICE_ID;
+        if (!accepted) {
+            logger.info("mqtt", "Filtered payload for another device", {
+                activeDeviceId,
+                payloadDeviceId: null,
+            });
+        }
+        return accepted;
     }
 
-    if (activeDeviceId === WOKWI_DEVICE_ID) {
-        return payloadDeviceId === WOKWI_DEVICE_ID;
+    const accepted = payloadDeviceId === activeDeviceId;
+    if (!accepted) {
+        logger.info("mqtt", "Filtered payload for another device", {
+            activeDeviceId,
+            payloadDeviceId: payloadDeviceId ?? null,
+        });
     }
-
-    return payloadDeviceId === activeDeviceId;
+    return accepted;
 }
 
 function applyConfigAckPayload(payload: MqttConfigAckPayload, receivedAt: number): void {
@@ -575,21 +584,26 @@ function parseStatusPacket(raw: string): StatusPacket | null {
             };
         }
 
-        if (data.status === "RESTARTING" && data.lastCommand === "RESTART") {
+        let statusInput = typeof data.status === "string" ? data.status.toUpperCase() : "";
+        if (statusInput === "OPENING" || statusInput === "CLOSING") {
+            statusInput = "MOVING";
+        }
+
+        if (statusInput === "RESTARTING") {
             return {
                 kind: "device",
                 payload: {
                     deviceId: typeof data.deviceId === "string" ? data.deviceId : undefined,
                     status: "RESTARTING",
-                    mode: sharedState.deviceState.mode ?? "MANUAL",
-                    lastCommand: "RESTART",
+                    mode: (data.mode === "AUTO" || data.mode === "MANUAL") ? data.mode : (sharedState.deviceState.mode ?? "MANUAL"),
+                    lastCommand: data.lastCommand === "RESTART" ? "RESTART" : undefined,
                     timestamp: typeof data.timestamp === "number" ? data.timestamp : undefined,
                 },
             };
         }
 
         if (
-            (data.status !== "OPEN" && data.status !== "CLOSED") ||
+            (statusInput !== "OPEN" && statusInput !== "CLOSED" && statusInput !== "MOVING") ||
             (data.mode !== "AUTO" && data.mode !== "MANUAL")
         ) {
             logger.warn("mqtt", "Invalid status payload", raw);
@@ -600,7 +614,7 @@ function parseStatusPacket(raw: string): StatusPacket | null {
             kind: "device",
             payload: {
                 deviceId: typeof data.deviceId === "string" ? data.deviceId : undefined,
-                status: data.status,
+                status: statusInput as DeviceStatus,
                 mode: data.mode,
                 lastCommand:
                     data.lastCommand === "OPEN" || data.lastCommand === "CLOSE" || data.lastCommand === "AUTO" || data.lastCommand === "MANUAL" || data.lastCommand === "RESTART"
@@ -863,6 +877,14 @@ function startStreamIfNeeded(): void {
     const sensorTopics = getDeviceTelemetryTopics(activeDeviceId);
     const statusTopics = getDeviceStatusTopics(activeDeviceId);
     const configAckTopic = getDeviceConfigAckTopic(activeDeviceId);
+
+    logger.info("mqtt", "Subscribing active device topics", {
+        activeDeviceId,
+        sensorTopics,
+        statusTopics,
+        configAckTopic,
+    });
+
     const sensorTopicSet = new Set(sensorTopics);
     const statusTopicSet = new Set(statusTopics);
 
@@ -1204,43 +1226,10 @@ export function sendCommand(command: DeviceCommand): boolean {
         return false;
     }
 
-    const commandTopic = getDeviceCommandTopic(activeDeviceId);
     const commandPayload = {
         deviceId: activeDeviceId,
         command,
     };
-
-    if (command === "RESTART") {
-        commandRateLimiter.recordSend(command);
-        sharedState.pendingCommand = command;
-        sharedState.commandStatus = "pending";
-        sharedState.commandSentAt = now;
-        notifyListeners();
-
-        appendSerialLog("COMMAND", `${command} -> publish ${commandTopic} target=${activeDeviceId}`, now);
-
-        appendLegacyEvent({
-            type: "USER",
-            action: command,
-            timestamp: now,
-        });
-        pushSystemEvent({
-            type: "COMMAND",
-            title: "Command sent",
-            description: `USER -> ${command} (${activeDeviceId})`,
-            timestamp: now,
-        });
-
-        MqttDiagnosticsService.recordCommandPayload(JSON.stringify(commandPayload), now);
-        const published = mqttService.publish(commandTopic, commandPayload);
-        if (!published) {
-            sharedState.pendingCommand = null;
-            sharedState.commandStatus = "idle";
-            sharedState.commandSentAt = null;
-            notifyListeners();
-        }
-        return published;
-    }
 
     commandRateLimiter.recordSend(command);
 
@@ -1249,12 +1238,20 @@ export function sendCommand(command: DeviceCommand): boolean {
     sharedState.commandSentAt = now;
     notifyListeners();
 
-    appendSerialLog("COMMAND", `${command} -> publish ${commandTopic} target=${activeDeviceId}`, now);
+    const commandTopics = getCommandPublishTopics(activeDeviceId);
+
+    appendSerialLog(
+        "COMMAND",
+        `${command} -> publish ${commandTopics.join(", ")} target=${activeDeviceId}`,
+        now,
+    );
+
     appendLegacyEvent({
         type: "USER",
         action: command,
         timestamp: now,
     });
+
     pushSystemEvent({
         type: "COMMAND",
         title: "Command sent",
@@ -1263,7 +1260,11 @@ export function sendCommand(command: DeviceCommand): boolean {
     });
 
     MqttDiagnosticsService.recordCommandPayload(JSON.stringify(commandPayload), now);
-    const published = mqttService.publish(commandTopic, commandPayload);
+
+    const published = commandTopics
+        .map((topic) => mqttService.publish(topic, commandPayload))
+        .some(Boolean);
+
     if (!published) {
         sharedState.pendingCommand = null;
         sharedState.commandStatus = "idle";
@@ -1415,10 +1416,6 @@ export function useSensor() {
             }
             setSchedules(result.schedules);
         };
-
-        void fetch("/api/telegram/polling").catch(() => {
-            // Polling bootstrap is best-effort for local development.
-        });
 
         void ScheduleService.migrateLegacyLocalSchedulesOnce().then(() => {
             void refreshSchedules();

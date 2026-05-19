@@ -82,6 +82,7 @@ Firmware must respond to commands on `smart-clothesline/command` and acknowledge
 - **Connectivity:** Upon reconnection, publish the current `status` immediately to sync the dashboard.
 - **Wokwi ADC Map:** Use `map(adc, 4095, 0, 0, 10000)` to normalize light values.
 - **Numeric Compliance:** Ensure all telemetry values are numbers, not strings, to support Firestore indexing.
+- **Wokwi Compatibility Guide:** For detailed per-device configuration, topic contract, and environment parameters, see the [Wokwi MQTT Compatibility Guide](./WOKWI_MQTT_COMPATIBILITY.md).
 
 ---
 

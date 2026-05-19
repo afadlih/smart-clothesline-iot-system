@@ -75,3 +75,26 @@ test("user device firestore payload sanitizes undefined fields", () => {
   );
 });
 
+test("Wokwi per-device MQTT hotfix contract validation", () => {
+  // Test 1: mqttTopics.ts exports WOKWI_DEFAULT_DEVICE_ID and has functions
+  const mqttTopicsContent = read("src/services/mqttTopics.ts");
+  assert.ok(mqttTopicsContent.includes("WOKWI_DEFAULT_DEVICE_ID"), "Expected WOKWI_DEFAULT_DEVICE_ID in mqttTopics.ts");
+  assert.ok(mqttTopicsContent.includes("LEGACY_TOPICS.sensor"), "Expected getDeviceTelemetryTopics to include LEGACY_TOPICS.sensor");
+  assert.ok(mqttTopicsContent.includes("LEGACY_TOPICS.status"), "Expected getDeviceStatusTopics to include LEGACY_TOPICS.status");
+  assert.ok(mqttTopicsContent.includes("getPairingDiscoveryTopics"), "Expected getPairingDiscoveryTopics to exist in mqttTopics.ts");
+  assert.ok(mqttTopicsContent.includes("getCommandPublishTopics"), "Expected getCommandPublishTopics to exist in mqttTopics.ts");
+
+  // Test 2: useSensor.ts contract
+  const useSensorContent = read("src/hooks/useSensor.ts");
+  assert.ok(useSensorContent.includes("getCommandPublishTopics"), "Expected useSensor.ts to import/use getCommandPublishTopics");
+  assert.ok(!useSensorContent.includes("/api/telegram/polling"), "Expected useSensor.ts to NOT contain /api/telegram/polling");
+
+  // Test 3: iot-hub/page.tsx contract
+  const iotHubContent = read("src/app/iot-hub/page.tsx");
+  assert.ok(iotHubContent.includes("getPairingDiscoveryTopics"), "Expected iot-hub/page.tsx to use getPairingDiscoveryTopics");
+
+  // Test 4: docs/WOKWI_MQTT_COMPATIBILITY.md exists and contains the match phrase
+  const docsContent = read("docs/WOKWI_MQTT_COMPATIBILITY.md");
+  assert.ok(docsContent.toLowerCase().includes("device id must match"), "Expected Wokwi docs to state Device ID must match active device ID");
+});
+
