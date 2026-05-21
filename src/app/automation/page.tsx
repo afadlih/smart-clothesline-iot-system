@@ -2,10 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Bot, CloudRain, Settings2, Shield, Timer, Zap, History, ChevronRight } from "lucide-react";
+import { Bot, CloudRain, Settings2, Shield, Timer, Zap, History, ChevronRight, Clock } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 import { useSystemState } from "@/hooks/useSystemState";
 import { formatClock } from "@/utils/timeFormat";
+import { ScheduleService, type FirebaseScheduleItem } from "@/services/ScheduleService";
+import { useAuth } from "@/hooks/useAuth";
+import { isWithinSchedule } from "@/features/system/ScheduleEngine";
 
 const SETTINGS_STORAGE_KEY = "smart-clothesline-settings-v1";
 
@@ -68,6 +71,47 @@ export default function AutomationPage() {
   const { decision, sendCommand, publishConfig, events, sensorData } = useSystemState();
   const [settings, setSettings] = useState<AutomationSettings>(defaults);
   const [isSaving, setIsSaving] = useState(false);
+
+  const { user } = useAuth();
+  const [schedules, setSchedules] = useState<FirebaseScheduleItem[]>([]);
+  const [loadingSchedules, setLoadingSchedules] = useState(true);
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => { setCurrentTime(new Date()); }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const loadScheduleData = async () => {
+      try {
+        const activeDevId = typeof window !== "undefined" ? localStorage.getItem("smart-clothesline-active-device-id-v1") : null;
+        if (user && activeDevId) {
+          const scheduleResult = await ScheduleService.loadDeviceSchedules({
+            uid: user.uid,
+            deviceId: activeDevId
+          });
+          setSchedules(scheduleResult.schedules.filter(s => s.enabled));
+        } else {
+          const scheduleResult = await ScheduleService.loadSchedules();
+          setSchedules(scheduleResult.schedules.filter(s => s.enabled));
+        }
+      } catch (err) {
+        console.error("Load error:", err);
+      } finally {
+        setLoadingSchedules(false);
+      }
+    };
+    
+    void loadScheduleData();
+    const onUpdate = () => { void loadScheduleData(); };
+    window.addEventListener("schedule-updated", onUpdate);
+    return () => window.removeEventListener("schedule-updated", onUpdate);
+  }, [user]);
+
+  const currentDecimalHour = useMemo(() => {
+    return currentTime.getHours() + currentTime.getMinutes() / 60 + currentTime.getSeconds() / 3600;
+  }, [currentTime]);
 
   useEffect(() => {
     try {
@@ -223,12 +267,56 @@ export default function AutomationPage() {
                     Configure <ChevronRight className="h-3 w-3" />
                   </Link>
                </div>
-               <div className="flex flex-col items-center justify-center py-20 bg-slate-50/50 dark:bg-white/5 rounded-[2rem] border border-dashed border-slate-200 dark:border-white/10">
-                  <div className="h-16 w-16 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center shadow-sm mb-6">
-                    <Timer className="h-8 w-8 text-slate-300 dark:text-slate-600" />
+               {loadingSchedules ? (
+                  <div className="flex flex-col items-center justify-center py-20 opacity-30">
+                     <Timer className="h-8 w-8 animate-pulse mb-4 text-emerald-500" />
+                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Loading schedules...</p>
                   </div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center leading-relaxed">No active override schedules found.<br/><span className="opacity-60">System currently follows default business rules.</span></p>
-               </div>
+               ) : schedules.length === 0 ? (
+                 <div className="flex flex-col items-center justify-center py-20 bg-slate-50/50 dark:bg-white/5 rounded-[2rem] border border-dashed border-slate-200 dark:border-white/10">
+                    <div className="h-16 w-16 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center shadow-sm mb-6">
+                      <Timer className="h-8 w-8 text-slate-300 dark:text-slate-600" />
+                    </div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center leading-relaxed">No active override schedules found.<br/><span className="opacity-60">System currently follows default business rules.</span></p>
+                 </div>
+               ) : (
+                 <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                   {schedules.map((schedule) => {
+                     const isTimeMatch = isWithinSchedule(
+                       { id: schedule.id, startHour: schedule.startHour, endHour: schedule.endHour, enabled: true }, 
+                       currentDecimalHour
+                     );
+                     
+                     const pad = (n: number) => String(Math.floor(n)).padStart(2, "0");
+                     const hStart = Math.floor(schedule.startHour);
+                     const mStart = Math.round((schedule.startHour - hStart) * 60);
+                     const hEnd = Math.floor(schedule.endHour);
+                     const mEnd = Math.round((schedule.endHour - hEnd) * 60);
+                     const timeStr = `${pad(hStart)}:${pad(mStart)} - ${pad(hEnd)}:${pad(mEnd)}`;
+
+                     return (
+                       <div key={schedule.id} className={`flex items-center justify-between p-6 rounded-[1.5rem] border transition-all ${isTimeMatch ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-slate-50 dark:bg-white/5 border-slate-200/50 dark:border-white/5'}`}>
+                          <div className="flex items-center gap-4">
+                             <div className={`p-3 rounded-xl ${isTimeMatch ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-slate-200 dark:bg-white/10 text-slate-500'}`}>
+                               <Clock className="h-5 w-5" />
+                             </div>
+                             <div>
+                                <h3 className={`text-sm font-black uppercase tracking-tight whitespace-nowrap ${isTimeMatch ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-800 dark:text-white'}`}>{timeStr}</h3>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{schedule.name}</p>
+                             </div>
+                          </div>
+                          {isTimeMatch ? (
+                            <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500 text-white text-[9px] font-black uppercase tracking-[0.2em] shadow-lg shadow-emerald-500/20 whitespace-nowrap">
+                               <Zap className="h-3 w-3" /> Running
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Waiting</span>
+                          )}
+                       </div>
+                     );
+                   })}
+                 </div>
+               )}
             </div>
           </div>
 
