@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
-import { Clock, Loader2, Plus, Power, ShieldCheck, Trash2, Calendar, AlertCircle, Zap, Shield, Edit2 } from "lucide-react";
+import { Clock, Loader2, Plus, Power, Trash2, Calendar, AlertCircle, Zap, Edit2 } from "lucide-react";
 import { isWithinSchedule } from "@/features/system/ScheduleEngine";
 import { ScheduleService, type FirebaseScheduleItem } from "@/services/ScheduleService";
 import { mqttService } from "@/services/MQTTService"; 
@@ -385,19 +385,3 @@ export default function SchedulePage() {
   );
 }
 
-function InsightRow({ label, value, icon, color = "slate" }: { label: string; value: string; icon: React.ReactNode; color?: string }) {
-   const colors: Record<string, string> = {
-      slate: "text-slate-400",
-      emerald: "text-emerald-500",
-      amber: "text-amber-500",
-   };
-   return (
-      <div className="flex items-center justify-between gap-4 p-6 rounded-[2rem] bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 group hover:border-blue-500/30 transition-all">
-         <div className="flex items-center gap-3 shrink-0">
-            <span className="text-slate-400 group-hover:text-blue-500 transition-colors">{icon}</span>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</span>
-         </div>
-         <span className={`text-[10px] font-black uppercase tracking-widest truncate text-right ${colors[color]}`} title={value}>{value}</span>
-      </div>
-   );
-}
