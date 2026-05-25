@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Zap,
   Shield,
@@ -9,8 +9,6 @@ import {
   Activity,
   AlertCircle,
   History,
-  Terminal,
-  Bug,
 } from "lucide-react";
 import OperationalHealthPanel from "@/components/status/OperationalHealth";
 import PageContainer from "@/components/layout/PageContainer";
@@ -57,31 +55,31 @@ export default function DashboardScreen() {
     decision,
     lastUpdate,
     sensor,
-    serialLogs,
-    connection,
-    drift,
-    debug,
+    // serialLogs,
+    // connection,
+    // drift,
+    // debug,
   } = useSystemState();
   const {
-    latestAlert,
+    // latestAlert,
     toasts,
     dismissToast,
     events: timelineEvents,
   } = useNotificationEngine();
-  const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
+  // const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isTimelineExpanded, _setIsTimelineExpanded] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isEventLogsExpanded, _setIsEventLogsExpanded] = useState(false);
-  const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
+  // const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
 
-  useEffect(() => {
-    setActiveDeviceId(localStorage.getItem(ACTIVE_DEVICE_STORAGE_KEY));
-  }, []);
+  // useEffect(() => {
+  //   setActiveDeviceId(localStorage.getItem(ACTIVE_DEVICE_STORAGE_KEY));
+  // }, []);
 
   const deviceStatusClass =
     runtime.deviceConnectivity === "OFFLINE" ||
-    runtime.deviceConnectivity === "UNKNOWN"
+      runtime.deviceConnectivity === "UNKNOWN"
       ? badgeClassByState("danger")
       : runtime.deviceConnectivity === "DELAYED"
         ? badgeClassByState("warn")
@@ -137,8 +135,8 @@ export default function DashboardScreen() {
                 className="block w-80 rounded-2xl border border-rose-200 bg-white/95 p-4 text-left shadow-2xl backdrop-blur-xl dark:border-rose-500/20 dark:bg-slate-900/95 animate-in slide-in-from-right-10 duration-300"
               >
                 <div className="flex items-center gap-2 mb-1">
-                   <div className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />
-                   <p className="text-[10px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-400">
+                  <div className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />
+                  <p className="text-[10px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-400">
                     System Alert
                   </p>
                 </div>
@@ -155,88 +153,82 @@ export default function DashboardScreen() {
 
         {/* Hero Status Section */}
         <div className="mb-8">
-            <section className="relative overflow-hidden rounded-[2.5rem] bg-white dark:bg-slate-900/50 p-8 md:p-10 shadow-2xl shadow-teal-500/5 border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
-              <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-teal-500/10 blur-[80px]" />
-              <div className="absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-emerald-500/5 blur-[80px]" />
-              
-              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500 text-white shadow-lg shadow-teal-500/20">
-                      <Activity className="h-5 w-5" />
-                    </div>
-                    <span className="text-[11px] font-black uppercase tracking-[0.25em] text-teal-600 dark:text-teal-400">
-                      Clothesline Overview
-                    </span>
-                  </div>
-                  <h2 className="text-6xl md:text-7xl font-black text-slate-800 dark:text-white tracking-tighter">
-                    {displayedStatus}
-                  </h2>
-                  <div className="flex items-center gap-3">
-                    <div className={`h-2 w-2 rounded-full ${runtime.streamState === 'STREAMING' ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-400'}`} />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                      {realtimeLabel}
-                    </span>
-                  </div>
-                </div>
+          <section className="relative overflow-hidden rounded-[2.5rem] bg-white dark:bg-slate-900/50 p-8 md:p-10 shadow-2xl shadow-teal-500/5 border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+            <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-teal-500/10 blur-[80px]" />
+            <div className="absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-emerald-500/5 blur-[80px]" />
 
-                <div className="max-w-md bg-slate-50 dark:bg-white/5 rounded-3xl p-6 border border-slate-200/50 dark:border-white/5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Decision Reasoning</p>
-                  <p className="text-sm font-bold text-slate-700 dark:text-slate-200 leading-relaxed">
-                    {decision.reason}
-                  </p>
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500 text-white shadow-lg shadow-teal-500/20">
+                    <Activity className="h-5 w-5" />
+                  </div>
+                  <span className="text-[11px] font-black uppercase tracking-[0.25em] text-teal-600 dark:text-teal-400">
+                    Clothesline Overview
+                  </span>
+                </div>
+                <h2 className="text-6xl md:text-7xl font-black text-slate-800 dark:text-white tracking-tighter">
+                  {displayedStatus}
+                </h2>
+                <div className="flex items-center gap-3">
+                  <div className={`h-2 w-2 rounded-full ${runtime.streamState === 'STREAMING' ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-400'}`} />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                    {realtimeLabel}
+                  </span>
                 </div>
               </div>
 
-              <div className="relative z-10 mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <StatusBadge
-                    icon={<Zap className="h-5 w-5" />}
-                    label="Active Mode"
-                    value={deviceModeLabel}
-                    valueClass="text-slate-800 dark:text-white"
-                    dotClass={deviceStatusClass.includes("rose") ? "bg-rose-500" : deviceStatusClass.includes("amber") ? "bg-amber-500" : "bg-emerald-500"}
-                    iconBgClass="bg-teal-500/10"
-                    iconTextClass="text-teal-600 dark:text-teal-400"
-                    title="Current operating mode"
-                />
-                <StatusBadge
-                    icon={<Shield className="h-5 w-5" />}
-                    label="Environmental Guard"
-                    value={safetyLabel}
-                    valueClass={runtime.decisionSource === "SAFETY" ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}
-                    dotClass={runtime.decisionSource === "SAFETY" ? "bg-rose-500" : "bg-emerald-500"}
-                    iconBgClass={runtime.decisionSource === "SAFETY" ? "bg-rose-500/10" : "bg-emerald-500/10"}
-                    iconTextClass={runtime.decisionSource === "SAFETY" ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}
-                    title="Automated safety protocols"
-                />
-                <StatusBadge
-                    icon={<Clock className="h-5 w-5" />}
-                    label="Heartbeat"
-                    value={lastUpdated}
-                    valueClass="text-slate-800 dark:text-white"
-                    dotClass="bg-teal-500"
-                    iconBgClass="bg-teal-500/10"
-                    iconTextClass="text-teal-600 dark:text-teal-400"
-                    title={runtime.freshnessSeconds === null ? "Never" : `${runtime.freshnessSeconds}s ago`}
-                />
-                <StatusBadge
-                    icon={<Calendar className="h-5 w-5" />}
-                    label="Auto Schedule"
-                    value={decision.activeSchedule ? `${formatHourFloat(decision.activeSchedule.startHour)} - ${formatHourFloat(decision.activeSchedule.endHour)}` : "Not Configured"}
-                    valueClass="text-slate-800 dark:text-white"
-                    dotClass={decision.scheduleActive ? "bg-emerald-500" : "bg-slate-400"}
-                    iconBgClass="bg-emerald-500/10"
-                    iconTextClass="text-emerald-600 dark:text-emerald-400"
-                    title={decision.scheduleActive ? "Schedule is active" : "Schedule is inactive"}
-                />
-              </div>
-            </section>
+            </div>
+
+            <div className="relative z-10 mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatusBadge
+                icon={<Zap className="h-5 w-5" />}
+                label="Active Mode"
+                value={deviceModeLabel}
+                valueClass="text-slate-800 dark:text-white"
+                dotClass={deviceStatusClass.includes("rose") ? "bg-rose-500" : deviceStatusClass.includes("amber") ? "bg-amber-500" : "bg-emerald-500"}
+                iconBgClass="bg-teal-500/10"
+                iconTextClass="text-teal-600 dark:text-teal-400"
+                title="Current operating mode"
+              />
+              <StatusBadge
+                icon={<Shield className="h-5 w-5" />}
+                label="Environmental Guard"
+                value={safetyLabel}
+                valueClass={runtime.decisionSource === "SAFETY" ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}
+                dotClass={runtime.decisionSource === "SAFETY" ? "bg-rose-500" : "bg-emerald-500"}
+                iconBgClass={runtime.decisionSource === "SAFETY" ? "bg-rose-500/10" : "bg-emerald-500/10"}
+                iconTextClass={runtime.decisionSource === "SAFETY" ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}
+                title="Automated safety protocols"
+              />
+              <StatusBadge
+                icon={<Clock className="h-5 w-5" />}
+                label="Heartbeat"
+                value={lastUpdated}
+                valueClass="text-slate-800 dark:text-white"
+                dotClass="bg-teal-500"
+                iconBgClass="bg-teal-500/10"
+                iconTextClass="text-teal-600 dark:text-teal-400"
+                title={runtime.freshnessSeconds === null ? "Never" : `${runtime.freshnessSeconds}s ago`}
+              />
+              <StatusBadge
+                icon={<Calendar className="h-5 w-5" />}
+                label="Active Schedule"
+                value={decision.activeSchedule ? `${formatHourFloat(decision.activeSchedule.startHour)} - ${formatHourFloat(decision.activeSchedule.endHour)}` : "Not Configured"}
+                valueClass="text-slate-800 dark:text-white"
+                dotClass={decision.scheduleActive ? "bg-emerald-500" : "bg-slate-400"}
+                iconBgClass="bg-emerald-500/10"
+                iconTextClass="text-emerald-600 dark:text-emerald-400"
+                title={decision.scheduleActive ? "Schedule is active" : "Schedule is inactive"}
+              />
+            </div>
+          </section>
         </div>
 
         <div className="grid grid-cols-1 gap-8 xl:grid-cols-12">
           {/* Main Controls & Data */}
-          <div className="space-y-8 xl:col-span-8">
-            
+          <div className="flex flex-col gap-8 xl:col-span-8">
+
             {/* Control Panel */}
             <section className="rounded-[2rem] bg-white dark:bg-slate-900/40 p-8 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
               <div className="flex items-center justify-between mb-8">
@@ -251,31 +243,27 @@ export default function DashboardScreen() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                 <div className="rounded-2xl bg-slate-50 dark:bg-white/5 p-5 border border-slate-200/50 dark:border-white/5">
-                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">State</p>
-                   <p className="text-xl font-black text-slate-800 dark:text-white uppercase">{runtime.actualDeviceStatus ?? "--"}</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">State</p>
+                  <p className="text-xl font-black text-slate-800 dark:text-white uppercase">{runtime.actualDeviceStatus ?? "--"}</p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 dark:bg-white/5 p-5 border border-slate-200/50 dark:border-white/5">
-                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Mode</p>
-                   <p className="text-xl font-black text-slate-800 dark:text-white uppercase">{runtime.actualDeviceMode ?? "--"}</p>
-                </div>
-                <div className="rounded-2xl bg-slate-50 dark:bg-white/5 p-5 border border-slate-200/50 dark:border-white/5">
-                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Last Ack</p>
-                   <p className="text-xl font-black text-slate-800 dark:text-white uppercase">{runtime.lastDeviceCommand ?? "-"}</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Mode</p>
+                  <p className="text-xl font-black text-slate-800 dark:text-white uppercase">{runtime.actualDeviceMode ?? "--"}</p>
                 </div>
               </div>
 
               {runtime.deviceConnectivity === "OFFLINE" && (
                 <div className="mb-6 flex items-center gap-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 p-4 text-sm font-bold text-rose-600 dark:text-rose-400">
-                   <AlertCircle className="h-5 w-5" />
-                   Commands blocked: Device is currently offline.
+                  <AlertCircle className="h-5 w-5" />
+                  Commands blocked: Device is currently offline.
                 </div>
               )}
               {!canSendCommand && (
                 <div className="mb-6 flex items-center gap-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 p-4 text-sm font-bold text-amber-700 dark:text-amber-300">
-                   <AlertCircle className="h-5 w-5" />
-                   {commandGuard.reason}
+                  <AlertCircle className="h-5 w-5" />
+                  {commandGuard.reason}
                 </div>
               )}
 
@@ -305,34 +293,34 @@ export default function DashboardScreen() {
             </section>
 
             {/* Sensor Grid */}
-            <section className="rounded-[2rem] bg-white dark:bg-slate-900/40 p-8 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+            <section className="flex-1 flex flex-col rounded-[2rem] bg-white dark:bg-slate-900/40 p-8 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
               <div className="flex items-center gap-3 mb-8">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
                   <Activity className="h-5 w-5" />
                 </div>
                 <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">Environmental Telemetry</h2>
               </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="rounded-2xl bg-slate-50 dark:bg-white/5 p-6 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/50 transition-colors">
+
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="flex flex-col justify-center rounded-2xl bg-slate-50 dark:bg-white/5 p-6 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/50 transition-colors">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Temperature</p>
                   <p className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">
                     {sensor ? `${sensor.temperature.toFixed(1)}°C` : "--"}
                   </p>
                 </div>
-                <div className="rounded-2xl bg-slate-50 dark:bg-white/5 p-6 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/50 transition-colors">
+                <div className="flex flex-col justify-center rounded-2xl bg-slate-50 dark:bg-white/5 p-6 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/50 transition-colors">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Humidity</p>
                   <p className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">
                     {sensor ? `${sensor.humidity.toFixed(1)}%` : "--"}
                   </p>
                 </div>
-                <div className="rounded-2xl bg-slate-50 dark:bg-white/5 p-6 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/50 transition-colors">
+                <div className="flex flex-col justify-center rounded-2xl bg-slate-50 dark:bg-white/5 p-6 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/50 transition-colors">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Light Intensity</p>
                   <p className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">
                     {sensor ? sensor.light.toFixed(0) : "--"}
                   </p>
                 </div>
-                <div className="rounded-2xl bg-slate-50 dark:bg-white/5 p-6 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/50 transition-colors">
+                <div className="flex flex-col justify-center rounded-2xl bg-slate-50 dark:bg-white/5 p-6 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/50 transition-colors">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Rain Detection</p>
                   <p className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">
                     {sensor ? (sensor.isRaining() ? "YES" : "NO") : "--"}
@@ -341,101 +329,36 @@ export default function DashboardScreen() {
               </div>
             </section>
 
-            {/* Alerts & Timeline Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <section className="rounded-[2rem] bg-white dark:bg-slate-900/40 p-8 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
-                  <div className="flex items-center gap-3 mb-6">
-                    <AlertCircle className="h-5 w-5 text-rose-500" />
-                    <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">Critical Alerts</h2>
-                  </div>
-                  
-                  {latestAlert ? (
-                    <div className="rounded-2xl bg-rose-500/5 border border-rose-500/20 p-5">
-                       <p className="text-sm font-bold text-rose-700 dark:text-rose-400 mb-1">{latestAlert.title}</p>
-                       <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{latestAlert.description}</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-10 opacity-40">
-                       <Shield className="h-10 w-10 text-teal-500 mb-3" />
-                       <p className="text-xs font-bold uppercase tracking-widest">System Secure</p>
-                    </div>
-                  )}
-                </section>
-
-                <section className="rounded-[2rem] bg-white dark:bg-slate-900/40 p-8 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <History className="h-5 w-5 text-teal-600 dark:text-teal-400" />
-                      <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">Activity Log</h2>
-                    </div>
-                    <button onClick={() => _setIsTimelineExpanded(!isTimelineExpanded)} className="text-[10px] font-black uppercase tracking-widest text-teal-600 hover:text-teal-700">
-                       {isTimelineExpanded ? 'Show Less' : 'View All'}
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    {timelineEvents.slice(0, isTimelineExpanded ? 10 : 3).map((event, idx) => (
-                      <div key={idx} className="flex gap-4">
-                        <div className="flex flex-col items-center">
-                           <div className="h-2 w-2 rounded-full bg-teal-500 shadow-[0_0_8px_rgba(20,184,166,0.5)]" />
-                           {idx < 2 && <div className="h-full w-px bg-slate-200 dark:bg-white/10 mt-1" />}
-                        </div>
-                        <div className="pb-4">
-                           <p className="text-xs font-bold text-slate-800 dark:text-white leading-none mb-1">{event.title}</p>
-                           <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">{new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-            </div>
           </div>
 
-          {/* Right Sidebar - System Health & Debug */}
-          <aside className="space-y-8 xl:col-span-4">
+          {/* Right Sidebar - System Health & Activity Log */}
+          <aside className="flex flex-col gap-8 xl:col-span-4">
             <OperationalHealthPanel health={operationalHealth} />
 
-            <section className="rounded-[2rem] bg-white dark:bg-slate-900/40 p-8 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
-              <div className="flex items-center gap-3 mb-6">
-                <Terminal className="h-5 w-5 text-teal-600 dark:text-teal-400" />
-                <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">System Console</h2>
+            <section className="flex-1 flex flex-col rounded-[2rem] bg-white dark:bg-slate-900/40 p-8 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <History className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                  <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">Activity Log</h2>
+                </div>
+                <button onClick={() => _setIsTimelineExpanded(!isTimelineExpanded)} className="text-[10px] font-black uppercase tracking-widest text-teal-600 hover:text-teal-700">
+                  {isTimelineExpanded ? 'Show Less' : 'View All'}
+                </button>
               </div>
-              <div className="space-y-3">
-                {serialLogs.slice(0, 5).map((log) => (
-                  <div key={log.id} className="rounded-xl bg-slate-50 dark:bg-white/5 p-4 border border-slate-200/50 dark:border-white/5">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                      {new Date(log.timestamp).toLocaleTimeString()}
-                    </p>
-                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200 font-mono leading-tight">
-                      {log.message}
-                    </p>
+
+              <div className="space-y-4">
+                {timelineEvents.slice(0, isTimelineExpanded ? 10 : 3).map((event, idx) => (
+                  <div key={idx} className="flex gap-4">
+                    <div className="flex flex-col items-center">
+                      <div className="h-2 w-2 rounded-full bg-teal-500 shadow-[0_0_8px_rgba(20,184,166,0.5)]" />
+                      {idx < (isTimelineExpanded ? 9 : 2) && <div className="h-full w-px bg-slate-200 dark:bg-white/10 mt-1" />}
+                    </div>
+                    <div className="pb-4">
+                      <p className="text-xs font-bold text-slate-800 dark:text-white leading-none mb-1">{event.title}</p>
+                      <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">{new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
                   </div>
                 ))}
-              </div>
-            </section>
-
-            <section className="rounded-[2rem] bg-white dark:bg-slate-900/40 p-8 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
-              <div className="flex items-center gap-3 mb-6">
-                <Bug className="h-5 w-5 text-amber-500" />
-                <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">Hardware Diags</h2>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Broker</p>
-                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{connection.state}</p>
-                 </div>
-                 <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Drift</p>
-                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{drift ?? "--"}ms</p>
-                 </div>
-                 <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Telemetry</p>
-                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{debug.mqttDiagnostics.freshnessSeconds ?? "--"}s</p>
-                 </div>
-                 <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">ID</p>
-                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{activeDeviceId?.split('-')[0] ?? "--"}</p>
-                 </div>
               </div>
             </section>
           </aside>

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
-import { Clock, Loader2, Plus, Power, ShieldCheck, Trash2, Calendar, AlertCircle, Zap, Shield, Edit2 } from "lucide-react";
+import { Clock, Loader2, Plus, Power, Trash2, Calendar, AlertCircle, Zap, Edit2 } from "lucide-react";
 import { isWithinSchedule } from "@/features/system/ScheduleEngine";
 import { ScheduleService, type FirebaseScheduleItem } from "@/services/ScheduleService";
 import { mqttService } from "@/services/MQTTService"; 
@@ -245,9 +245,9 @@ export default function SchedulePage() {
              </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-8 xl:grid-cols-12">
+          <div>
             {/* Main List Area */}
-            <section className="xl:col-span-8 space-y-8">
+            <section className="space-y-8">
               {isFormOpen && (
                 <div className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-10 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm animate-in fade-in slide-in-from-top-4 duration-500">
                   <div className="flex items-center gap-3 mb-10">
@@ -320,14 +320,14 @@ export default function SchedulePage() {
                              </div>
                              <div>
                                 <div className="flex items-center gap-4 mb-2">
-                                   <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter uppercase">{schedule.name}</h3>
+                                   <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter uppercase whitespace-nowrap">{formatWindow(schedule.startHour, schedule.endHour)}</h3>
                                    {isCurrentlyRunning && (
-                                     <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 text-[9px] font-black uppercase tracking-[0.2em] animate-pulse border border-emerald-500/20">
+                                     <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 text-[9px] font-black uppercase tracking-[0.2em] animate-pulse border border-emerald-500/20 whitespace-nowrap">
                                         <Zap className="h-3 w-3" /> Running now
                                      </span>
                                    )}
                                 </div>
-                                <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">{formatWindow(schedule.startHour, schedule.endHour)}</p>
+                                <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">{schedule.name}</p>
                                 {!isCurrentlyRunning && schedule.enabled && (
                                   <p className="text-[10px] font-black text-teal-500/60 uppercase tracking-widest mt-2">Waiting for next window</p>
                                 )}
@@ -377,39 +377,7 @@ export default function SchedulePage() {
               </div>
             </section>
 
-            {/* Sidebar Insights */}
-            <aside className="xl:col-span-4 space-y-8">
-               <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-10 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
-                  <div className="flex items-center gap-3 mb-10">
-                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
-                        <ShieldCheck className="h-5 w-5" />
-                     </div>
-                     <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Active device</h2>
-                  </div>
-                  
-                  <div className="space-y-4">
-                     <InsightRow label="Active Device" value={activeDeviceId || "None"} icon={<Calendar size={16}/>} />
-                     <InsightRow label="Storage Path" value={`users/${user?.uid ? user.uid.slice(0, 6) : "..."}.../${activeDeviceId}/schedules`} icon={<Shield size={16}/>} color="slate" />
-                     <InsightRow label="Schedule Status" value="Dashboard runtime scheduling" icon={<Shield size={16}/>} color="emerald" />
-                  </div>
-               </section>
 
-               <section className="rounded-[2.5rem] bg-slate-900 p-10 text-white relative overflow-hidden shadow-2xl">
-                  <div className="absolute -right-10 -bottom-10 h-32 w-32 rounded-full bg-teal-500/20 blur-2xl" />
-                  <div className="relative z-10">
-                     <Clock className="h-10 w-10 text-teal-400 mb-6 opacity-40" />
-                     <h3 className="text-2xl font-black mb-3">Schedule window</h3>
-                     <p className="text-sm font-medium text-slate-400 leading-relaxed mb-10">
-                       Schedules defined here will automatically target the active device. 
-                       Ensure your automation parameters are tuned to support scheduled operations.
-                     </p>
-                     <div className="flex items-center justify-between pt-6 border-t border-white/5">
-                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Live Clock</span>
-                        <span className="text-2xl font-black font-mono text-teal-400">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                     </div>
-                  </div>
-               </section>
-            </aside>
           </div>
         )}
       </PageContainer>
@@ -417,19 +385,3 @@ export default function SchedulePage() {
   );
 }
 
-function InsightRow({ label, value, icon, color = "slate" }: { label: string; value: string; icon: React.ReactNode; color?: string }) {
-   const colors: Record<string, string> = {
-      slate: "text-slate-400",
-      emerald: "text-emerald-500",
-      amber: "text-amber-500",
-   };
-   return (
-      <div className="flex items-center justify-between gap-4 p-6 rounded-[2rem] bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 group hover:border-blue-500/30 transition-all">
-         <div className="flex items-center gap-3 shrink-0">
-            <span className="text-slate-400 group-hover:text-blue-500 transition-colors">{icon}</span>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</span>
-         </div>
-         <span className={`text-[10px] font-black uppercase tracking-widest truncate text-right ${colors[color]}`} title={value}>{value}</span>
-      </div>
-   );
-}
