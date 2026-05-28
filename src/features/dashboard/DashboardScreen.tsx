@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Zap,
   Shield,
@@ -15,6 +15,7 @@ import PageContainer from "@/components/layout/PageContainer";
 import StatusBadge from "@/components/layout/StatusBadge";
 import { useNotificationEngine } from "@/hooks/useNotificationEngine";
 import { useSystemState } from "@/hooks/useSystemState";
+import { PairableDevice } from "../settings/PairingDeviceSettings";
 
 function formatClock(value: number | null): string {
   if (value === null) {
@@ -66,16 +67,27 @@ export default function DashboardScreen() {
     dismissToast,
     events: timelineEvents,
   } = useNotificationEngine();
-  // const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
+  const [device, setDevice] = useState<PairableDevice | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isTimelineExpanded, _setIsTimelineExpanded] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isEventLogsExpanded, _setIsEventLogsExpanded] = useState(false);
-  // const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
+  const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-devices-v1";
 
-  // useEffect(() => {
-  //   setActiveDeviceId(localStorage.getItem(ACTIVE_DEVICE_STORAGE_KEY));
-  // }, []);
+  useEffect(() => { // untuk mengambil data dari localstorage 
+    try {
+      const raw = localStorage.getItem(ACTIVE_DEVICE_STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      const selectedDevice = data.devices?.find(
+        (device: PairableDevice) => device.id === data.selectedDeviceId
+      ) ?? null;
+      setDevice(selectedDevice);
+    } catch (error) {
+      console.error("Gagal membaca device dari localStorage:", error);
+      setDevice(null);
+    }
+  }, []);
 
   const deviceStatusClass =
     runtime.deviceConnectivity === "OFFLINE" ||
@@ -120,6 +132,7 @@ export default function DashboardScreen() {
         : runtime.commandStatus === "timeout"
           ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
           : "bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20";
+
 
 
   return (
@@ -170,11 +183,14 @@ export default function DashboardScreen() {
                 <h2 className="text-6xl md:text-7xl font-black text-slate-800 dark:text-white tracking-tighter">
                   {displayedStatus}
                 </h2>
-                <div className="flex items-center gap-3">
-                  <div className={`h-2 w-2 rounded-full ${runtime.streamState === 'STREAMING' ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-400'}`} />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                    {realtimeLabel}
-                  </span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`h-2 w-2 rounded-full ${runtime.streamState === 'STREAMING' ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-400'}`} />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                      {realtimeLabel}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-widest">{device?.name}</span>
                 </div>
               </div>
 

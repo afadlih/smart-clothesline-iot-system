@@ -143,7 +143,29 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
     router.push("/settings?tab=profile");
   };
 
+  const clearSmartClothesLineStorage = () => {
+    const keysToRemove: string[] = [];
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+
+      if (
+        key.startsWith("smart-clothesline-") ||
+        key === "isLogin" ||
+        key === "user"
+      ) {
+        keysToRemove.push(key);
+      }
+
+      keysToRemove.forEach((key) => {
+        localStorage.removeItem(key);
+      })
+    }
+  }
+
   const handleSignOut = async () => {
+    clearSmartClothesLineStorage();
     setIsUserMenuOpen(false);
     await signOutUser();
     router.replace("/auth/login");
@@ -212,9 +234,8 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
   }
 
   return (
-    <header className={`sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl transition-all duration-300 border-b border-slate-200/60 dark:border-white/10 ${
-      isMobileMenuOpen ? 'md:hidden blur-sm' : ''
-    }`}>
+    <header className={`sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl transition-all duration-300 border-b border-slate-200/60 dark:border-white/10 ${isMobileMenuOpen ? 'md:hidden blur-sm' : ''
+      }`}>
       <div className="flex items-center justify-between gap-2 md:gap-4 px-4 py-3 md:px-6 lg:px-8 transition-colors duration-300">
         {/* Left Section */}
         <div className="flex flex-shrink-0 items-center gap-1 sm:gap-2">
