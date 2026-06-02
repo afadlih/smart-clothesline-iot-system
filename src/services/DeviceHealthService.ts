@@ -1,5 +1,5 @@
-import type { SensorHistoryItem } from "@/hooks/useSensor";
-import type { ConnectionSnapshot } from "@/hooks/useSensor";
+import type { SensorHistoryItem } from "@/features/sensor/hooks/useSensor";
+import type { ConnectionSnapshot } from "@/features/sensor/hooks/useSensor";
 
 type DeviceCommandStatus = "idle" | "pending" | "success" | "timeout";
 

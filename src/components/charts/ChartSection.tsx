@@ -1,6 +1,6 @@
 "use client";
 
-import { SensorHistoryItem } from "@/hooks/useSensor";
+import { SensorHistoryItem } from "@/features/sensor/hooks/useSensor";
 
 type ChartSectionProps = {
 	history: SensorHistoryItem[];

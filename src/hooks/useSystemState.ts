@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useSensor } from "@/hooks/useSensor";
+import { useSensor } from "@/features/sensor/hooks/useSensor";
 import { RuntimeStatePresenter } from "@/services/RuntimeStatePresenter";
 
 export function useSystemState() {

@@ -89,9 +89,11 @@ test("Wokwi per-device MQTT hotfix contract validation", () => {
   assert.ok(useSensorContent.includes("getCommandPublishTopics"), "Expected useSensor.ts to import/use getCommandPublishTopics");
   assert.ok(!useSensorContent.includes("/api/telegram/polling"), "Expected useSensor.ts to NOT contain /api/telegram/polling");
 
-  // Test 3: iot-hub/page.tsx contract
-  const iotHubContent = read("src/app/iot-hub/page.tsx");
-  assert.ok(iotHubContent.includes("getPairingDiscoveryTopics"), "Expected iot-hub/page.tsx to use getPairingDiscoveryTopics");
+  // Test 3: iot-hub page contract (checks IoTHubPage.tsx if modularized, else page.tsx)
+  const iotHubContent = existsSync(join(ROOT, "src/features/iothub/IoTHubPage.tsx"))
+    ? read("src/features/iothub/IoTHubPage.tsx")
+    : read("src/app/iot-hub/page.tsx");
+  assert.ok(iotHubContent.includes("getPairingDiscoveryTopics"), "Expected IoT Hub page to use getPairingDiscoveryTopics");
 
   // Test 4: docs/WOKWI_MQTT_COMPATIBILITY.md exists and contains the match phrase
   const docsContent = read("docs/WOKWI_MQTT_COMPATIBILITY.md");
