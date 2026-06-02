@@ -3,11 +3,16 @@ export type RawTelemetryPayload = {
   temperature?: unknown;
   humidity?: unknown;
   light?: unknown;
+  lightRaw?: unknown;
+  lightThreshold?: unknown;
   rain?: unknown;
+  rainVal?: unknown;
+  rainRaw?: unknown;
   timestamp?: unknown;
   heartbeat?: unknown;
   mode?: unknown;
   status?: unknown;
+  lastCommand?: unknown;
 };
 
 export type ValidTelemetryPayload = {
@@ -15,11 +20,19 @@ export type ValidTelemetryPayload = {
   temperature: number;
   humidity: number;
   light: number;
+  lightRaw?: number;
+  lightThreshold?: number;
   rain: boolean;
+  rainVal?: number;
+  rainRaw?: number;
   timestamp: number;
   heartbeat: number;
+  deviceTimestamp?: number;
+  deviceUptimeMs?: number;
+  heartbeatAt: number;
   mode?: "AUTO" | "MANUAL";
-  deviceState?: "OPEN" | "CLOSED" | "RESTARTING";
+  deviceState?: "OPEN" | "CLOSED" | "MOVING" | "FAULT" | "RESTARTING" | "UNKNOWN";
+  lastCommand?: "OPEN" | "CLOSE" | "AUTO" | "MANUAL" | "RESTART";
 };
 
 type ValidationResult =
@@ -42,6 +55,34 @@ function toSafeTimestamp(input: unknown, fallback: number): number {
   return parsed;
 }
 
+function toTelemetryTime(
+  input: unknown,
+  fallback: number,
+): { effectiveAt: number; deviceTimestamp?: number; deviceUptimeMs?: number } {
+  const parsed = toFiniteNumber(input);
+  if (parsed === null || parsed <= 0) {
+    return { effectiveAt: fallback };
+  }
+
+  // Epoch seconds
+  if (parsed >= 946684800 && parsed < 1_000_000_000_000) {
+    const ms = parsed * 1000;
+    return { effectiveAt: ms, deviceTimestamp: ms };
+  }
+
+  // Epoch milliseconds
+  if (parsed >= 946684800000 && parsed <= Date.now() + 5 * 60 * 1000) {
+    return { effectiveAt: parsed, deviceTimestamp: parsed };
+  }
+
+  // Device uptime millis (e.g. millis() from firmware)
+  if (parsed > 0 && parsed < 946684800000) {
+    return { effectiveAt: fallback, deviceUptimeMs: parsed };
+  }
+
+  return { effectiveAt: fallback };
+}
+
 export class SensorValidationLayer {
   static validate(raw: RawTelemetryPayload, receivedAt: number): ValidationResult {
     const temperature = toFiniteNumber(raw.temperature);
@@ -57,16 +98,49 @@ export class SensorValidationLayer {
       return { ok: false, reason: "Invalid rain flag" };
     }
 
+    const rainRawValue = toFiniteNumber(raw.rainVal ?? raw.rainRaw);
+    const lightRawValue = toFiniteNumber(raw.lightRaw);
+    const lightThresholdValue = toFiniteNumber(raw.lightThreshold);
+
     const sanitizedTemperature = Math.max(-50, Math.min(100, temperature));
     const sanitizedHumidity = Math.max(0, Math.min(100, humidity));
     const sanitizedLight = Math.max(0, Math.min(10000, light));
-    const timestamp = toSafeTimestamp(raw.timestamp, receivedAt);
-    const heartbeat = toSafeTimestamp(raw.heartbeat, timestamp);
+
+    const sanitizedRainRaw =
+      rainRawValue === null ? undefined : Math.max(0, Math.min(4095, rainRawValue));
+
+    const sanitizedLightRaw =
+      lightRawValue === null ? undefined : Math.max(0, Math.min(4095, lightRawValue));
+
+    const sanitizedLightThreshold =
+      lightThresholdValue === null ? undefined : Math.max(0, Math.min(10000, lightThresholdValue));
+
+    const timestampInfo = toTelemetryTime(raw.timestamp, receivedAt);
+    const heartbeatInfo = toTelemetryTime(raw.heartbeat, timestampInfo.effectiveAt);
+    const timestamp = toSafeTimestamp(timestampInfo.effectiveAt, receivedAt);
+    const heartbeat = toSafeTimestamp(heartbeatInfo.effectiveAt, timestamp);
 
     const mode = raw.mode === "AUTO" || raw.mode === "MANUAL" ? raw.mode : undefined;
+    const statusUpper = typeof raw.status === "string" ? raw.status.toUpperCase() : undefined;
     const deviceState =
-      raw.status === "OPEN" || raw.status === "CLOSED" || raw.status === "RESTARTING"
-        ? raw.status
+      statusUpper === "OPEN" ||
+      statusUpper === "CLOSED" ||
+      statusUpper === "MOVING" ||
+      statusUpper === "FAULT" ||
+      statusUpper === "RESTARTING" ||
+      statusUpper === "UNKNOWN"
+        ? statusUpper
+        : statusUpper === "OPENING" || statusUpper === "CLOSING"
+          ? "MOVING"
+          : undefined;
+
+    const lastCommand =
+      raw.lastCommand === "OPEN" ||
+      raw.lastCommand === "CLOSE" ||
+      raw.lastCommand === "AUTO" ||
+      raw.lastCommand === "MANUAL" ||
+      raw.lastCommand === "RESTART"
+        ? raw.lastCommand
         : undefined;
 
     const value: ValidTelemetryPayload = {
@@ -74,15 +148,22 @@ export class SensorValidationLayer {
       temperature: sanitizedTemperature,
       humidity: sanitizedHumidity,
       light: sanitizedLight,
+      lightRaw: sanitizedLightRaw,
+      lightThreshold: sanitizedLightThreshold,
       rain: rawRain,
+      rainVal: sanitizedRainRaw,
+      rainRaw: sanitizedRainRaw,
       timestamp,
       heartbeat,
+      deviceTimestamp: timestampInfo.deviceTimestamp,
+      deviceUptimeMs: timestampInfo.deviceUptimeMs,
+      heartbeatAt: heartbeat,
       mode,
       deviceState,
+      lastCommand,
     };
 
     const incomplete = mode === undefined || deviceState === undefined;
     return { ok: true, value, incomplete };
   }
 }
-

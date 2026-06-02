@@ -1,46 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
-import { TelegramOpsService } from "@/services/TelegramOpsService";
 import { TelegramBotApiService } from "@/services/TelegramBotApiService";
-import { ensureTelegramPollingStarted, getTelegramPollingDiagnostics } from "@/lib/telegramSingleton";
+import { TelegramOpsService } from "@/services/TelegramOpsService";
+import { TelegramEnvConfigService } from "@/services/telegram/TelegramEnvConfigService";
+import {
+  resolveTelegramWebhookUrl,
+  resolveAppBaseUrl,
+  isTelegramWebhookEnabled,
+  getWebhookEnvironmentLabel,
+} from "@/services/telegram/TelegramWebhookUrlResolver";
 import { resetTelegramAuthConfigCache } from "@/services/telegram/telegram.security";
+import { TelegramWebhookSyncService } from "@/services/telegram/TelegramWebhookSyncService";
 
-const COMMANDS = [
-  { command: "start", description: "Start operational bot" },
-  { command: "status", description: "Current device status" },
-  { command: "latest", description: "Latest telemetry" },
-  { command: "health", description: "Operational health" },
-  { command: "open", description: "Open clothesline" },
-  { command: "close", description: "Close clothesline" },
-  { command: "mode_auto", description: "Switch to auto mode" },
-  { command: "mode_manual", description: "Switch to manual mode" },
-  { command: "restart", description: "Admin restart command" },
-  { command: "override", description: "Admin override command" },
-  { command: "debug", description: "Admin debug summary" },
-  { command: "alerts", description: "Latest alerts" },
-  { command: "help", description: "Available commands" },
-];
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const boot = await ensureTelegramPollingStarted();
-    const config = await TelegramOpsService.getConfig();
-    if (!config) {
-      return NextResponse.json({ ok: true, configured: false, polling: getTelegramPollingDiagnostics(), boot });
+    const token = TelegramEnvConfigService.getBotToken();
+    const vercelEnv = getWebhookEnvironmentLabel();
+    const webhookEnabled = isTelegramWebhookEnabled();
+    const appBaseUrl = resolveAppBaseUrl(request);
+    const resolvedWebhookUrl = resolveTelegramWebhookUrl(request);
+
+    const tokenCheck = token ? await TelegramBotApiService.getMe(token) : { ok: false };
+
+    let auditLogs: unknown[] = [];
+    try {
+      auditLogs = await TelegramOpsService.getRecentAuditLogs(20);
+    } catch {
+      auditLogs = [];
     }
-    const tokenOk = config.botToken ? await TelegramBotApiService.getMe(config.botToken) : { ok: false };
-    const auditLogs = await TelegramOpsService.getRecentAuditLogs(20);
+
     return NextResponse.json({
       ok: true,
-      configured: true,
-      enabled: config.enabled,
-      mode: config.mode,
-      tokenValid: tokenOk.ok,
-      tokenDescription: tokenOk.description ?? null,
-      hasWebhookSecret: Boolean(config.webhookSecret),
-      authorizedUsers: config.authorizedUsers,
+      telegramMode: "notification-only",
+      configured: Boolean(token),
+      tokenValid: tokenCheck.ok,
+      webhookEnabled,
+      resolvedWebhookUrl,
+      appBaseUrl,
+      vercelEnv,
+      allowedGroups: TelegramEnvConfigService.getAllowedGroupIds(),
+      groupModeEnabled: TelegramEnvConfigService.isGroupModeEnabled(),
       auditLogs,
-      polling: getTelegramPollingDiagnostics(),
-      boot,
     });
   } catch (error) {
     return NextResponse.json({ ok: false, error: String(error) }, { status: 500 });
@@ -48,60 +47,41 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const setupAttemptedAt = Date.now();
   try {
-    const body = (await request.json()) as {
-      botToken: string;
-      chatId?: string;
-      webhookSecret: string;
-      mode: "polling" | "webhook";
-      enabled: boolean;
-      authorizedUsers: Array<{ userId: number; username?: string; role: "Viewer" | "Operator" | "Admin" }>;
-      webhookUrl?: string;
+    const body = (await request.json().catch(() => ({}))) as {
+      repair?: boolean;
+      force?: boolean;
     };
 
-    const token = body.botToken || process.env.TELEGRAM_BOT_TOKEN || "";
-    const chatId = body.chatId || process.env.TELEGRAM_CHAT_ID;
-    const connectionTest = await TelegramBotApiService.testTelegramConnection({
-      token,
-      chatId,
-    });
-    if (!connectionTest.tokenValid) {
-      return NextResponse.json({ ok: false, error: "Invalid bot token" }, { status: 400 });
+    const token = TelegramEnvConfigService.getBotToken();
+    if (!token) {
+      return NextResponse.json({
+        ok: false,
+        error: "TELEGRAM_BOT_TOKEN missing",
+      }, { status: 400 });
     }
 
-    const commandRegistered = await TelegramBotApiService.setMyCommands(token, COMMANDS);
-    let webhookRegistered = true;
-    if (body.mode === "webhook" && body.webhookUrl) {
-      webhookRegistered = await TelegramBotApiService.setWebhook(
-        token,
-        body.webhookUrl,
-        body.webhookSecret,
-      );
-    } else if (body.mode === "polling") {
-      await TelegramBotApiService.deleteWebhook(token);
-    }
+    // Set minimal commands (help only)
+    const commandRegistered = await TelegramBotApiService.setMyCommands(token, [
+      { command: "help", description: "Get bot information" }
+    ]);
 
-    await TelegramOpsService.saveConfig({
-      botToken: token,
-      chatId,
-      webhookSecret: body.webhookSecret,
-      mode: body.mode,
-      enabled: body.enabled,
-      authorizedUsers: body.authorizedUsers ?? [],
-    });
+    const syncResult = await TelegramWebhookSyncService.sync({
+      repair: body.repair ?? true,
+      force: body.force ?? false,
+      source: "setup-route"
+    }, request);
+
     resetTelegramAuthConfigCache();
 
-    const boot = await ensureTelegramPollingStarted();
     return NextResponse.json({
-      ok: true,
+      ...syncResult,
+      setupAttemptedAt,
       commandRegistered,
-      webhookRegistered,
-      tokenValid: true,
-      connectionTest,
-      polling: getTelegramPollingDiagnostics(),
-      boot,
     });
   } catch (error) {
     return NextResponse.json({ ok: false, error: String(error) }, { status: 500 });
   }
 }
+

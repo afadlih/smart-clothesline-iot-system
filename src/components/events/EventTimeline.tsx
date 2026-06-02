@@ -1,6 +1,8 @@
 "use client";
 
+import { Clock } from "lucide-react";
 import type { SystemEvent } from "@/models/SystemEvent";
+import { formatTimelineTimestamp } from "@/utils/timeFormat";
 
 function isSameDay(a: Date, b: Date): boolean {
   return (
@@ -16,27 +18,6 @@ function badgeByType(type: SystemEvent["type"]): string {
   if (type === "CONFIG") return "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300";
   if (type === "STATUS") return "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300";
   return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
-}
-
-function formatTimestamp(timestamp: number): string {
-  const target = new Date(timestamp);
-  const now = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-
-  if (isSameDay(target, now)) {
-    return target.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-  }
-
-  if (isSameDay(target, yesterday)) {
-    return `Yesterday • ${target.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
-  }
-
-  return `${target.toLocaleDateString("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-  })} • ${target.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 function groupLabel(timestamp: number): "Today" | "Yesterday" | "Older" {
@@ -71,9 +52,12 @@ export default function EventTimeline({ events }: { events: SystemEvent[] }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Timeline & Event Log
-        </h3>
+        <div className="flex items-center gap-2">
+          <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Timeline & Event Log
+          </h3>
+        </div>
         <span className="text-xs text-slate-500 dark:text-slate-400">Latest 30 events</span>
       </div>
 
@@ -110,7 +94,7 @@ export default function EventTimeline({ events }: { events: SystemEvent[] }) {
                             </span>
                           )}
                         </div>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">{formatTimestamp(event.timestamp)}</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">{formatTimelineTimestamp(event.timestamp)}</span>
                       </div>
                       <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">{event.title}</p>
                       <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{event.description}</p>

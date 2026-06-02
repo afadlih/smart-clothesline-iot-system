@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-import MainLayout from "@/components/layout/MainLayout";
+import AppShell from "@/components/layout/AppShell";
 import ThemeInitializer from "@/components/layout/ThemeInitializer";
 
 const inter = Inter({
@@ -31,7 +31,7 @@ export default function RootLayout({
     >
       <body className="m-0 h-full w-full bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors duration-300">
         <ThemeInitializer />
-        <MainLayout>{children}</MainLayout>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

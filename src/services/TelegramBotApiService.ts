@@ -1,5 +1,4 @@
-import { logger } from "@/lib/logger";
-import { processTelegramCommand } from "@/services/telegramCommandService";
+
 
 type TelegramApiResponse<T> = {
   ok: boolean;
@@ -8,34 +7,31 @@ type TelegramApiResponse<T> = {
 };
 
 type BotCommand = { command: string; description: string };
-type PollingStatus = "stopped" | "running" | "retrying";
-type TelegramUpdate = {
-  update_id: number;
-  message?: {
-    text?: string;
-    chat?: { id?: number };
-    from?: { id?: number; username?: string };
-  };
+
+type TelegramBotInfo = {
+  id: number;
+  first_name: string;
+  username?: string;
+  can_join_groups?: boolean;
+};
+
+type TelegramWebhookInfo = {
+  url: string;
+  has_custom_certificate?: boolean;
+  pending_update_count?: number;
+  max_connections?: number;
+  ip_address?: string;
 };
 
 function endpoint(token: string, method: string): string {
   return `https://api.telegram.org/bot${token}/${method}`;
 }
 
+export type SendMessageOptions = {
+  disableWebPagePreview?: boolean;
+};
+
 export class TelegramBotApiService {
-  private static polling = false;
-  private static pollingStatus: PollingStatus = "stopped";
-  private static offset = 0;
-  private static processed = 0;
-  private static startedAt: number | null = null;
-  private static lastUpdateAt: number | null = null;
-  private static lastError: string | null = null;
-  private static stopRequested = false;
-
-  private static sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
   private static async safeRequest<T>(url: string, init: RequestInit): Promise<TelegramApiResponse<T>> {
     try {
       const response = await fetch(url, init);
@@ -49,45 +45,87 @@ export class TelegramBotApiService {
     }
   }
 
-  static async sendMessage(token: string, chatId: string | number, text: string): Promise<boolean> {
+  static async sendMessageWithResult(
+    token: string,
+    chatId: string | number,
+    text: string,
+    options?: SendMessageOptions,
+  ): Promise<{ ok: boolean; description?: string }> {
     const data = await this.safeRequest<unknown>(endpoint(token, "sendMessage"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: chatId,
         text,
+        disable_web_page_preview: options?.disableWebPagePreview ?? undefined,
       }),
-    });
-    return data.ok;
-  }
-
-  static async getMe(token: string): Promise<{ ok: boolean; description?: string }> {
-    const data = await this.safeRequest<unknown>(endpoint(token, "getMe"), {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
     });
     return { ok: data.ok, description: data.description };
   }
 
-  static async setWebhook(token: string, webhookUrl: string, secret: string): Promise<boolean> {
-    const data = await this.safeRequest<unknown>(endpoint(token, "setWebhook"), {
+  static async sendMessage(
+    token: string,
+    chatId: string | number,
+    text: string,
+    options?: SendMessageOptions,
+  ): Promise<boolean> {
+    const result = await this.sendMessageWithResult(token, chatId, text, options);
+    return result.ok;
+  }
+
+  static async getMe(token: string): Promise<TelegramApiResponse<TelegramBotInfo>> {
+    return this.safeRequest<TelegramBotInfo>(endpoint(token, "getMe"), {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  static async getWebhookInfo(token: string): Promise<TelegramApiResponse<TelegramWebhookInfo>> {
+    return this.safeRequest<TelegramWebhookInfo>(endpoint(token, "getWebhookInfo"), {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  static async setWebhookWithResult(
+    token: string,
+    webhookUrl: string,
+    options?: { secretToken?: string; dropPendingUpdates?: boolean },
+  ): Promise<TelegramApiResponse<unknown>> {
+    return this.safeRequest<unknown>(endpoint(token, "setWebhook"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url: webhookUrl,
-        secret_token: secret,
+        secret_token: options?.secretToken || undefined,
+        drop_pending_updates: options?.dropPendingUpdates ?? false,
       }),
     });
-    return data.ok;
   }
 
-  static async deleteWebhook(token: string): Promise<boolean> {
-    const data = await this.safeRequest<unknown>(endpoint(token, "deleteWebhook"), {
+  static async setWebhook(
+    token: string,
+    webhookUrl: string,
+    options?: { secretToken?: string; dropPendingUpdates?: boolean },
+  ): Promise<boolean> {
+    const res = await this.setWebhookWithResult(token, webhookUrl, options);
+    return res.ok;
+  }
+
+  static async deleteWebhookWithResult(
+    token: string,
+    options?: { dropPendingUpdates?: boolean },
+  ): Promise<TelegramApiResponse<unknown>> {
+    return this.safeRequest<unknown>(endpoint(token, "deleteWebhook"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ drop_pending_updates: false }),
+      body: JSON.stringify({ drop_pending_updates: options?.dropPendingUpdates ?? false }),
     });
-    return data.ok;
+  }
+
+  static async deleteWebhook(token: string, options?: { dropPendingUpdates?: boolean }): Promise<boolean> {
+    const res = await this.deleteWebhookWithResult(token, options);
+    return res.ok;
   }
 
   static async setMyCommands(token: string, commands: BotCommand[]): Promise<boolean> {
@@ -97,23 +135,6 @@ export class TelegramBotApiService {
       body: JSON.stringify({ commands }),
     });
     return data.ok;
-  }
-
-  static getPollingDiagnostics() {
-    return {
-      status: this.pollingStatus,
-      isRunning: this.polling,
-      offset: this.offset,
-      lastUpdateAt: this.lastUpdateAt,
-      updatesProcessed: this.processed,
-      uptimeMs: this.startedAt ? Date.now() - this.startedAt : 0,
-      lastError: this.lastError,
-    };
-  }
-
-  static stopPolling() {
-    this.stopRequested = true;
-    this.pollingStatus = "stopped";
   }
 
   static async testTelegramConnection(input: {
@@ -143,73 +164,5 @@ export class TelegramBotApiService {
       error: me.ok ? undefined : me.description,
     };
   }
-
-  private static async pollOnce(token: string): Promise<void> {
-    const data = await this.safeRequest<TelegramUpdate[]>(endpoint(token, "getUpdates"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        timeout: 25,
-        offset: this.offset,
-        allowed_updates: ["message"],
-      }),
-    });
-
-    if (!data.ok) {
-      throw new Error(data.description ?? "Polling request failed");
-    }
-
-    const updates = Array.isArray(data.result) ? data.result : [];
-    for (const update of updates) {
-      this.offset = Math.max(this.offset, update.update_id + 1);
-      this.lastUpdateAt = Date.now();
-      this.processed += 1;
-      logger.info("polling", "Update received", { updateId: update.update_id });
-
-      const text = typeof update.message?.text === "string" ? update.message.text : undefined;
-      const chatId = typeof update.message?.chat?.id === "number" ? update.message.chat.id : undefined;
-      const userId = typeof update.message?.from?.id === "number" ? update.message.from.id : undefined;
-      const username = typeof update.message?.from?.username === "string" ? update.message.from.username : undefined;
-
-      if (!text || !chatId || !userId) {
-        continue;
-      }
-
-      await processTelegramCommand({
-        text,
-        chatId,
-        userId,
-        username,
-      });
-      logger.info("polling", "Reply sent", { command: text });
-    }
-  }
-
-  static async startPolling(token: string): Promise<void> {
-    if (this.polling) return;
-    this.polling = true;
-    this.stopRequested = false;
-    this.pollingStatus = "running";
-    this.startedAt = Date.now();
-    this.lastError = null;
-
-    logger.info("telegram", "Service initialized");
-    logger.info("polling", "Polling started");
-
-    while (!this.stopRequested) {
-      try {
-        await this.pollOnce(token);
-        this.pollingStatus = "running";
-      } catch (error) {
-        this.lastError = String(error);
-        this.pollingStatus = "retrying";
-        logger.error("polling", "Polling crash", error);
-        logger.warn("polling", "Retrying polling in 3s");
-        await this.sleep(3000);
-      }
-    }
-
-    this.polling = false;
-    this.pollingStatus = "stopped";
-  }
 }
+

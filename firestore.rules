@@ -2,8 +2,116 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isNumber(v) {
+      return v is int || v is float;
+    }
+
+    function isBoolean(v) {
+      return v is bool;
+    }
+
+    function isValidTimestampMs(v) {
+      return isNumber(v) && v > 0 && v < 4102444800000; // < year 2100
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidSchedule(data) {
+      return data.name is string
+        && data.enabled is bool
+        && (
+          (data.timeOpen is string && data.timeClose is string) ||
+          (isNumber(data.startHour) && isNumber(data.endHour))
+        );
+    }
+
+    function isValidSensorPayload(data) {
+      return isNumber(data.temperature)
+        && data.temperature >= -50
+        && data.temperature <= 100
+        && isNumber(data.humidity)
+        && data.humidity >= 0
+        && data.humidity <= 100
+        && isNumber(data.light)
+        && data.light >= 0
+        && data.light <= 100000
+        && isBoolean(data.rain)
+        && (data.rainVal == null || (isNumber(data.rainVal) && data.rainVal >= 0))
+        && (data.rainRaw == null || (isNumber(data.rainRaw) && data.rainRaw >= 0))
+        && (data.lightRaw == null || (isNumber(data.lightRaw) && data.lightRaw >= 0))
+        && (data.lightThreshold == null || (isNumber(data.lightThreshold) && data.lightThreshold >= 0))
+        && (data.status == null || data.status in ['OPEN', 'CLOSED', 'MOVING', 'OPENING', 'CLOSING', 'RESTARTING', 'FAULT', 'UNKNOWN'])
+        && (data.deviceId == null || (data.deviceId is string && data.deviceId.size() > 0))
+        && (data.mode == null || data.mode in ['AUTO', 'MANUAL', 'SCHEDULE', 'UNKNOWN'])
+        && (data.source == null || data.source in ['STATUS_TOPIC', 'SENSOR_FALLBACK', 'UNKNOWN', 'MQTT', 'WOKWI', 'DEVICE', 'DASHBOARD', 'SCHEDULE'])
+        && (data.receivedAt == null || isValidTimestampMs(data.receivedAt))
+        && (data.deviceTimestamp == null || isValidTimestampMs(data.deviceTimestamp))
+        && (data.deviceUptimeMs == null || (isNumber(data.deviceUptimeMs) && data.deviceUptimeMs >= 0))
+        && (data.createdAt == null || data.createdAt is timestamp || isValidTimestampMs(data.createdAt));
+    }
+
+    match /sensor_data/{docId} {
+      allow read: if true;
+      allow create: if isValidSensorPayload(request.resource.data);
+      allow update: if isValidSensorPayload(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /events_log/{docId} {
+      allow read: if true;
+      allow create: if request.resource.data.action is string;
+      allow update, delete: if false;
+    }
+
+    match /users/{userId}/devices/{deviceId}/schedules/{scheduleId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && isValidSchedule(request.resource.data)
+        && (
+          request.resource.data.deviceId == null
+          || request.resource.data.deviceId == deviceId
+        );
+      allow delete: if isOwner(userId);
+    }
+
+    match /schedules/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && isValidSchedule(request.resource.data);
+      allow delete: if isSignedIn();
+    }
+
+    match /system_settings/{docId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
+    }
+
+    match /telegram_config/{docId} {
+      allow read, write: if false;
+    }
+
+    match /telegram_commands/{docId} {
+      allow read, write: if false;
+    }
+
+    match /telegram_audit/{docId} {
+      allow read: if true;
+      allow create: if request.resource.data.command is string
+        && request.resource.data.result is string
+        && request.resource.data.detail is string
+        && isValidTimestampMs(request.resource.data.timestamp);
+      allow update, delete: if false;
+    }
+
     match /{document=**} {
-      allow read, write: if request.time < timestamp.date(2026, 7, 21);
+      allow read, write: if false;
     }
   }
 }

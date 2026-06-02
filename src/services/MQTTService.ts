@@ -1,18 +1,32 @@
 import mqtt, { type MqttClient } from "mqtt";
-import { SensorValidator, ValidationError } from "./ValidationService";
+import { SensorValidationLayer, type RawTelemetryPayload } from "./SensorValidationLayer";
+import { logger } from "@/lib/logger";
+import {
+  LEGACY_TOPICS,
+  getDeviceCommandTopic as buildDeviceCommandTopic,
+  getDeviceConfigAckTopic as buildDeviceConfigAckTopic,
+  getDeviceConfigTopic as buildDeviceConfigTopic,
+} from "@/services/mqttTopics";
 
-export const MQTT_BROKER_URL = "wss://ba30f548c6ba4db2a6eae072d0a0ab18.s1.eu.hivemq.cloud:8884/mqtt";
-const MQTT_USER = "fabiqnn";
-const MQTT_PASS = "WmGgym2vPTa7dR.";
-export const SENSOR_TOPIC = "smart-clothesline/sensor";
-export const STATUS_TOPIC = "smart-clothesline/status";
-export const COMMAND_TOPIC = "smart-clothesline/command";
-export const CONFIG_TOPIC = "smart-clothesline/config";
-export const CONFIG_ACK_TOPIC = "smart-clothesline/config/ack";
-export const PAIRING_DISCOVERY_TOPIC = "smart-clothesline/pairing/discovery";
+export const MQTT_BROKER_URL = process.env.NEXT_PUBLIC_MQTT_BROKER_URL ?? "wss://broker.hivemq.com:8884/mqtt";
+// SECURITY NOTE:
+// NEXT_PUBLIC MQTT credentials are visible in browser runtime.
+// Never use privileged broker credentials here.
+const MQTT_USER = process.env.NEXT_PUBLIC_MQTT_USERNAME;
+const MQTT_PASS = process.env.NEXT_PUBLIC_MQTT_PASSWORD;
+export const SENSOR_TOPIC = LEGACY_TOPICS.sensor;
+export const STATUS_TOPIC = LEGACY_TOPICS.status;
+export const COMMAND_TOPIC = LEGACY_TOPICS.command;
+export const CONFIG_TOPIC = LEGACY_TOPICS.config;
+export const CONFIG_ACK_TOPIC = LEGACY_TOPICS.configAck;
+export const PAIRING_DISCOVERY_TOPIC = LEGACY_TOPICS.pairingDiscovery;
+
+if (typeof window !== "undefined" && (MQTT_USER || MQTT_PASS) && process.env.NODE_ENV !== "production") {
+  logger.warn("mqtt", "Using browser-exposed MQTT credentials. Ensure broker ACL is low privilege.");
+}
 
 type SubscribeCallback = (topic: string, payload: string) => void;
-type TopicCallback = (payload: string) => void;
+type TopicCallback = (payload: string, topic: string) => void;
 type ConnectionState = "connecting" | "online" | "reconnecting" | "offline" | "error";
 
 export type MqttConnectionSnapshot = {
@@ -28,8 +42,12 @@ export type SensorMessage = {
   temperature: number;
   humidity: number;
   light: number;
+  lightRaw?: number;
+  lightThreshold?: number;
+  rainVal?: number;
+  rainRaw?: number;
   rain: boolean;
-  status?: "OPEN" | "CLOSED";
+  status?: "OPEN" | "CLOSED" | "MOVING" | "FAULT" | "UNKNOWN";
   mode?: "AUTO" | "MANUAL";
   timestamp?: number;
 };
@@ -82,7 +100,7 @@ class RetryStrategy {
     const timeoutId = setTimeout(callback, delay);
     this.retryTimeoutId = timeoutId;
 
-    console.info("[MQTT][RETRY]", {
+    logger.warn("mqtt", "Reconnect retry scheduled", {
       attempt: this.retryCount + 1,
       maxRetries: this.maxRetries,
       delayMs: delay,
@@ -100,10 +118,36 @@ class RetryStrategy {
   }
 }
 
+export function getDeviceDiscoveryTopic(deviceId: string): string {
+  return `smart-clothesline/${deviceId}/pairing/discovery`;
+}
+
+export function getDeviceSensorTopic(deviceId: string): string {
+  return `smart-clothesline/${deviceId}/sensor`;
+}
+
+export function getDeviceStatusTopic(deviceId: string): string {
+  return `smart-clothesline/${deviceId}/status`;
+}
+
+export function getDeviceCommandTopic(deviceId: string): string {
+  return buildDeviceCommandTopic(deviceId);
+}
+
+export function getDeviceConfigTopic(deviceId: string): string {
+  return buildDeviceConfigTopic(deviceId);
+}
+
+export function getDeviceConfigAckTopic(deviceId: string): string {
+  return buildDeviceConfigAckTopic(deviceId);
+}
+
+
 class MqttService {
   private client: MqttClient | null = null;
   private subscribers = new Set<SubscribeCallback>();
   private topicSubscribers = new Map<string, Set<TopicCallback>>();
+  private dynamicSubscription = new Set<string>();
   private sensorSubscribers = new Set<SensorMessageCallback>();
   private connectionSubscribers = new Set<ConnectionCallback>();
   private connection: MqttConnectionSnapshot = {
@@ -134,20 +178,29 @@ class MqttService {
         return null;
       }
 
-      // Validate using Zod schema
-      try {
-        const validated = SensorValidator.validate(data);
-        return validated as SensorMessage;
-      } catch (validationError) {
-        if (validationError instanceof ValidationError) {
-          SensorValidator.logValidationError(validationError);
-        } else {
-          console.warn("[MQTT] Validation error:", validationError);
-        }
+      // Validate using SensorValidationLayer
+      const validation = SensorValidationLayer.validate(data as RawTelemetryPayload, Date.now());
+      if (validation.ok) {
+        return {
+          deviceId: validation.value.deviceId,
+          temperature: validation.value.temperature,
+          humidity: validation.value.humidity,
+          light: validation.value.light,
+          lightRaw: validation.value.lightRaw,
+          lightThreshold: validation.value.lightThreshold,
+          rainVal: validation.value.rainVal,
+          rainRaw: validation.value.rainRaw,
+          rain: validation.value.rain,
+          status: validation.value.deviceState === "RESTARTING" ? undefined : validation.value.deviceState,
+          mode: validation.value.mode,
+          timestamp: validation.value.timestamp,
+        };
+      } else {
+        logger.warn("mqtt", "Validation error", validation.reason);
         return null;
       }
     } catch (error) {
-      console.warn("[MQTT] Failed to parse sensor message:", error);
+      logger.warn("mqtt", "Failed to parse sensor message", error);
       return null;
     }
   }
@@ -167,7 +220,7 @@ class MqttService {
     }
 
     for (const callback of callbacks) {
-      callback(raw);
+      callback(raw, topic);
     }
   }
 
@@ -177,7 +230,7 @@ class MqttService {
     }
 
     if (this.retryStrategy.isMaxRetriesExceeded()) {
-      console.error("[MQTT] Max retries exceeded, giving up");
+      logger.error("mqtt", "Max retries exceeded, giving up");
       this.setConnection({
         state: "error",
         isOnline: false,
@@ -187,8 +240,8 @@ class MqttService {
     }
 
     this.client = mqtt.connect(MQTT_BROKER_URL, {
-      username: MQTT_USER,
-      password: MQTT_PASS,
+      ...(MQTT_USER ? { username: MQTT_USER } : {}),
+      ...(MQTT_PASS ? { password: MQTT_PASS } : {}),
       reconnectPeriod: 0, // Disable auto-reconnect, we handle it manually
       connectTimeout: 10000,
       clean: true,
@@ -197,35 +250,38 @@ class MqttService {
 
     this.client.on("connect", () => {
       this.retryStrategy.reset();
-      this.client?.subscribe([SENSOR_TOPIC, STATUS_TOPIC, CONFIG_TOPIC, CONFIG_ACK_TOPIC, PAIRING_DISCOVERY_TOPIC], (error) => {
-        if (error) {
-          console.error("[MQTT] Failed to subscribe:", error.message);
-        }
-      });
       this.setConnection({ state: "online", isOnline: true, lastError: null });
-      console.info("[MQTT] Connected successfully");
+      logger.info("mqtt", "Connected successfully");
+
+      for (const topic of this.topicSubscribers.keys()) {
+        this.client?.subscribe(topic, (error) => {
+          if (!error) {
+            this.dynamicSubscription.add(topic);
+          }
+        })
+      }
     });
 
     this.client.on("reconnect", () => {
-      console.info("[MQTT] Reconnecting...");
+      logger.warn("mqtt", "Reconnecting...");
       this.setConnection({ state: "reconnecting", isOnline: false });
     });
 
     this.client.on("offline", () => {
-      console.warn("[MQTT] Connection offline");
+      logger.warn("mqtt", "Connection offline");
       this.setConnection({ state: "offline", isOnline: false });
       this.scheduleReconnect();
     });
 
     this.client.on("close", () => {
-      console.warn("[MQTT] Connection closed");
+      logger.warn("mqtt", "Connection closed");
       this.setConnection({ state: "offline", isOnline: false });
       this.scheduleReconnect();
     });
 
     this.client.on("message", (topic, payload) => {
       const raw = payload.toString();
-      console.info(`[MQTT][RECV][${topic}]: ${raw}`);
+      logger.debug("mqtt", `Message received on ${topic}`, raw);
 
       for (const callback of this.subscribers) {
         callback(topic, raw);
@@ -250,7 +306,7 @@ class MqttService {
     });
 
     this.client.on("error", (error) => {
-      console.error("[MQTT] Connection error:", error.message);
+      logger.error("mqtt", "Connection error", error.message);
       this.setConnection({ state: "error", isOnline: false, lastError: error.message });
       this.scheduleReconnect();
     });
@@ -275,9 +331,21 @@ class MqttService {
 
   subscribeTopic(topic: string, callback: TopicCallback): () => void {
     this.connect();
+
     const existing = this.topicSubscribers.get(topic) ?? new Set<TopicCallback>();
     existing.add(callback);
     this.topicSubscribers.set(topic, existing);
+
+    if (this.client?.connected && !this.dynamicSubscription.has(topic)) {
+      this.client.subscribe(topic, (error) => {
+        if (error) {
+          logger.error("mqtt", "Failed to subscribe topic", error.message);
+          return;
+        }
+
+        this.dynamicSubscription.add(topic);
+      })
+    }
 
     return () => {
       const callbacks = this.topicSubscribers.get(topic);
@@ -285,16 +353,27 @@ class MqttService {
         return;
       }
       callbacks.delete(callback);
+
       if (callbacks.size === 0) {
         this.topicSubscribers.delete(topic);
+
+        if (this.client?.connected && this.dynamicSubscription.has(topic)) {
+          this.client.unsubscribe(topic);
+          this.dynamicSubscription.delete(topic);
+        }
       }
     };
   }
 
-  publish(topic: string, payload: string | Record<string, unknown>) {
+  publish(topic: string, payload: string | Record<string, unknown>): boolean {
     this.connect();
+    if (!this.client || !this.client.connected) {
+      logger.warn("mqtt", "Publish skipped, client is not connected", { topic });
+      return false;
+    }
     const message = typeof payload === "string" ? payload : JSON.stringify(payload);
-    this.client?.publish(topic, message);
+    this.client.publish(topic, message);
+    return true;
   }
 
   onMessage(callback: SensorMessageCallback): () => void {

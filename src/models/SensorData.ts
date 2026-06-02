@@ -2,7 +2,11 @@ interface SensorDataInput {
     temp?: number;
     humidity?: number;
     light?: number;
-    rain?: number;
+    lightRaw?: number;
+    lightThreshold?: number;
+    rainVal?: number;
+    rainRaw?: number;
+    rain?: number | boolean;
     status?: "OPEN" | "CLOSED" | "TERBUKA" | "TERTUTUP";
     timestamp?: string;
 }
@@ -11,6 +15,10 @@ export class SensorData {
     temperature: number;
     humidity: number;
     light: number;
+    lightRaw?: number;
+    lightThreshold?: number;
+    rainVal?: number;
+    rainRaw?: number;
     rain: number;
     status: "OPEN" | "CLOSED";
     timestamp: string;
@@ -19,7 +27,11 @@ export class SensorData {
         this.temperature = data.temp ?? 0;
         this.humidity = data.humidity ?? 0;
         this.light = data.light ?? 0;
-        this.rain = data.rain ?? 0;
+        this.lightRaw = data.lightRaw;
+        this.lightThreshold = data.lightThreshold;
+        this.rainVal = data.rainVal;
+        this.rainRaw = data.rainRaw;
+        this.rain = typeof data.rain === "boolean" ? (data.rain ? 1 : 0) : (data.rain ?? 0);
         const normalized =
             data.status === "TERBUKA"
                 ? "OPEN"
@@ -36,8 +48,8 @@ export class SensorData {
         return this.rain > 0;
     }
 
-    isDark(threshold: number = 200): boolean {
-        return this.light < threshold;
+    isDark(threshold: number = 3000): boolean {
+        return this.light > threshold;
     }
 
     getWeatherStatus(): string {

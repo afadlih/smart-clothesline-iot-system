@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "validate": "npm run lint && npm run typecheck && npm run test:telegram && npm run test:architecture && npm run build",
+    "telegram:sync-webhook": "node scripts/sync-telegram-webhook.mjs",
+    "test:telegram": "node --test scripts/telegram-notification-only.test.mjs",
+    "test:architecture": "node --test scripts/iot-architecture-contract.test.mjs"
   },
   "dependencies": {
     "autoprefixer": "^10.5.0",
@@ -24,8 +29,8 @@
   },
   "devDependencies": {
     "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35",
     "typescript": "^5"
