@@ -5,8 +5,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Wind } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useAuthStore } from "@/stores/authStore";
-import type { User } from "firebase/auth";
 
 function LoginContent() {
   const [showPassword, setShowPassword] = useState(false);
@@ -55,17 +53,7 @@ function LoginContent() {
     await signInWithGoogle();
   };
 
-  const handleGoToDashboardDirectly = () => {
-    useAuthStore.setState({
-      user: {
-        uid: "demo-operator",
-        email: "operator@smartclothesline.local",
-        displayName: "Demo Operator",
-      } as unknown as User,
-      loading: false,
-    });
-    router.replace(returnUrl);
-  };
+
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-teal-50 via-white to-emerald-50 p-4">
@@ -241,17 +229,7 @@ function LoginContent() {
             </svg>
             Continue with Google
           </button>
- 
-          {/* Demo Bypass Action */}
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={handleGoToDashboardDirectly}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-teal-300 bg-teal-50/20 py-3.5 text-sm font-semibold text-teal-600 transition-all hover:bg-teal-50/50 hover:border-teal-400 active:scale-[0.98] shadow-sm"
-            >
-              ✨ Try Demo Mode (Skip Login)
-            </button>
-          </div>
+
 
           {/* Footer */}
           <p className="mt-8 text-center text-sm text-slate-500">
