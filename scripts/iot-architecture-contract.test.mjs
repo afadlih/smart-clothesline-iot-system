@@ -85,13 +85,13 @@ test("Wokwi per-device MQTT hotfix contract validation", () => {
   assert.ok(mqttTopicsContent.includes("getCommandPublishTopics"), "Expected getCommandPublishTopics to exist in mqttTopics.ts");
 
   // Test 2: useSensor.ts contract
-  const useSensorContent = read("src/hooks/useSensor.ts");
+  const useSensorContent = read("src/features/sensor/hooks/useSensor.ts");
   assert.ok(useSensorContent.includes("getCommandPublishTopics"), "Expected useSensor.ts to import/use getCommandPublishTopics");
   assert.ok(!useSensorContent.includes("/api/telegram/polling"), "Expected useSensor.ts to NOT contain /api/telegram/polling");
 
   // Test 3: iot-hub page contract (checks IoTHubPage.tsx if modularized, else page.tsx)
-  const iotHubContent = existsSync(join(ROOT, "src/features/iothub/IoTHubPage.tsx"))
-    ? read("src/features/iothub/IoTHubPage.tsx")
+  const iotHubContent = existsSync(join(ROOT, "src/features/sensor/view/iothub/IoTHubPage.tsx"))
+    ? read("src/features/sensor/view/iothub/IoTHubPage.tsx")
     : read("src/app/iot-hub/page.tsx");
   assert.ok(iotHubContent.includes("getPairingDiscoveryTopics"), "Expected IoT Hub page to use getPairingDiscoveryTopics");
 
@@ -120,7 +120,7 @@ test("schedule synchronization contract validation", () => {
   assert.ok(runtimeContent.includes("export function evaluateScheduleTransition"), "ScheduleRuntimeService.ts must export evaluateScheduleTransition");
 
   // 5. useSensor.ts uses getCommandPublishTopics for schedule commands
-  const useSensorContent = read("src/hooks/useSensor.ts");
+  const useSensorContent = read("src/features/sensor/hooks/useSensor.ts");
   assert.ok(
     useSensorContent.includes("getCommandPublishTopics(activeDeviceId)"),
     "Expected active device getCommandPublishTopics in schedule commands routing in useSensor.ts"

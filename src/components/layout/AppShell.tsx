@@ -12,8 +12,9 @@ export default function AppShell({
 }) {
   const pathname = usePathname();
   const isAuthRoute = pathname.startsWith("/auth");
+  const isLandingPage = pathname === "/";
 
-  if (isAuthRoute) {
+  if (isAuthRoute || isLandingPage) {
     return <>{children}</>;
   }
 
