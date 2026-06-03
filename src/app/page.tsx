@@ -257,11 +257,10 @@ export default function LandingPage() {
                 {/* Status Indicator */}
                 <div className="mb-6 p-4 rounded-2xl bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-white/5 flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-550 dark:text-slate-400">Clothesline Cover:</span>
-                  <span className={`px-4 py-1.5 rounded-full text-xs font-black transition-all ${
-                    clotheslineState === "OPEN"
+                  <span className={`px-4 py-1.5 rounded-full text-xs font-black transition-all ${clotheslineState === "OPEN"
                       ? "bg-teal-150/40 text-teal-600 dark:bg-teal-500/20 dark:text-teal-400 border border-teal-500/20"
                       : "bg-rose-100/40 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400 border border-rose-500/20"
-                  }`}>
+                    }`}>
                     {clotheslineState === "OPEN" ? "☀️ OPEN (Drying)" : "🌧️ CLOSED (Protected)"}
                   </span>
                 </div>
@@ -306,11 +305,10 @@ export default function LandingPage() {
                 {/* Simulation Button */}
                 <button
                   onClick={isRainy ? handleSimulateSunny : handleSimulateRainy}
-                  className={`w-full py-3.5 px-4 rounded-2xl text-xs font-bold border transition-all active:scale-[0.98] ${
-                    isRainy
+                  className={`w-full py-3.5 px-4 rounded-2xl text-xs font-bold border transition-all active:scale-[0.98] ${isRainy
                       ? "bg-gradient-to-r from-emerald-600 to-teal-500 border-emerald-600 text-white shadow-md shadow-emerald-500/20"
                       : "bg-gradient-to-r from-rose-600 to-orange-500 border-rose-600 text-white shadow-md shadow-rose-500/20"
-                  }`}
+                    }`}
                 >
                   {isRainy ? "☀️ Clear Weather & Dry Clothes" : "🌧️ Simulate Sudden Rain"}
                 </button>
@@ -781,7 +779,7 @@ export default function LandingPage() {
               <Cpu className="h-4.5 w-4.5" />
             </div>
             <span className="font-bold text-sm text-slate-700 dark:text-slate-300">
-              Smart Clothesline IoT System
+              Smart Clothesline
             </span>
           </div>
 
