@@ -154,3 +154,63 @@ test("schedule synchronization contract validation", () => {
   assert.ok(tgCommandIndex !== -1, "telegram_commands path not found in firestore.rules");
   assert.ok(commandLines[tgCommandIndex + 1].includes("allow read, write: if false;"), "telegram_commands must block all reads and writes");
 });
+
+test("landing page contract validation", () => {
+  const content = read("src/app/page.tsx");
+  
+  // 1. Landing page mentions key keywords
+  const required = [
+    "Smart Clothesline",
+    "Realtime Monitoring",
+    "Rain Detection",
+    "Dashboard",
+    "Telegram Alerts",
+    "Analytics",
+    "Hadoop"
+  ];
+  for (const token of required) {
+    assert.ok(content.toLowerCase().includes(token.toLowerCase()), `Landing page should mention: ${token}`);
+  }
+
+  // 2. Landing page does not contain AI-slop words
+  const slop = [
+    "revolutionary",
+    "AI-powered",
+    "autonomous intelligence",
+    "temporal engine",
+    "synergy"
+  ];
+  for (const word of slop) {
+    assert.ok(!content.toLowerCase().includes(word.toLowerCase()), `Landing page contains AI-slop: ${word}`);
+  }
+
+  // 3. Landing page links to dashboard, analytics, big-data, and iot-hub
+  const routes = [
+    "/dashboard",
+    "/analytics",
+    "/big-data",
+    "/iot-hub"
+  ];
+  for (const route of routes) {
+    assert.ok(content.includes(route), `Landing page should link to: ${route}`);
+  }
+
+  // 4. Telegram copy says notification-only or equivalent
+  assert.ok(
+    content.toLowerCase().includes("notifications only") || 
+    content.toLowerCase().includes("notification-only"),
+    "Telegram copy must state it is notification-only"
+  );
+
+  // 5. Landing page does not import useSensor or MQTT runtime hooks
+  assert.ok(!content.includes("useSensor"), "Landing page should not import useSensor");
+
+  // 6. Landing page does not import Node-only modules
+  const nodeModules = [
+    'import fs ', 'import * as fs', 'from "fs"', "from 'path'",
+    'import child_process', "from 'child_process'"
+  ];
+  for (const mod of nodeModules) {
+    assert.ok(!content.includes(mod), `Landing page imports Node module: ${mod}`);
+  }
+});

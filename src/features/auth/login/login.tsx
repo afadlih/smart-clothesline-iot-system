@@ -217,6 +217,22 @@ function LoginContent() {
             </svg>
             Continue with Google
           </button>
+ 
+          {/* Dashboard / Home CTA */}
+          <div className="mt-4 flex gap-2">
+            <Link
+              href="/"
+              className="flex-1 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-3.5 text-xs font-semibold text-slate-600 hover:text-slate-800 transition-all hover:bg-slate-50 hover:border-slate-300 shadow-sm active:scale-[0.98]"
+            >
+              Back to Home
+            </Link>
+            <Link
+              href="/dashboard"
+              className="flex-1 flex items-center justify-center rounded-2xl border border-teal-200/60 bg-teal-50/30 py-3.5 text-xs font-bold text-teal-600 hover:text-teal-700 transition-all hover:bg-teal-50/70 hover:border-teal-300 shadow-sm active:scale-[0.98]"
+            >
+              Go to Dashboard
+            </Link>
+          </div>
 
           {/* Footer */}
           <p className="mt-8 text-center text-sm text-slate-500">

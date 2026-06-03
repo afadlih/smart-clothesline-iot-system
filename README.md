@@ -18,6 +18,12 @@ The system has been stabilized and validated for production release.
 - **Telegram Integration:** Outbound operational event notifications.
 - **Analytics:** Historical trends and data export (CSV/JSON).
 - **IoT Hub:** Device pairing, diagnostics, and sync management.
+ 
+---
+
+## 🌐 Public Landing Page
+
+The root route `/` introduces the Smart Clothesline IoT System for users and demo visitors. It explains the product, features, IoT/cloud architecture, dashboard access, notification model, and analytics capabilities.
 
 ---
 

@@ -11,11 +11,9 @@ import {
   Droplets,
   Smartphone,
   Bell,
-  Database,
   Wifi,
   ShieldCheck,
   Server,
-  ArrowRight,
   Layers,
   Users,
   BookOpen,
@@ -23,7 +21,6 @@ import {
   X,
   Activity,
   History,
-  AlertTriangle,
   Laptop
 } from "lucide-react";
 import { useThemeStore } from "@/stores/themeStore";
@@ -38,14 +35,11 @@ export default function LandingPage() {
   // Simulator State
   const [isRainy, setIsRainy] = useState(false);
   const [isAutoMode, setIsAutoMode] = useState(true);
-  const [clotheslineState, setClotheslineState] = useState<"TERBUKA" | "TERTUTUP">("TERBUKA");
+  const [clotheslineState, setClotheslineState] = useState<"OPEN" | "CLOSED">("OPEN");
   const [temp, setTemp] = useState(29.5);
   const [humidity, setHumidity] = useState(62);
   const [lightLevel, setLightLevel] = useState(85);
-  const [simulatedLogs, setSimulatedLogs] = useState<string[]>([
-    "[11:40:00] Sistem diinisialisasi. Mode: AUTOMATIC",
-    "[11:40:05] Jemuran TERBUKA. Kondisi: Cerah"
-  ]);
+  const [simulatedLogs, setSimulatedLogs] = useState<string[]>([]);
 
   // Sync theme
   useEffect(() => {
@@ -67,60 +61,68 @@ export default function LandingPage() {
     setSimulatedLogs((prev) => [`[${time}] ${message}`, ...prev.slice(0, 4)]);
   }, []);
 
+  // Initialize logs on mount
+  useEffect(() => {
+    if (mounted && simulatedLogs.length === 0) {
+      addLog("System initialized. Mode: AUTOMATIC");
+      addLog("Clothesline OPEN. Weather: Sunny");
+    }
+  }, [mounted, simulatedLogs.length, addLog]);
+
   // Event handlers for simulation
   const handleSimulateRainy = () => {
     setIsRainy(true);
-    setTemp(23.8);
-    setHumidity(88);
-    setLightLevel(18);
-    addLog("Sensor: Terdeteksi HUJAN!");
+    setTemp(22.4);
+    setHumidity(90);
+    setLightLevel(15);
+    addLog("Sensor: RAIN DETECTED!");
     if (isAutoMode) {
-      setClotheslineState("TERTUTUP");
-      addLog("Auto Mode: Menutup jemuran otomatis untuk melindungi pakaian.");
+      setClotheslineState("CLOSED");
+      addLog("Auto Mode: Automatically closing clothesline to protect laundry.");
     } else {
-      addLog("Sensor: Perintah tutup jemuran diabaikan (Mode MANUAL aktif).");
+      addLog("Sensor: Rain detected (Ignored: MANUAL mode active).");
     }
   };
 
   const handleSimulateSunny = () => {
     setIsRainy(false);
-    setTemp(30.2);
-    setHumidity(55);
-    setLightLevel(90);
-    addLog("Sensor: Cuaca kembali cerah.");
+    setTemp(30.5);
+    setHumidity(52);
+    setLightLevel(88);
+    addLog("Sensor: Weather cleared.");
     if (isAutoMode) {
-      setClotheslineState("TERBUKA");
-      addLog("Auto Mode: Membuka jemuran otomatis.");
+      setClotheslineState("OPEN");
+      addLog("Auto Mode: Automatically opening clothesline to resume drying.");
     } else {
-      addLog("Sensor: Perintah buka jemuran diabaikan (Mode MANUAL aktif).");
+      addLog("Sensor: Weather cleared (Ignored: MANUAL mode active).");
     }
   };
 
   const handleToggleMode = () => {
     const newAuto = !isAutoMode;
     setIsAutoMode(newAuto);
-    addLog(`Mode diubah ke: ${newAuto ? "AUTOMATIC" : "MANUAL"}`);
+    addLog(`Mode toggled to: ${newAuto ? "AUTOMATIC" : "MANUAL"}`);
     if (newAuto) {
       if (isRainy) {
-        setClotheslineState("TERTUTUP");
-        addLog("Auto Mode: Menyesuaikan status jemuran ke TERTUTUP (sedang hujan).");
+        setClotheslineState("CLOSED");
+        addLog("Auto Mode: Synced clothesline to CLOSED state (raining).");
       } else {
-        setClotheslineState("TERBUKA");
-        addLog("Auto Mode: Menyesuaikan status jemuran ke TERBUKA (cuaca cerah).");
+        setClotheslineState("OPEN");
+        addLog("Auto Mode: Synced clothesline to OPEN state (clear weather).");
       }
     }
   };
 
   const handleManualOpen = () => {
     if (isAutoMode) return;
-    setClotheslineState("TERBUKA");
-    addLog("Manual Override: Membuka jemuran.");
+    setClotheslineState("OPEN");
+    addLog("Manual Override: Opening clothesline.");
   };
 
   const handleManualClose = () => {
     if (isAutoMode) return;
-    setClotheslineState("TERTUTUP");
-    addLog("Manual Override: Menutup jemuran.");
+    setClotheslineState("CLOSED");
+    addLog("Manual Override: Closing clothesline.");
   };
 
   const handleThemeToggle = () => {
@@ -134,7 +136,7 @@ export default function LandingPage() {
       <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="flex flex-col items-center gap-3">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-teal-500 border-t-transparent" />
-          <p className="text-sm font-medium text-slate-500 animate-pulse">Memuat halaman...</p>
+          <p className="text-sm font-medium text-slate-500 animate-pulse">Loading landing page...</p>
         </div>
       </div>
     );
@@ -142,7 +144,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-300 font-sans">
-      
+
       {/* 1. HEADER / NAVBAR */}
       <header className="sticky top-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-200/60 dark:border-white/10 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -159,12 +161,12 @@ export default function LandingPage() {
 
             {/* Desktop Navigation */}
             <nav className="hidden md:flex space-x-6 text-sm font-semibold text-slate-600 dark:text-slate-300">
-              <a href="#masalah" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">Masalah</a>
-              <a href="#solusi" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">Solusi</a>
-              <a href="#fitur" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">Fitur</a>
-              <a href="#cara-kerja" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">Cara Kerja</a>
-              <a href="#big-data" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">Big Data</a>
-              <a href="#keamanan" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">Keamanan</a>
+              <a href="#features" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">Features</a>
+              <a href="#how-it-works" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">How It Works</a>
+              <a href="#technology" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">Technology</a>
+              <Link href="/analytics" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">Analytics</Link>
+              <Link href="/big-data" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">Big Data</Link>
+              <Link href="/dashboard" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">Dashboard</Link>
             </nav>
 
             {/* Action Buttons */}
@@ -181,7 +183,7 @@ export default function LandingPage() {
                 href="/dashboard"
                 className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-500 text-white font-bold text-sm shadow-md hover:from-teal-500 hover:to-emerald-400 hover:shadow-teal-500/10 transition-all active:scale-95"
               >
-                Buka Dashboard
+                Open Dashboard
               </Link>
             </div>
 
@@ -209,61 +211,61 @@ export default function LandingPage() {
         {isMobileMenuOpen && (
           <div className="md:hidden border-t border-slate-200 dark:border-white/10 bg-white dark:bg-slate-950 px-4 py-4 space-y-3 transition-all duration-300">
             <a
-              href="#masalah"
+              href="#features"
               onClick={() => setIsMobileMenuOpen(false)}
               className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm"
             >
-              Masalah
+              Features
             </a>
             <a
-              href="#solusi"
+              href="#how-it-works"
               onClick={() => setIsMobileMenuOpen(false)}
               className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm"
             >
-              Solusi
+              How It Works
             </a>
             <a
-              href="#fitur"
+              href="#technology"
               onClick={() => setIsMobileMenuOpen(false)}
               className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm"
             >
-              Fitur
+              Technology
             </a>
-            <a
-              href="#cara-kerja"
+            <Link
+              href="/analytics"
               onClick={() => setIsMobileMenuOpen(false)}
               className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm"
             >
-              Cara Kerja
-            </a>
-            <a
-              href="#big-data"
+              Analytics
+            </Link>
+            <Link
+              href="/big-data"
               onClick={() => setIsMobileMenuOpen(false)}
               className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm"
             >
               Big Data
-            </a>
-            <a
-              href="#keamanan"
+            </Link>
+            <Link
+              href="/dashboard"
               onClick={() => setIsMobileMenuOpen(false)}
               className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm"
             >
-              Keamanan
-            </a>
+              Dashboard
+            </Link>
             <div className="pt-2 border-t border-slate-200 dark:border-white/5">
               <Link
                 href="/dashboard"
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-500 text-white font-bold text-sm shadow-md"
               >
-                Buka Dashboard
+                Open Dashboard
               </Link>
             </div>
           </div>
         )}
       </header>
 
-      {/* 2. HERO SECTION */}
+      {/* 1. HERO SECTION */}
       <section className="relative overflow-hidden pt-12 pb-20 lg:pt-20 lg:pb-32 bg-gradient-to-b from-teal-500/10 via-transparent to-transparent">
         {/* Background Gradients */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 -z-10 w-[500px] h-[500px] bg-gradient-to-br from-teal-300/20 to-sky-300/20 dark:from-teal-900/10 dark:to-sky-900/10 rounded-full blur-3xl pointer-events-none" />
@@ -271,52 +273,45 @@ export default function LandingPage() {
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
-            
+
             {/* Left Copy */}
             <div className="lg:col-span-7 text-center lg:text-left space-y-6">
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-teal-500/10 border border-teal-500/20 text-xs font-bold text-teal-600 dark:text-teal-400 tracking-wider uppercase">
-                <Cpu className="h-3.5 w-3.5" /> Smart Clothesline IoT System
+                <Cpu className="h-3.5 w-3.5" /> Smart Clothesline
               </span>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.15] text-slate-800 dark:text-white">
-                Cara lebih pintar melindungi jemuran dari{" "}
+                Keep your clothes safer when the{" "}
                 <span className="bg-gradient-to-r from-teal-600 to-sky-500 dark:from-teal-400 dark:to-sky-400 bg-clip-text text-transparent">
-                  hujan mendadak.
+                  weather changes.
                 </span>
               </h1>
               <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400 max-w-xl mx-auto lg:mx-0 leading-relaxed">
-                Pantau cuaca, kontrol jemuran Anda secara otomatis, serta terima notifikasi realtime dari satu dashboard cloud yang terintegrasi.
+                Smart Clothesline monitors rain, light, temperature, and humidity, then helps you open or close the clothesline through a realtime dashboard.
               </p>
-              
+
               {/* CTAs */}
               <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-2">
                 <Link
                   href="/dashboard"
                   className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3.5 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-500 text-white font-extrabold shadow-lg hover:from-teal-500 hover:to-emerald-400 hover:shadow-teal-500/20 transition-all active:scale-95 text-base"
                 >
-                  Buka Dashboard
+                  Open Dashboard
                 </Link>
                 <Link
                   href="/analytics"
                   className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors font-bold text-slate-700 dark:text-slate-300 text-base"
                 >
-                  Lihat Analisis
+                  View Analytics
                 </Link>
               </div>
 
-              {/* Badges */}
-              <div className="grid grid-cols-3 gap-4 pt-6 max-w-md mx-auto lg:mx-0 border-t border-slate-200/50 dark:border-white/5">
-                <div>
-                  <h4 className="text-xl font-bold text-teal-600 dark:text-teal-400">Realtime</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Telemetri Sensor</p>
-                </div>
-                <div>
-                  <h4 className="text-xl font-bold text-emerald-600 dark:text-emerald-400">Otomatis</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Perlindungan Hujan</p>
-                </div>
-                <div>
-                  <h4 className="text-xl font-bold text-sky-600 dark:text-sky-400">Telegram</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Notifikasi Instan</p>
-                </div>
+              {/* Status Chips */}
+              <div className="flex flex-wrap justify-center lg:justify-start gap-2 pt-4 border-t border-slate-200/50 dark:border-white/5">
+                {["Realtime MQTT", "Rain Detection", "Telegram Alerts", "Cloud Analytics"].map((chip) => (
+                  <span key={chip} className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white/50 dark:bg-slate-900/50 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    {chip}
+                  </span>
+                ))}
               </div>
             </div>
 
@@ -325,7 +320,7 @@ export default function LandingPage() {
               <div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 p-6 shadow-2xl backdrop-blur-xl transition-all duration-300 relative">
                 <div className="absolute top-3 right-3 flex items-center gap-1">
                   <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Simulator Live</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Live Simulator</span>
                 </div>
 
                 <div className="flex items-center gap-3 mb-6">
@@ -333,8 +328,8 @@ export default function LandingPage() {
                     <Laptop className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-800 dark:text-white text-sm">Contoh Telemetri IoT</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Status aktual perangkat</p>
+                    <h3 className="font-bold text-slate-800 dark:text-white text-sm">IoT Telemetry Widget</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Live mockup of actual device telemetry</p>
                   </div>
                 </div>
 
@@ -343,15 +338,15 @@ export default function LandingPage() {
                   <div className="p-3.5 rounded-2xl bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-white/5 flex items-center gap-3">
                     <Thermometer className="h-5 w-5 text-amber-500" />
                     <div>
-                      <p className="text-[10px] font-semibold uppercase text-slate-400">Suhu</p>
+                      <p className="text-[10px] font-semibold uppercase text-slate-400">Temperature</p>
                       <p className="text-base font-bold text-slate-800 dark:text-white">{temp.toFixed(1)}°C</p>
                     </div>
                   </div>
-                  
+
                   <div className="p-3.5 rounded-2xl bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-white/5 flex items-center gap-3">
                     <Droplets className="h-5 w-5 text-sky-500" />
                     <div>
-                      <p className="text-[10px] font-semibold uppercase text-slate-400">Kelembapan</p>
+                      <p className="text-[10px] font-semibold uppercase text-slate-400">Humidity</p>
                       <p className="text-base font-bold text-slate-800 dark:text-white">{humidity}%</p>
                     </div>
                   </div>
@@ -359,9 +354,9 @@ export default function LandingPage() {
                   <div className="p-3.5 rounded-2xl bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-white/5 flex items-center gap-3">
                     {isRainy ? <CloudRain className="h-5 w-5 text-sky-500" /> : <Sun className="h-5 w-5 text-amber-500" />}
                     <div>
-                      <p className="text-[10px] font-semibold uppercase text-slate-400">Sensor Hujan</p>
+                      <p className="text-[10px] font-semibold uppercase text-slate-400">Rain Sensor</p>
                       <p className={`text-sm font-bold ${isRainy ? 'text-rose-500' : 'text-emerald-500'}`}>
-                        {isRainy ? "Terdeteksi Hujan" : "Kondisi Cerah"}
+                        {isRainy ? "Raining" : "Sunny"}
                       </p>
                     </div>
                   </div>
@@ -369,40 +364,54 @@ export default function LandingPage() {
                   <div className="p-3.5 rounded-2xl bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-white/5 flex items-center gap-3">
                     <Cpu className="h-5 w-5 text-teal-500" />
                     <div>
-                      <p className="text-[10px] font-semibold uppercase text-slate-400">Jemuran</p>
-                      <p className={`text-sm font-bold ${clotheslineState === 'TERBUKA' ? 'text-teal-600 dark:text-teal-400' : 'text-slate-500'}`}>
+                      <p className="text-[10px] font-semibold uppercase text-slate-400">Clothesline</p>
+                      <p className={`text-sm font-bold ${clotheslineState === 'OPEN' ? 'text-teal-600 dark:text-teal-400' : 'text-slate-500'}`}>
                         {clotheslineState}
                       </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-white/5 flex items-center gap-3">
+                    <Sun className="h-5 w-5 text-yellow-500" />
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase text-slate-400">Light Level</p>
+                      <p className="text-base font-bold text-slate-800 dark:text-white">{lightLevel * 10} Lux</p>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-white/5 flex items-center gap-3">
+                    <Wifi className="h-5 w-5 text-emerald-500" />
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase text-slate-400">Connectivity</p>
+                      <p className="text-base font-bold text-emerald-500">ONLINE</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Control Panel Simulator */}
                 <div className="p-4 rounded-2xl border border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-900/80 space-y-4">
-                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Simulasikan Perubahan Cuaca:</p>
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Simulate Local Weather:</p>
                   <div className="flex gap-2">
                     <button
                       onClick={handleSimulateRainy}
-                      className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
-                        isRainy
-                          ? "bg-rose-500 border-rose-600 text-white shadow-md shadow-rose-500/20"
-                          : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5"
-                      }`}
+                      className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold border transition-all ${isRainy
+                        ? "bg-rose-500 border-rose-600 text-white shadow-md shadow-rose-500/20"
+                        : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5"
+                        }`}
                     >
-                      🌧️ Terjadi Hujan
+                      🌧️ Make It Rain
                     </button>
                     <button
                       onClick={handleSimulateSunny}
-                      className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
-                        !isRainy
-                          ? "bg-emerald-500 border-emerald-600 text-white shadow-md shadow-emerald-500/20"
-                          : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5"
-                      }`}
+                      className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold border transition-all ${!isRainy
+                        ? "bg-emerald-500 border-emerald-600 text-white shadow-md shadow-emerald-500/20"
+                        : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5"
+                        }`}
                     >
-                      ☀️ Cuaca Cerah
+                      ☀️ Make It Sunny
                     </button>
                   </div>
-                  
+
                   <div className="border-t border-slate-200 dark:border-white/5 pt-3 flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                       Mode: <span className="text-teal-600 dark:text-teal-400">{isAutoMode ? "Auto" : "Manual"}</span>
@@ -411,7 +420,7 @@ export default function LandingPage() {
                       onClick={handleToggleMode}
                       className="py-1 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[10px] font-bold hover:bg-slate-100 dark:hover:bg-white/5 text-slate-700 dark:text-slate-300 transition-colors"
                     >
-                      Ganti ke {isAutoMode ? "Manual" : "Auto"}
+                      Switch to {isAutoMode ? "Manual" : "Auto"}
                     </button>
                   </div>
 
@@ -419,28 +428,38 @@ export default function LandingPage() {
                     <div className="pt-2 border-t border-dashed border-slate-200 dark:border-white/5 flex gap-2">
                       <button
                         onClick={handleManualOpen}
-                        disabled={clotheslineState === "TERBUKA"}
-                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
-                          clotheslineState === "TERBUKA"
-                            ? "bg-teal-600 border-teal-700 text-white opacity-60"
-                            : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5"
-                        }`}
+                        disabled={clotheslineState === "OPEN"}
+                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${clotheslineState === "OPEN"
+                          ? "bg-teal-600 border-teal-700 text-white opacity-60"
+                          : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5"
+                          }`}
                       >
-                        Buka Jemuran
+                        Open Clothesline
                       </button>
                       <button
                         onClick={handleManualClose}
-                        disabled={clotheslineState === "TERTUTUP"}
-                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
-                          clotheslineState === "TERTUTUP"
-                            ? "bg-slate-600 border-slate-700 text-white opacity-60"
-                            : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5"
-                        }`}
+                        disabled={clotheslineState === "CLOSED"}
+                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${clotheslineState === "CLOSED"
+                          ? "bg-slate-600 border-slate-700 text-white opacity-60"
+                          : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5"
+                          }`}
                       >
-                        Tutup Jemuran
+                        Close Clothesline
                       </button>
                     </div>
                   )}
+                </div>
+
+                {/* Live Activity Log console */}
+                <div className="mt-4 p-3.5 rounded-2xl border border-slate-200 dark:border-white/5 bg-slate-100/50 dark:bg-slate-900/60 space-y-2">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Live Activity Log</p>
+                  <div className="bg-slate-100 dark:bg-slate-950 p-3 rounded-xl font-mono text-[9px] text-slate-600 dark:text-slate-400 space-y-1.5 max-h-[75px] overflow-y-auto">
+                    {simulatedLogs.map((log, index) => (
+                      <p key={index} className={index === 0 ? "text-teal-600 dark:text-teal-400" : "text-slate-500"}>
+                        {log}
+                      </p>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -449,44 +468,39 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 3. PROBLEM SECTION */}
-      <section id="masalah" className="py-20 border-t border-slate-200/50 dark:border-white/5 bg-white dark:bg-slate-900/40">
+      {/* 2. PROBLEM SECTION */}
+      <section id="problems" className="py-20 border-t border-slate-200/50 dark:border-white/5 bg-white dark:bg-slate-900/40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto space-y-4 mb-16">
-            <span className="text-xs font-bold text-rose-500 uppercase tracking-widest">Tantangan Keseharian</span>
+            <span className="text-xs font-bold text-rose-500 uppercase tracking-widest">Why This Exists</span>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-800 dark:text-white">
-              Mengapa Jemuran Tradisional Menyulitkan Anda?
+              The Challenges of Traditional Drying
             </h2>
             <p className="text-slate-600 dark:text-slate-400 leading-relaxed text-sm sm:text-base">
-              Menjemur pakaian terdengar sepele, namun cuaca yang tidak menentu seringkali mendatangkan masalah yang merugikan.
+              Drying clothes outside remains a daily chore filled with uncertainty and micro-management.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
               {
-                title: "Hujan Mendadak",
-                desc: "Jemuran basah kuyup karena hujan deras tiba-tiba saat Anda sedang tidak di rumah.",
+                title: "Unexpected Rain",
+                desc: "Sudden weather changes soak clean clothes when users are away from home, ruining the wash.",
                 color: "border-rose-500/20 bg-rose-500/5 text-rose-500"
               },
               {
-                title: "Tidak Praktis",
-                desc: "Mengontrol jemuran manual menyita tenaga dan waktu, terutama ketika Anda sibuk beraktivitas.",
+                title: "Manual Checking",
+                desc: "Constantly looking outside at the sky is distracting and wastes valuable time throughout the day.",
                 color: "border-amber-500/20 bg-amber-500/5 text-amber-500"
               },
               {
-                title: "Buta Kondisi Rumah",
-                desc: "Sulit memantau apakah cuaca di rumah sedang cerah atau mendung ketika Anda berada di luar.",
+                title: "No Remote Control",
+                desc: "Traditional clotheslines cannot be controlled from a distance when sudden cloudiness strikes.",
                 color: "border-sky-500/20 bg-sky-500/5 text-sky-500"
               },
               {
-                title: "Ketergantungan Sinar",
-                desc: "Proses jemur pakaian sepenuhnya tergantung pada kejelasan sinar matahari tanpa alternatif pintar.",
-                color: "border-yellow-500/20 bg-yellow-500/5 text-yellow-600 dark:text-yellow-400"
-              },
-              {
-                title: "Alat Sulit Dipantau",
-                desc: "Kondisi keausan atau operasional motor penggerak jemuran tidak dapat diketahui tanpa sistem monitor.",
+                title: "No Drying History",
+                desc: "Drying patterns are unrecorded, making it difficult to analyze ambient drying efficiency.",
                 color: "border-slate-500/20 bg-slate-500/5 text-slate-500"
               }
             ].map((item, idx) => (
@@ -505,35 +519,35 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 4. SOLUTION SECTION */}
+      {/* 3. SOLUTION SECTION */}
       <section id="solusi" className="py-20 border-t border-slate-200/50 dark:border-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-            
+
             {/* Left Diagram Panel */}
             <div className="lg:col-span-5 order-2 lg:order-1 flex justify-center">
               <div className="w-full max-w-sm p-6 rounded-3xl border border-slate-200 dark:border-white/5 bg-white dark:bg-slate-900/50 shadow-xl relative space-y-6">
-                <h4 className="font-bold text-slate-800 dark:text-white text-sm">Aliran Data Solusi IoT</h4>
-                
+                <h4 className="font-bold text-slate-800 dark:text-white text-sm">System Pipeline Flow</h4>
+
                 <div className="space-y-4 text-xs">
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-teal-50 dark:bg-teal-500/5 border border-teal-200/50 dark:border-teal-500/10">
                     <div className="h-6 w-6 rounded bg-teal-500 text-white font-bold flex items-center justify-center">1</div>
-                    <p className="text-slate-700 dark:text-slate-300">Sensor mendeteksi rintik air & tingkat cahaya.</p>
+                    <p className="text-slate-700 dark:text-slate-300">Sensor reads weather (light, rain, temp, hum).</p>
                   </div>
-                  
+
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-sky-50 dark:bg-sky-500/5 border border-sky-200/50 dark:border-sky-500/10">
                     <div className="h-6 w-6 rounded bg-sky-500 text-white font-bold flex items-center justify-center">2</div>
-                    <p className="text-slate-700 dark:text-slate-300">ESP32 memproses & mengirim sinyal via MQTT.</p>
+                    <p className="text-slate-700 dark:text-slate-300">Device sends telemetry over MQTT broker.</p>
                   </div>
 
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200/50 dark:border-emerald-500/10">
                     <div className="h-6 w-6 rounded bg-emerald-500 text-white font-bold flex items-center justify-center">3</div>
-                    <p className="text-slate-700 dark:text-slate-300">Dashboard cloud mengupdate UI & mengirim notifikasi Telegram.</p>
+                    <p className="text-slate-700 dark:text-slate-300">Dashboard updates realtime & Telegram sends alerts.</p>
                   </div>
 
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-500/5 border border-slate-200/50 dark:border-slate-500/10">
                     <div className="h-6 w-6 rounded bg-slate-500 text-white font-bold flex items-center justify-center">4</div>
-                    <p className="text-slate-700 dark:text-slate-300">Data telemetri disimpan di Firestore untuk dianalisis.</p>
+                    <p className="text-slate-700 dark:text-slate-300">Analytics dashboard displays historical drying logs.</p>
                   </div>
                 </div>
               </div>
@@ -541,52 +555,52 @@ export default function LandingPage() {
 
             {/* Right Copy */}
             <div className="lg:col-span-7 order-1 lg:order-2 space-y-6">
-              <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-widest">Solusi Terintegrasi</span>
+              <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-widest">Our Solution</span>
               <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-800 dark:text-white">
-                Bagaimana Sistem IoT Menyelamatkan Cucian Anda?
+                How Smart Clothesline Solves It
               </h2>
               <p className="text-slate-600 dark:text-slate-400 leading-relaxed text-sm sm:text-base">
-                Smart Clothesline menghubungkan sensor cuaca fisik (suhu, kelembapan, cahaya, hujan) dengan motor penggerak otomatis melalui cloud.
+                Smart Clothesline combines sensors, device automation, cloud dashboard, and notification to help users monitor and control a clothesline more reliably.
               </p>
-              
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-teal-500 font-bold">✓</span>
-                    <h4 className="font-bold text-slate-800 dark:text-white text-sm">Sensor Akurat</h4>
+                    <h4 className="font-bold text-slate-800 dark:text-white text-sm">Automated Safety</h4>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Membaca curah hujan dan tingkat cahaya matahari secara instan untuk memperkirakan kondisi penjemuran terbaik.
+                    The clothesline closes immediately when rain drops are detected, saving your laundry without human intervention.
                   </p>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-teal-500 font-bold">✓</span>
-                    <h4 className="font-bold text-slate-800 dark:text-white text-sm">Dashboard Responsif</h4>
+                    <h4 className="font-bold text-slate-800 dark:text-white text-sm">Realtime Awareness</h4>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Kontrol manual jarak jauh jika Anda ingin menyesuaikan jemuran di luar keputusan otomatis sistem.
+                    Read active sensor data such as solar intensity and temperature directly from your phone or computer.
                   </p>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-teal-500 font-bold">✓</span>
-                    <h4 className="font-bold text-slate-800 dark:text-white text-sm">Sistem Proteksi Telegram</h4>
+                    <h4 className="font-bold text-slate-800 dark:text-white text-sm">Instant Notifications</h4>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Menerima notifikasi langsung ke Telegram saat jemuran menutup otomatis akibat air hujan terdeteksi.
+                    Get notification-only updates directly inside Telegram as soon as clothesline actions are executed.
                   </p>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-teal-500 font-bold">✓</span>
-                    <h4 className="font-bold text-slate-800 dark:text-white text-sm">Simulasi Wokwi</h4>
+                    <h4 className="font-bold text-slate-800 dark:text-white text-sm">Interactive Sandbox</h4>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Mendukung simulator Wokwi untuk mempermudah simulasi sirkuit dan pengujian kode bagi pembelajar IoT.
+                    Try the simulation instantly in the Wokwi emulator without purchasing any complex physical components first.
                   </p>
                 </div>
               </div>
@@ -596,60 +610,50 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 5. FEATURES SECTION */}
-      <section id="fitur" className="py-20 border-t border-slate-200/50 dark:border-white/5 bg-slate-100/40 dark:bg-slate-900/20">
+      {/* 4. CORE FEATURES SECTION */}
+      <section id="features" className="py-20 border-t border-slate-200/50 dark:border-white/5 bg-slate-100/40 dark:bg-slate-900/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto space-y-4 mb-16">
-            <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-widest">Fitur Unggulan</span>
+            <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-widest">Key Features</span>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-800 dark:text-white">
-              Semua Fitur dalam Genggaman Anda
+              Designed for Convenience and Control
             </h2>
             <p className="text-slate-600 dark:text-slate-400 leading-relaxed text-sm sm:text-base">
-              Menghadirkan fitur-fitur esensial untuk mempermudah monitoring jemuran Anda, mulai dari hardware hingga pipeline analisis data besar.
+              A comprehensive list of core system features that support your day-to-day clothes drying experience.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               {
                 icon: <Activity className="h-6 w-6 text-teal-500" />,
-                title: "Pemantauan Real-time",
-                desc: "Pantau suhu, kelembapan, cahaya, dan status hujan secara instan kapan saja."
+                title: "Realtime Monitoring",
+                desc: "Monitor temperature, humidity, light, rain condition, and clothesline status from the dashboard."
               },
               {
                 icon: <CloudRain className="h-6 w-6 text-sky-500" />,
-                title: "Deteksi Hujan Otomatis",
-                desc: "Sensor mendeteksi rintik hujan dan menutup jemuran secara otomatis untuk melindungi pakaian Anda."
+                title: "Smart Rain Protection",
+                desc: "Rain detection helps the system react faster when wet conditions are detected."
               },
               {
                 icon: <Smartphone className="h-6 w-6 text-indigo-500" />,
-                title: "Kontrol Dashboard",
-                desc: "Buka dan tutup jemuran atau ganti mode operasi dari mana saja dengan sekali klik."
+                title: "Remote Dashboard Control",
+                desc: "Open, close, switch mode, or restart the device from the dashboard when needed."
               },
               {
                 icon: <Bell className="h-6 w-6 text-amber-500" />,
-                title: "Notifikasi Telegram",
-                desc: "Dapatkan pemberitahuan langsung di ponsel Anda saat status jemuran berubah atau hujan turun."
+                title: "Telegram Notifications",
+                desc: "Receive useful alerts such as rain warning or device status updates. Telegram is used for notifications only, not device commands."
               },
               {
                 icon: <Wifi className="h-6 w-6 text-emerald-500" />,
-                title: "Manajemen Perangkat",
-                desc: "Kelola konektivitas perangkat ESP32 dan pantau status online/offline dengan mudah."
+                title: "Device Pairing",
+                desc: "Connect Wokwi simulator or real ESP32 devices using device identity and pairing flow."
               },
               {
-                icon: <History className="h-6 w-6 text-sky-600" />,
-                title: "Analisis Riwayat",
-                desc: "Tinjau grafik data sensor harian dan mingguan untuk memahami pola cuaca di sekitar Anda."
-              },
-              {
-                icon: <Database className="h-6 w-6 text-purple-500" />,
-                title: "Analisis Batch Hadoop",
-                desc: "Dukungan analisis data skala besar untuk laporan historis jangka panjang yang mendalam."
-              },
-              {
-                icon: <Cpu className="h-6 w-6 text-slate-500" />,
-                title: "Integrasi ESP32 & Wokwi",
-                desc: "Sistem dapat berjalan pada hardware ESP32 fisik maupun simulator Wokwi untuk kemudahan pengujian."
+                icon: <History className="h-6 w-6 text-purple-500" />,
+                title: "Analytics and Big Data",
+                desc: "Review operational trends and batch reports from historical sensor data."
               }
             ].map((feat, idx) => (
               <div
@@ -669,240 +673,302 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 6. HOW IT WORKS SECTION */}
-      <section id="cara-kerja" className="py-20 border-t border-slate-200/50 dark:border-white/5">
+      {/* 5. HOW IT WORKS SECTION */}
+      <section id="how-it-works" className="py-20 border-t border-slate-200/50 dark:border-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto space-y-4 mb-16">
-            <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-widest">Cara Kerja</span>
+            <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-widest">How It Works</span>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-800 dark:text-white">
-              Langkah Sederhana Cara Kerja Sistem
+              Steps to Get Started
             </h2>
             <p className="text-slate-600 dark:text-slate-400 leading-relaxed text-sm sm:text-base">
-              Dari deteksi cuaca lokal hingga analisis data historis di server cloud, berikut alur kerja otomatisnya.
+              Setting up your smart clothesline is simple. Follow this process to connect your device.
             </p>
           </div>
 
-          {/* 4 Steps Flow */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-16 relative">
+          {/* 6 Steps Flow */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-6 mb-16">
             {[
-              {
-                step: "1",
-                title: "Membaca Lingkungan",
-                desc: "Sensor fisik atau simulasi membaca parameter suhu, kelembapan, cahaya, dan curah hujan."
-              },
-              {
-                step: "2",
-                title: "Kirim Data via MQTT",
-                desc: "Perangkat ESP32 mengirimkan data telemetri secara instan ke broker MQTT cloud."
-              },
-              {
-                step: "3",
-                title: "Visualisasi & Notifikasi",
-                desc: "Dashboard memproses data secara real-time dan Telegram mengirim notifikasi jika darurat."
-              },
-              {
-                step: "4",
-                title: "Simpan & Analisis",
-                desc: "Data tersimpan di Firestore dan diekspor ke Hadoop untuk analisis batch jangka panjang."
-              }
+              { step: "1", title: "Setup Device", desc: "Install physical ESP32 hardware or open the Wokwi simulator link." },
+              { step: "2", title: "MQTT Link", desc: "Connect the device credentials to the public MQTT broker." },
+              { step: "3", title: "Pair Device", desc: "Add your device ID to your profile inside the IoT Hub tab." },
+              { step: "4", title: "Open Dashboard", desc: "Monitor active telemetry feeds on the web dashboard." },
+              { step: "5", title: "Get Alerts", desc: "Receive immediate notifications inside your Telegram client." },
+              { step: "6", title: "View Analytics", desc: "Review daily patterns and long-term climate analytics." }
             ].map((step, idx) => (
               <div key={idx} className="relative p-6 rounded-2xl bg-white dark:bg-slate-900/30 border border-slate-200 dark:border-white/5 text-center space-y-3">
-                <div className="absolute -top-5 left-1/2 -translate-x-1/2 h-10 w-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 text-white font-extrabold text-sm flex items-center justify-center shadow-md">
+                <div className="mx-auto h-8 w-8 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 text-white font-extrabold text-xs flex items-center justify-center shadow-sm">
                   {step.step}
                 </div>
-                <h3 className="font-bold text-slate-800 dark:text-white text-base pt-3">{step.title}</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{step.desc}</p>
+                <h3 className="font-bold text-slate-800 dark:text-white text-xs">{step.title}</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">{step.desc}</p>
               </div>
             ))}
           </div>
 
           {/* Architecture Strip */}
-          <div className="p-6 rounded-3xl border border-slate-200 dark:border-slate-880 bg-slate-100/50 dark:bg-slate-900/60 flex flex-col items-center justify-center gap-4">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Alur Pipa Data Sistem IoT</p>
+          <div className="p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/60 flex flex-col items-center justify-center gap-4">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">System Architecture Pipeline</p>
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-xs font-bold text-slate-700 dark:text-slate-300">
               <span className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700">ESP32 / Wokwi</span>
               <span className="text-teal-500">➔</span>
               <span className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700">MQTT Broker</span>
               <span className="text-teal-500">➔</span>
-              <span className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700">Web Dashboard</span>
+              <span className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700">Next.js Dashboard</span>
               <span className="text-teal-500">➔</span>
               <span className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700">Cloud Firestore</span>
               <span className="text-teal-500">➔</span>
-              <span className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700">Analytics & Hadoop</span>
+              <span className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700">Analytics / Hadoop Reports</span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 7. DASHBOARD PREVIEW SECTION */}
+      {/* 6. PRODUCT PREVIEW SECTION */}
       <section className="py-20 border-t border-slate-200/50 dark:border-white/5 bg-slate-100/40 dark:bg-slate-900/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto space-y-4 mb-16">
-            <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-widest">Pratinjau Dashboard</span>
+            <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-widest">Interface Previews</span>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-800 dark:text-white">
-              Antarmuka Kontrol yang Bersih dan Intuitif
+              Explore the Connected System
             </h2>
             <p className="text-slate-600 dark:text-slate-400 leading-relaxed text-sm sm:text-base">
-              Melihat pratinjau bagaimana Anda mengelola status perangkat dan memantau kondisi cuaca langsung secara grafis.
+              A breakdown of what you see and manage across the system&apos;s key screens.
             </p>
           </div>
 
-          {/* Desktop Dashboard Mockup */}
-          <div className="rounded-3xl border border-slate-200 dark:border-slate-880 bg-white dark:bg-slate-900 overflow-hidden shadow-2xl">
-            {/* Mock Window Bar */}
-            <div className="bg-slate-100 dark:bg-slate-950 px-6 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="h-3 w-3 rounded-full bg-rose-500" />
-                <span className="h-3 w-3 rounded-full bg-amber-500" />
-                <span className="h-3 w-3 rounded-full bg-emerald-500" />
-              </div>
-              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">smart-clothesline-workspace</span>
-              <div className="w-10" />
-            </div>
-
-            {/* Mock Dashboard Content */}
-            <div className="p-6 md:p-8 space-y-6">
-              
-              {/* Header Status Bar */}
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 border-b border-slate-200/60 dark:border-white/5">
-                <div>
-                  <h3 className="text-lg font-bold text-slate-800 dark:text-white">Workspace Pengendalian Jemuran</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">ID Perangkat: <span className="font-mono text-teal-600 dark:text-teal-400">esp32_clothesline_01</span></p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                    Alat Terhubung
+          {/* CSS-Based Mock Panels */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            {[
+              {
+                title: "Dashboard",
+                desc: "Displays active environment telemetry and allows manual opening/closing overrides for active clotheslines.",
+                badge: "Realtime View",
+                badgeColor: "bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20",
+                preview: (
+                  <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl space-y-2 text-[10px]">
+                    <div className="flex justify-between border-b pb-1 border-slate-200 dark:border-slate-700">
+                      <span className="font-bold">Device: Online</span>
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Temp: 30°C</span>
+                      <span className="font-semibold text-teal-500">OPEN</span>
+                    </div>
+                  </div>
+                )
+              },
+              {
+                title: "IoT Hub",
+                desc: "Where users add new devices, check token pairing parameters, and configure Wokwi simulator compatibility.",
+                badge: "Device Pairing",
+                badgeColor: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
+                preview: (
+                  <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl space-y-2 text-[10px]">
+                    <div className="text-slate-400 font-mono font-bold text-[8px]">PAIRING UTILITY</div>
+                    <div className="p-1 rounded bg-white dark:bg-slate-900 border text-center font-mono">esp32_device_xyz</div>
+                  </div>
+                )
+              },
+              {
+                title: "Analytics",
+                desc: "Provides interactive graphs of temperature, humidity, and rainfall patterns compiled over recent hours.",
+                badge: "Data Trends",
+                badgeColor: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20",
+                preview: (
+                  <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl space-y-2 text-[10px]">
+                    <div className="flex items-end justify-between h-8 px-2 pt-2 border-b border-slate-350 dark:border-slate-700">
+                      <div className="w-1.5 h-4 bg-teal-500" />
+                      <div className="w-1.5 h-6 bg-teal-500" />
+                      <div className="w-1.5 h-5 bg-teal-400" />
+                      <div className="w-1.5 h-8 bg-emerald-400" />
+                    </div>
+                  </div>
+                )
+              },
+              {
+                title: "Big Data Report",
+                desc: "Summarizes export files through Hadoop batch scripts for daily rain statistics and climate reports.",
+                badge: "Hadoop Batch",
+                badgeColor: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20",
+                preview: (
+                  <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl space-y-2 text-[10px] font-mono">
+                    <div className="text-[8px] text-purple-500">MAPREDUCE_ETL.CSV</div>
+                    <div className="text-[8px] text-slate-400">Rain events total: 14</div>
+                    <Link href="/big-data" className="mt-1 block text-right text-[8px] text-purple-550 font-bold hover:underline">
+                      View Big Data Analytics →
+                    </Link>
+                  </div>
+                )
+              },
+              {
+                title: "Telegram Alert",
+                desc: "Receives outbound Telegram notifications when weather events trigger automated fallbacks on the device.",
+                badge: "Notification Only",
+                badgeColor: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
+                preview: (
+                  <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl space-y-1 text-[9px]">
+                    <div className="font-bold text-indigo-500">Telegram Bot</div>
+                    <div className="p-1.5 rounded-lg bg-teal-500/10 border border-teal-500/20 text-slate-700 dark:text-slate-300">
+                      ⚠️ Rain detected. Clothesline closed automatically.
+                    </div>
+                  </div>
+                )
+              }
+            ].map((panel, idx) => (
+              <div key={idx} className="p-5 rounded-3xl border border-slate-200 dark:border-white/5 bg-white dark:bg-slate-900/50 flex flex-col justify-between space-y-4">
+                <div className="space-y-2">
+                  <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${panel.badgeColor}`}>
+                    {panel.badge}
                   </span>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-teal-500/10 border border-teal-500/20 text-xs font-bold text-teal-600 dark:text-teal-400">
-                    Mode: {isAutoMode ? "AUTO" : "MANUAL"}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-sky-500/10 border border-sky-500/20 text-xs font-bold text-sky-600 dark:text-sky-400">
-                    Jemuran: {clotheslineState}
-                  </span>
+                  <h3 className="font-bold text-slate-800 dark:text-white text-sm">{panel.title}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{panel.desc}</p>
                 </div>
+                {panel.preview}
               </div>
-
-              {/* Layout Sensor Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {[
-                  { label: "Suhu Udara", value: `${temp.toFixed(1)} °C`, status: temp > 28 ? "Hangat" : "Sejuk", color: "text-amber-500", icon: <Thermometer className="h-5 w-5" /> },
-                  { label: "Kelembapan", value: `${humidity} %`, status: humidity > 70 ? "Tinggi" : "Normal", color: "text-sky-500", icon: <Droplets className="h-5 w-5" /> },
-                  { label: "Sensor Hujan", value: isRainy ? "Hujan" : "Cerah", status: isRainy ? "Terdeteksi" : "Aman", color: "text-emerald-500", icon: <CloudRain className="h-5 w-5" /> },
-                  { label: "Intensitas Cahaya", value: `${lightLevel * 10} Lux`, status: lightLevel > 55 ? "Terang" : "Redup", color: "text-yellow-500", icon: <Sun className="h-5 w-5" /> }
-                ].map((sensor, idx) => (
-                  <div key={idx} className="p-5 rounded-2xl border border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-slate-800/40 space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{sensor.label}</span>
-                      <div className={`p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-white/5 ${sensor.color}`}>
-                        {sensor.icon}
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-baseline">
-                      <span className="text-2xl font-bold text-slate-800 dark:text-white">{sensor.value}</span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 uppercase">{sensor.status}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Simulated Device Control Box */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
-                <div className="lg:col-span-2 p-5 rounded-2xl border border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-slate-800/40 flex flex-col justify-between">
-                  <div className="space-y-2 mb-4">
-                    <h4 className="font-bold text-slate-800 dark:text-white text-sm">Log Aktivitas Terbaru</h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Catatan telemetri real-time dari broker MQTT</p>
-                  </div>
-                  <div className="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl font-mono text-[10px] text-slate-600 dark:text-slate-400 space-y-2 max-h-[120px] overflow-y-auto">
-                    {simulatedLogs.map((log, index) => (
-                      <p key={index} className={index === 0 ? "text-teal-600 dark:text-teal-400" : "text-slate-500"}>
-                        {log}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="p-5 rounded-2xl border border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-slate-800/40 space-y-4">
-                  <div className="space-y-1">
-                    <h4 className="font-bold text-slate-800 dark:text-white text-sm">Aktuator Fisik</h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Kontrol manual override motor jemuran</p>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex gap-2">
-                      <button className="flex-1 py-2 px-3 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-400 cursor-not-allowed">
-                        Buka (Disable)
-                      </button>
-                      <button className="flex-1 py-2 px-3 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-400 cursor-not-allowed">
-                        Tutup (Disable)
-                      </button>
-                    </div>
-                    <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex gap-2.5 items-start">
-                      <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                      <p className="text-[10px] text-amber-700 dark:text-amber-300 leading-relaxed font-semibold">
-                        Ganti mode ke MANUAL pada dasbor Anda untuk mengaktifkan tombol kendali jemuran jarak jauh secara langsung.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* 8. USE CASES SECTION */}
+      {/* 7. TECHNOLOGY SECTION */}
+      <section id="technology" className="py-20 border-t border-slate-200/50 dark:border-white/5">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-3xl mx-auto space-y-4 mb-16">
+            <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-widest">Our Stack</span>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-800 dark:text-white">
+              Built on Modern Cloud and IoT Technologies
+            </h2>
+            <p className="text-slate-600 dark:text-slate-400 leading-relaxed text-sm sm:text-base">
+              A structured technical roadmap supporting low-latency telemetry transfers and analytical batch reports.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { title: "ESP32 & Wokwi", desc: "Drives physical sensor loops or simulations with C++ firmware compatibility." },
+              { title: "MQTT Broker", desc: "Delivers realtime telemetry and commands between the device and dashboard." },
+              { title: "Next.js Dashboard", desc: "React-based web interface showing interactive gauges and settings." },
+              { title: "Firebase Firestore", desc: "Acts as the cloud storage mechanism for keeping telemetry archives." },
+              { title: "Telegram Bot API", desc: "Sends outbound alerts regarding environmental safety changes." },
+              { title: "Hadoop Batch Analytics", desc: "Processes exported historical sensor data for daily summaries and rain-event analysis (currently in MVP scaffold)." },
+              { title: "GitHub Actions CI", desc: "Provides automated integration checking to enforce architecture rules." },
+              { title: "Zustand & Tailwind", desc: "Coordinates layout styling variables and light/dark theme persistence." }
+            ].map((tech, idx) => (
+              <div key={idx} className="p-5 rounded-2xl border border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-slate-900/50 space-y-2">
+                <h4 className="font-extrabold text-slate-800 dark:text-white text-sm">{tech.title}</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{tech.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 8. SAFETY AND CONTROL SECTION */}
+      <section id="safety" className="py-20 border-t border-slate-200/50 dark:border-white/5 bg-white dark:bg-slate-900/40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+
+            <div className="lg:col-span-7 space-y-6">
+              <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-widest">Trust & Security</span>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-800 dark:text-white">
+                Safety and Control Design Choices
+              </h2>
+              <p className="text-slate-600 dark:text-slate-400 leading-relaxed text-sm sm:text-base">
+                Control stays clear and predictable. The dashboard is the place for device actions, while Telegram only notifies users when attention is needed.
+              </p>
+
+              <div className="space-y-4">
+                <div className="flex gap-3">
+                  <div className="h-5 w-5 rounded bg-teal-500/10 text-teal-600 flex items-center justify-center font-bold text-xs mt-0.5">✓</div>
+                  <div>
+                    <h4 className="font-bold text-slate-800 dark:text-white text-sm">Centralized Control surface</h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      All manual actuation commands are authorized strictly via the authenticated web application dashboard.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <div className="h-5 w-5 rounded bg-teal-500/10 text-teal-600 flex items-center justify-center font-bold text-xs mt-0.5">✓</div>
+                  <div>
+                    <h4 className="font-bold text-slate-800 dark:text-white text-sm">Notification-Only Telegram Alerts</h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Telegram only relays alerts to keep operations safe and prevent command hijacking from exterior interfaces.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <div className="h-5 w-5 rounded bg-teal-500/10 text-teal-600 flex items-center justify-center font-bold text-xs mt-0.5">✓</div>
+                  <div>
+                    <h4 className="font-bold text-slate-800 dark:text-white text-sm">Local Device Fallback behavior</h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      If internet connectivity is lost, the local ESP32 controller closes the line automatically upon detecting rain.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Failsafe mockup visual */}
+            <div className="lg:col-span-5 flex justify-center">
+              <div className="w-full max-w-sm p-6 rounded-3xl border border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-900/50 shadow-xl space-y-4">
+                <div className="flex items-center gap-2 text-teal-600">
+                  <ShieldCheck className="h-5 w-5" />
+                  <span className="font-bold text-xs text-slate-800 dark:text-white">Active Failsafe Status</span>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div className="p-3 rounded-lg bg-white dark:bg-slate-800 border flex justify-between">
+                    <span>MQTT Control Port</span>
+                    <span className="font-mono text-emerald-500 font-bold">SECURED</span>
+                  </div>
+                  <div className="p-3 rounded-lg bg-white dark:bg-slate-800 border flex justify-between">
+                    <span>Telegram Command Input</span>
+                    <span className="font-mono text-rose-500 font-bold">DISABLED</span>
+                  </div>
+                  <div className="p-3 rounded-lg bg-white dark:bg-slate-800 border flex justify-between">
+                    <span>Local Offline Fallback</span>
+                    <span className="font-mono text-teal-500 font-bold">ARMED</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      {/* 9. USE CASES SECTION */}
       <section className="py-20 border-t border-slate-200/50 dark:border-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto space-y-4 mb-16">
-            <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-widest">Skenario Penerapan</span>
+            <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-widest">Practical Applications</span>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-800 dark:text-white">
-              Sangat Cocok untuk Berbagai Kebutuhan
+              Fits a Variety of Settings
             </h2>
             <p className="text-slate-600 dark:text-slate-400 leading-relaxed text-sm sm:text-base">
-              Smart Clothesline dirancang fleksibel untuk memecahkan masalah penjemuran pakaian di berbagai kondisi lingkungan.
+              A versatile solution tailored for home laundry, educational demonstrations, and commercial operations.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
             {[
-              {
-                icon: <Sun className="h-6 w-6 text-teal-500" />,
-                title: "Rumah Tangga",
-                desc: "Melindungi cucian keluarga saat rumah kosong ditinggal bekerja seharian tanpa khawatir mendung tiba-tiba."
-              },
-              {
-                icon: <Users className="h-6 w-6 text-indigo-500" />,
-                title: "Rumah Kos (Kost)",
-                desc: "Membantu banyak penghuni kost mengeringkan baju bersama di atap tanpa harus saling menunggu."
-              },
-              {
-                icon: <Smartphone className="h-6 w-6 text-emerald-500" />,
-                title: "Bisnis Laundry",
-                desc: "Meningkatkan efisiensi kerja operator laundry dengan sistem jemuran yang responsif terhadap cuaca."
-              },
-              {
-                icon: <BookOpen className="h-6 w-6 text-amber-500" />,
-                title: "Laboratorium IoT",
-                desc: "Sarana pembelajaran mahasiswa dan pelajar untuk mempelajari mikrokontroler & arsitektur jaringan IoT."
-              },
-              {
-                icon: <Layers className="h-6 w-6 text-purple-500" />,
-                title: "Pembelajaran Cloud",
-                desc: "Studi kasus komprehensif bagi developer untuk mempelajari integrasi broker MQTT, Firestore, dan Hadoop."
-              }
+              { icon: <Sun className="h-5 w-5 text-teal-500" />, title: "Home Laundry", desc: "Protects family laundry drying at home during unpredictable weather shifts." },
+              { icon: <Users className="h-5 w-5 text-indigo-500" />, title: "Boarding Houses", desc: "Assists shared accommodations in managing group clothesline areas collaboratively." },
+              { icon: <Smartphone className="h-5 w-5 text-emerald-500" />, title: "Laundry Business", desc: "Helps commercial laundry operators optimize scheduling and safeguard garments." },
+              { icon: <BookOpen className="h-5 w-5 text-amber-500" />, title: "IoT Demos", desc: "Serves as an illustrative physical/virtual sandbox setup for student projects." },
+              { icon: <Layers className="h-5 w-5 text-purple-500" />, title: "Cloud Learning", desc: "Utilizes structured MQTT, Firestore database, and pipeline data schemas." },
+              { icon: <Server className="h-5 w-5 text-rose-500" />, title: "Big Data Demos", desc: "Demonstrates batch file analytical workflows using MapReduce logs." }
             ].map((uc, idx) => (
-              <div
-                key={idx}
-                className="p-6 rounded-3xl border border-slate-200 dark:border-white/5 bg-white dark:bg-slate-900/40 flex flex-col justify-between hover:scale-[1.02] transition-transform"
-              >
+              <div key={idx} className="p-5 rounded-3xl border border-slate-200 dark:border-white/5 bg-white dark:bg-slate-900/40 flex flex-col justify-between hover:scale-[1.02] transition-transform">
                 <div className="space-y-4">
-                  <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-600 dark:text-slate-300">
+                  <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center">
                     {uc.icon}
                   </div>
-                  <h3 className="font-extrabold text-slate-800 dark:text-white text-base leading-snug">{uc.title}</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{uc.desc}</p>
+                  <h3 className="font-extrabold text-slate-800 dark:text-white text-sm">{uc.title}</h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">{uc.desc}</p>
                 </div>
               </div>
             ))}
@@ -910,170 +976,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 9. CLOUD AND BIG DATA SECTION */}
-      <section id="big-data" className="py-20 border-t border-slate-200/50 dark:border-white/5 bg-slate-100/40 dark:bg-slate-900/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-            
-            {/* Left Copy */}
-            <div className="lg:col-span-7 space-y-6">
-              <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-widest">Infrastruktur Data</span>
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-800 dark:text-white">
-                Dirancang untuk Pembelajaran Cloud & Big Data
-              </h2>
-              <p className="text-slate-600 dark:text-slate-400 leading-relaxed text-sm sm:text-base">
-                Proyek ini mengintegrasikan pengolahan data real-time dengan pemrosesan analitik batch skala besar untuk kebutuhan pelaporan jangka panjang yang mendalam.
-              </p>
-
-              {/* Data Layers Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-4 rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-slate-900/50 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-teal-500" />
-                    <h4 className="font-bold text-slate-800 dark:text-white text-xs">Pesan Realtime (MQTT)</h4>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Broker MQTT menangani pengiriman data telemetri instan dari mikrokontroler dengan latensi milidetik.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-slate-900/50 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                    <h4 className="font-bold text-slate-800 dark:text-white text-xs">Penyimpanan Riwayat (Firestore)</h4>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Database Cloud Firestore mencatat log aktivitas jemuran untuk pemuatan grafik dasbor instan.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-slate-900/50 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-sky-500" />
-                    <h4 className="font-bold text-slate-800 dark:text-white text-xs">Notifikasi Instan (Telegram)</h4>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Pemberitahuan khusus dikirim ke bot Telegram sebagai media alert praktis untuk kenyamanan pengguna.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-slate-900/50 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-purple-500" />
-                    <h4 className="font-bold text-slate-800 dark:text-white text-xs">Analisis Batch (Hadoop)</h4>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Hadoop MapReduce memproses data telemetri yang diekspor untuk membuat laporan kecenderungan cuaca bulanan.
-                  </p>
-                </div>
-              </div>
-
-              {/* Warning Alert Hadoop vs Control */}
-              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex gap-3 items-start">
-                <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <h5 className="font-bold text-amber-800 dark:text-amber-300 text-xs">Penting Diketahui</h5>
-                  <p className="text-[10px] text-amber-700 dark:text-amber-300 leading-relaxed font-semibold mt-1">
-                    Framework Hadoop digunakan khusus untuk laporan batch jangka panjang (analitik historis), bukan untuk kontrol motor jemuran secara real-time.
-                  </p>
-                </div>
-              </div>
-
-              {/* CTA link to big data page */}
-              <div className="pt-2">
-                <Link
-                  href="/big-data"
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-950 font-bold text-xs hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors shadow-md"
-                >
-                  Lihat Analisis Big Data <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              </div>
-            </div>
-
-            {/* Right Big Data Visual Panel */}
-            <div className="lg:col-span-5 flex justify-center">
-              <div className="w-full max-w-sm p-6 rounded-3xl border border-slate-200 dark:border-white/5 bg-white dark:bg-slate-900/50 shadow-xl space-y-4">
-                <div className="flex items-center gap-2">
-                  <Server className="h-5 w-5 text-teal-600" />
-                  <span className="font-bold text-xs text-slate-800 dark:text-white">Arsitektur Pipeline Pembelajaran</span>
-                </div>
-                
-                {/* Visual nodes */}
-                <div className="space-y-3 pt-2">
-                  <div className="p-3 rounded-xl bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-white/5 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Input Telemetri</span>
-                    <span className="text-xs font-mono font-bold text-teal-600 dark:text-teal-400">ESP32 (MQTT)</span>
-                  </div>
-                  <div className="flex justify-center text-slate-400 text-xs">↓</div>
-                  
-                  <div className="p-3 rounded-xl bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-white/5 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Penyimpanan Cloud</span>
-                    <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">Firestore NoSQL</span>
-                  </div>
-                  <div className="flex justify-center text-slate-400 text-xs">↓</div>
-                  
-                  <div className="p-3 rounded-xl bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-white/5 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Batch ETL Export</span>
-                    <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">JSON/CSV Export</span>
-                  </div>
-                  <div className="flex justify-center text-slate-400 text-xs">↓</div>
-                  
-                  <div className="p-3 rounded-xl bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-white/5 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Pemrosesan Batch</span>
-                    <span className="text-xs font-mono font-bold text-purple-600 dark:text-purple-400">Hadoop MapReduce</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </section>
-
-      {/* 10. SAFETY AND TRUST SECTION */}
-      <section id="keamanan" className="py-20 border-t border-slate-200/50 dark:border-white/5 bg-white dark:bg-slate-900/40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto space-y-4 mb-16">
-            <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-widest">Keandalan Sistem</span>
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-800 dark:text-white">
-              Keamanan dan Kepercayaan dalam Desain Kami
-            </h2>
-            <p className="text-slate-600 dark:text-slate-400 leading-relaxed text-sm sm:text-base">
-              Kami memprioritaskan keamanan operasional alat demi kenyamanan dan perlindungan data Anda.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              {
-                icon: <ShieldCheck className="h-6 w-6 text-teal-600" />,
-                title: "Fallback Lokal Otomatis",
-                desc: "Perangkat ESP32 memiliki algoritma lokal untuk menutup jemuran secara mandiri jika terdeteksi hujan ketika koneksi internet ke cloud terputus."
-              },
-              {
-                icon: <Bell className="h-6 w-6 text-emerald-600" />,
-                title: "Telegram Notification Only",
-                desc: "Saluran Telegram digunakan khusus sebagai pembawa notifikasi instan, mencegah celah injeksi perintah langsung dari luar sistem utama."
-              },
-              {
-                icon: <Cpu className="h-6 w-6 text-indigo-600" />,
-                title: "Isolasi Topik MQTT",
-                desc: "Setiap alat menggunakan pengalamatan topik MQTT unik per-perangkat untuk mencegah data antar pengguna saling tertukar."
-              }
-            ].map((safety, idx) => (
-              <div key={idx} className="p-6 rounded-3xl border border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-slate-900/50 space-y-4 hover:scale-[1.02] transition-transform">
-                <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center">
-                  {safety.icon}
-                </div>
-                <h3 className="font-extrabold text-slate-800 dark:text-white text-base leading-snug">{safety.title}</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{safety.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 11. FINAL CTA SECTION */}
+      {/* 10. DEMO / CALL TO ACTION SECTION */}
       <section className="relative py-24 bg-gradient-to-br from-teal-600 to-emerald-700 text-white overflow-hidden text-center">
         {/* Background blobs */}
         <div className="absolute top-10 left-10 -z-10 w-[300px] h-[300px] bg-white/10 rounded-full blur-2xl pointer-events-none" />
@@ -1081,10 +984,10 @@ export default function LandingPage() {
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight">
-            Siap Memantau Jemuran Pintar Anda?
+            Ready to Protect Your Laundry?
           </h2>
           <p className="text-base sm:text-lg text-teal-100 max-w-xl mx-auto leading-relaxed">
-            Buka dashboard sekarang, hubungkan sirkuit mikrokontroler Anda, dan nikmati kemudahan penjemuran otomatis hari ini.
+            Open the dashboard today to monitor telemetry. Use the Wokwi simulator for demo mode or connect a real ESP32 device for hardware testing.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
@@ -1092,19 +995,25 @@ export default function LandingPage() {
               href="/dashboard"
               className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3.5 rounded-2xl bg-white text-teal-700 font-extrabold shadow-xl hover:bg-slate-50 transition-colors text-base"
             >
-              Buka Dashboard
+              Open Dashboard
             </Link>
             <Link
               href="/analytics"
               className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3.5 rounded-2xl border border-white/20 bg-white/5 text-white font-bold hover:bg-white/10 transition-colors text-base"
             >
-              Lihat Analisis
+              View Analytics
+            </Link>
+            <Link
+              href="/iot-hub"
+              className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3.5 rounded-2xl border border-teal-200/30 text-teal-200 hover:text-white hover:bg-white/5 transition-colors font-semibold text-base"
+            >
+              Configure Device
             </Link>
           </div>
         </div>
       </section>
 
-      {/* 12. FOOTER */}
+      {/* FOOTER */}
       <footer className="bg-slate-100 dark:bg-slate-950 border-t border-slate-200/50 dark:border-white/5 py-12 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2">
@@ -1117,7 +1026,7 @@ export default function LandingPage() {
           </div>
 
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            &copy; {new Date().getFullYear()} Smart Clothesline IoT System. Cloud Computing & Big Data Learning Project.
+            &copy; {new Date().getFullYear()} Smart Clothesline.
           </p>
         </div>
       </footer>
