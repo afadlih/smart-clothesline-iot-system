@@ -2,8 +2,10 @@
 
 import { Suspense } from "react";
 import { usePathname } from "next/navigation";
-import AuthGate from "@/components/auth/AuthGate";
-import MainLayout from "@/components/layout/MainLayout";
+import dynamic from "next/dynamic";
+
+const AuthGate = dynamic(() => import("@/components/auth/AuthGate"), { ssr: false });
+const MainLayout = dynamic(() => import("@/components/layout/MainLayout"), { ssr: false });
 
 export default function AppShell({
   children,

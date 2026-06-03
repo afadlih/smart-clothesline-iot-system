@@ -156,13 +156,20 @@ test("schedule synchronization contract validation", () => {
 });
 test("landing page contract validation", () => {
   const content = read("src/app/page.tsx");
+  const layoutContent = read("src/app/layout.tsx");
   
-  // 1. src/app/page.tsx existence is verified by read() above.
+  // 1. src/app/page.tsx exists (verified by read() above)
   
-  // 2. Landing page does not import forbidden imports
+  // 2. Landing page does not contain "use client"
+  assert.ok(!content.includes('"use client"'), 'Landing page should not contain "use client"');
+  assert.ok(!content.includes("'use client'"), "Landing page should not contain 'use client'");
+
+  // 3. Landing page does not import forbidden systems
   const forbidden = [
-    "useSensor",
     "mqttService",
+    "MQTTService",
+    "useSensor",
+    "useSystemState",
     "FirestoreService",
     "useAnalyticsData",
     "firebase",
@@ -175,13 +182,31 @@ test("landing page contract validation", () => {
     assert.ok(!content.includes(item), `Landing page should not import or refer to: ${item}`);
   }
 
-  // 3. Landing page does not contain useEffect
-  assert.ok(!content.includes("useEffect"), "Landing page should not contain useEffect");
+  // 4. Landing page does not contain useEffect, useState, localStorage, window, document, fetch
+  const forbiddenJs = [
+    "useEffect",
+    "useState",
+    "localStorage",
+    "window.",
+    "document.",
+    "fetch("
+  ];
+  for (const item of forbiddenJs) {
+    assert.ok(!content.includes(item), `Landing page should not contain JS runtime feature: ${item}`);
+  }
 
-  // 4. Landing page does not contain localStorage
-  assert.ok(!content.includes("localStorage"), "Landing page should not contain localStorage");
+  // 5. src/app/layout.tsx does not import forbidden systems
+  const forbiddenLayout = [
+    "mqttService",
+    "MQTTService",
+    "useSensor",
+    "FirestoreService"
+  ];
+  for (const item of forbiddenLayout) {
+    assert.ok(!layoutContent.includes(item), `Root layout should not import or refer to: ${item}`);
+  }
 
-  // 5. Landing page contains links to required routes
+  // 6. Landing page contains links to required routes
   const requiredRoutes = [
     "/dashboard",
     "/analytics",
@@ -192,7 +217,7 @@ test("landing page contract validation", () => {
     assert.ok(content.includes(route), `Landing page should link to: ${route}`);
   }
 
-  // 6. Landing page mentions key product concepts
+  // 7. Landing page mentions key product concepts
   const mentions = [
     "Smart Clothesline",
     "rain detection",
@@ -208,7 +233,7 @@ test("landing page contract validation", () => {
     "Landing page should mention Hadoop or Big Data"
   );
 
-  // 7. Landing page does not contain AI-slop words
+  // 8. Landing page does not contain AI-slop words
   const slop = [
     "revolutionary",
     "AI-powered",
@@ -220,6 +245,6 @@ test("landing page contract validation", () => {
     assert.ok(!content.toLowerCase().includes(word.toLowerCase()), `Landing page contains AI-slop: ${word}`);
   }
 
-  // 8. Landing page has accessible text for primary CTA
+  // 9. Landing page has accessible text for primary CTA
   assert.ok(content.includes("Open Dashboard"), "Landing page should have accessible primary CTA 'Open Dashboard'");
 });
