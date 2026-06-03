@@ -157,6 +157,7 @@ test("schedule synchronization contract validation", () => {
 test("landing page contract validation", () => {
   const content = read("src/app/page.tsx");
   const layoutContent = read("src/app/layout.tsx");
+  const simulatorContent = read("src/components/landing/InteractiveSimulator.tsx");
   
   // 1. src/app/page.tsx exists (verified by read() above)
   
@@ -220,10 +221,11 @@ test("landing page contract validation", () => {
   // 7. Landing page mentions key product concepts
   const mentions = [
     "Smart Clothesline",
-    "rain detection",
+    "rain",
     "dashboard",
-    "Telegram notifications",
-    "analytics"
+    "notification",
+    "analytics",
+    "IoT Hub"
   ];
   for (const item of mentions) {
     assert.ok(content.toLowerCase().includes(item.toLowerCase()), `Landing page should mention: ${item}`);
@@ -233,18 +235,42 @@ test("landing page contract validation", () => {
     "Landing page should mention Hadoop or Big Data"
   );
 
-  // 8. Landing page does not contain AI-slop words
+  // 8. Landing page contains FAQ section and "How to use" or equivalent
+  assert.ok(content.toLowerCase().includes("faq") || content.includes("Frequently Asked Questions"), "Landing page should contain FAQ section");
+  assert.ok(content.toLowerCase().includes("how to use") || content.toLowerCase().includes("cara menggunakan"), "Landing page should contain How to use section");
+
+  // 9. Landing page says Telegram is notification-only or does not allow control
+  assert.ok(
+    content.toLowerCase().includes("telegram only sends notifications") ||
+    content.toLowerCase().includes("telegram only sends alerts") ||
+    content.toLowerCase().includes("notification-only"),
+    "Landing page should state Telegram is notification-only"
+  );
+
+  // 10. Landing page does not contain forbidden kit/AI-slop terms
   const slop = [
-    "revolutionary",
+    "Starter Kit",
+    "Education Kit",
+    "Buy Kit",
     "AI-powered",
-    "autonomous intelligence",
+    "revolutionary",
     "temporal engine",
     "synergy"
   ];
   for (const word of slop) {
-    assert.ok(!content.toLowerCase().includes(word.toLowerCase()), `Landing page contains AI-slop: ${word}`);
+    assert.ok(!content.toLowerCase().includes(word.toLowerCase()), `Landing page contains forbidden/AI-slop term: ${word}`);
   }
 
-  // 9. Landing page has accessible text for primary CTA
-  assert.ok(content.includes("Open Dashboard"), "Landing page should have accessible primary CTA 'Open Dashboard'");
+  // 11. Landing page has accessible text for primary CTA
+  assert.ok(content.includes("Open Dashboard") || content.includes("Buka Dasbor"), "Landing page should have accessible primary CTA 'Open Dashboard'");
+
+  // 12. Interactive simulator includes common-user rain/clear explanation
+  assert.ok(
+    simulatorContent.includes("Weather is clear. Clothesline is open for drying."),
+    "Simulator should explain clear weather condition"
+  );
+  assert.ok(
+    simulatorContent.includes("Rain detected. Clothesline is closed for protection."),
+    "Simulator should explain rainy weather condition"
+  );
 });

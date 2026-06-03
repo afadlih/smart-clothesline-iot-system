@@ -21,9 +21,9 @@ The system has been stabilized and validated for production release.
  
 ---
 
-## 🌐 Public Landing Page
+## Public Landing Page
 
-The root route `/` introduces the Smart Clothesline IoT System for users and demo visitors. It explains the product, features, IoT/cloud architecture, dashboard access, notification model, and analytics capabilities.
+The root route `/` explains Smart Clothesline for common users. It focuses on the everyday problem, how users operate the dashboard, how Telegram notifications help, and where users can view Analytics.
 
 ---
 
