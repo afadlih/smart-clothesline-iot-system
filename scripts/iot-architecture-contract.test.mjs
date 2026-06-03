@@ -154,7 +154,6 @@ test("schedule synchronization contract validation", () => {
   assert.ok(tgCommandIndex !== -1, "telegram_commands path not found in firestore.rules");
   assert.ok(commandLines[tgCommandIndex + 1].includes("allow read, write: if false;"), "telegram_commands must block all reads and writes");
 });
-
 test("landing page contract validation", () => {
   const content = read("src/app/page.tsx");
   
@@ -164,9 +163,7 @@ test("landing page contract validation", () => {
     "Realtime Monitoring",
     "Rain Detection",
     "Dashboard",
-    "Telegram Alerts",
-    "Analytics",
-    "Hadoop"
+    "Telegram Alerts"
   ];
   for (const token of required) {
     assert.ok(content.toLowerCase().includes(token.toLowerCase()), `Landing page should mention: ${token}`);
@@ -184,11 +181,9 @@ test("landing page contract validation", () => {
     assert.ok(!content.toLowerCase().includes(word.toLowerCase()), `Landing page contains AI-slop: ${word}`);
   }
 
-  // 3. Landing page links to dashboard, analytics, big-data, and iot-hub
+  // 3. Landing page links to dashboard and iot-hub
   const routes = [
     "/dashboard",
-    "/analytics",
-    "/big-data",
     "/iot-hub"
   ];
   for (const route of routes) {

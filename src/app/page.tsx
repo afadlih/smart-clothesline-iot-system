@@ -13,7 +13,6 @@ import {
   Bell,
   Wifi,
   ShieldCheck,
-  Server,
   Layers,
   Users,
   BookOpen,
@@ -164,8 +163,7 @@ export default function LandingPage() {
               <a href="#features" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">Features</a>
               <a href="#how-it-works" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">How It Works</a>
               <a href="#technology" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">Technology</a>
-              <Link href="/analytics" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">Analytics</Link>
-              <Link href="/big-data" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">Big Data</Link>
+              <Link href="/iot-hub" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">IoT Hub</Link>
               <Link href="/dashboard" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">Dashboard</Link>
             </nav>
 
@@ -232,18 +230,11 @@ export default function LandingPage() {
               Technology
             </a>
             <Link
-              href="/analytics"
+              href="/iot-hub"
               onClick={() => setIsMobileMenuOpen(false)}
               className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm"
             >
-              Analytics
-            </Link>
-            <Link
-              href="/big-data"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm"
-            >
-              Big Data
+              IoT Hub
             </Link>
             <Link
               href="/dashboard"
@@ -298,16 +289,16 @@ export default function LandingPage() {
                   Open Dashboard
                 </Link>
                 <Link
-                  href="/analytics"
+                  href="/iot-hub"
                   className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors font-bold text-slate-700 dark:text-slate-300 text-base"
                 >
-                  View Analytics
+                  Configure Device
                 </Link>
               </div>
 
               {/* Status Chips */}
               <div className="flex flex-wrap justify-center lg:justify-start gap-2 pt-4 border-t border-slate-200/50 dark:border-white/5">
-                {["Realtime MQTT", "Rain Detection", "Telegram Alerts", "Cloud Analytics"].map((chip) => (
+                {["Realtime MQTT", "Rain Detection", "Telegram Alerts", "Device Pairing"].map((chip) => (
                   <span key={chip} className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white/50 dark:bg-slate-900/50 text-xs font-semibold text-slate-500 dark:text-slate-400">
                     {chip}
                   </span>
@@ -652,8 +643,8 @@ export default function LandingPage() {
               },
               {
                 icon: <History className="h-6 w-6 text-purple-500" />,
-                title: "Analytics and Big Data",
-                desc: "Review operational trends and batch reports from historical sensor data."
+                title: "Automated Scheduling",
+                desc: "Create and customize daily schedules to automatically open or close the clothesline."
               }
             ].map((feat, idx) => (
               <div
@@ -694,7 +685,7 @@ export default function LandingPage() {
               { step: "3", title: "Pair Device", desc: "Add your device ID to your profile inside the IoT Hub tab." },
               { step: "4", title: "Open Dashboard", desc: "Monitor active telemetry feeds on the web dashboard." },
               { step: "5", title: "Get Alerts", desc: "Receive immediate notifications inside your Telegram client." },
-              { step: "6", title: "View Analytics", desc: "Review daily patterns and long-term climate analytics." }
+              { step: "6", title: "Set Schedules", desc: "Automate open/close cycles under user schedule preferences." }
             ].map((step, idx) => (
               <div key={idx} className="relative p-6 rounded-2xl bg-white dark:bg-slate-900/30 border border-slate-200 dark:border-white/5 text-center space-y-3">
                 <div className="mx-auto h-8 w-8 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 text-white font-extrabold text-xs flex items-center justify-center shadow-sm">
@@ -717,8 +708,6 @@ export default function LandingPage() {
               <span className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700">Next.js Dashboard</span>
               <span className="text-teal-500">➔</span>
               <span className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700">Cloud Firestore</span>
-              <span className="text-teal-500">➔</span>
-              <span className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700">Analytics / Hadoop Reports</span>
             </div>
           </div>
         </div>
@@ -738,7 +727,7 @@ export default function LandingPage() {
           </div>
 
           {/* CSS-Based Mock Panels */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
                 title: "Dashboard",
@@ -767,37 +756,6 @@ export default function LandingPage() {
                   <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl space-y-2 text-[10px]">
                     <div className="text-slate-400 font-mono font-bold text-[8px]">PAIRING UTILITY</div>
                     <div className="p-1 rounded bg-white dark:bg-slate-900 border text-center font-mono">esp32_device_xyz</div>
-                  </div>
-                )
-              },
-              {
-                title: "Analytics",
-                desc: "Provides interactive graphs of temperature, humidity, and rainfall patterns compiled over recent hours.",
-                badge: "Data Trends",
-                badgeColor: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20",
-                preview: (
-                  <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl space-y-2 text-[10px]">
-                    <div className="flex items-end justify-between h-8 px-2 pt-2 border-b border-slate-350 dark:border-slate-700">
-                      <div className="w-1.5 h-4 bg-teal-500" />
-                      <div className="w-1.5 h-6 bg-teal-500" />
-                      <div className="w-1.5 h-5 bg-teal-400" />
-                      <div className="w-1.5 h-8 bg-emerald-400" />
-                    </div>
-                  </div>
-                )
-              },
-              {
-                title: "Big Data Report",
-                desc: "Summarizes export files through Hadoop batch scripts for daily rain statistics and climate reports.",
-                badge: "Hadoop Batch",
-                badgeColor: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20",
-                preview: (
-                  <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl space-y-2 text-[10px] font-mono">
-                    <div className="text-[8px] text-purple-500">MAPREDUCE_ETL.CSV</div>
-                    <div className="text-[8px] text-slate-400">Rain events total: 14</div>
-                    <Link href="/big-data" className="mt-1 block text-right text-[8px] text-purple-550 font-bold hover:underline">
-                      View Big Data Analytics →
-                    </Link>
                   </div>
                 )
               },
@@ -851,7 +809,7 @@ export default function LandingPage() {
               { title: "Next.js Dashboard", desc: "React-based web interface showing interactive gauges and settings." },
               { title: "Firebase Firestore", desc: "Acts as the cloud storage mechanism for keeping telemetry archives." },
               { title: "Telegram Bot API", desc: "Sends outbound alerts regarding environmental safety changes." },
-              { title: "Hadoop Batch Analytics", desc: "Processes exported historical sensor data for daily summaries and rain-event analysis (currently in MVP scaffold)." },
+              { title: "TypeScript & TSX", desc: "Ensures component type-safety and robust development patterns across dashboard runtimes." },
               { title: "GitHub Actions CI", desc: "Provides automated integration checking to enforce architecture rules." },
               { title: "Zustand & Tailwind", desc: "Coordinates layout styling variables and light/dark theme persistence." }
             ].map((tech, idx) => (
@@ -953,14 +911,13 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
             {[
               { icon: <Sun className="h-5 w-5 text-teal-500" />, title: "Home Laundry", desc: "Protects family laundry drying at home during unpredictable weather shifts." },
               { icon: <Users className="h-5 w-5 text-indigo-500" />, title: "Boarding Houses", desc: "Assists shared accommodations in managing group clothesline areas collaboratively." },
               { icon: <Smartphone className="h-5 w-5 text-emerald-500" />, title: "Laundry Business", desc: "Helps commercial laundry operators optimize scheduling and safeguard garments." },
               { icon: <BookOpen className="h-5 w-5 text-amber-500" />, title: "IoT Demos", desc: "Serves as an illustrative physical/virtual sandbox setup for student projects." },
-              { icon: <Layers className="h-5 w-5 text-purple-500" />, title: "Cloud Learning", desc: "Utilizes structured MQTT, Firestore database, and pipeline data schemas." },
-              { icon: <Server className="h-5 w-5 text-rose-500" />, title: "Big Data Demos", desc: "Demonstrates batch file analytical workflows using MapReduce logs." }
+              { icon: <Layers className="h-5 w-5 text-purple-500" />, title: "Cloud Learning", desc: "Utilizes structured MQTT, Firestore database, and pipeline data schemas." }
             ].map((uc, idx) => (
               <div key={idx} className="p-5 rounded-3xl border border-slate-200 dark:border-white/5 bg-white dark:bg-slate-900/40 flex flex-col justify-between hover:scale-[1.02] transition-transform">
                 <div className="space-y-4">
@@ -996,12 +953,6 @@ export default function LandingPage() {
               className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3.5 rounded-2xl bg-white text-teal-700 font-extrabold shadow-xl hover:bg-slate-50 transition-colors text-base"
             >
               Open Dashboard
-            </Link>
-            <Link
-              href="/analytics"
-              className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3.5 rounded-2xl border border-white/20 bg-white/5 text-white font-bold hover:bg-white/10 transition-colors text-base"
-            >
-              View Analytics
             </Link>
             <Link
               href="/iot-hub"
