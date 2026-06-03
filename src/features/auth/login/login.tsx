@@ -53,12 +53,24 @@ function LoginContent() {
     await signInWithGoogle();
   };
 
+
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-teal-50 via-white to-emerald-50 p-4">
       <div className="flex w-full max-w-4xl overflow-hidden rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-white/20 backdrop-blur-sm">
 
         {/* ─── LEFT: Form ─────────────────────────────────── */}
         <div className="flex w-full flex-col justify-center bg-white/80 px-12 py-14 md:w-1/2">
+
+          {/* Back to Home Navigation Link */}
+          <div className="mb-4">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-teal-600 transition-colors"
+            >
+              &larr; Back to Home
+            </Link>
+          </div>
 
           {/* Logo */}
           <div className="mb-8 flex justify-center">
@@ -217,6 +229,7 @@ function LoginContent() {
             </svg>
             Continue with Google
           </button>
+
 
           {/* Footer */}
           <p className="mt-8 text-center text-sm text-slate-500">

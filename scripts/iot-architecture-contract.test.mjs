@@ -85,13 +85,13 @@ test("Wokwi per-device MQTT hotfix contract validation", () => {
   assert.ok(mqttTopicsContent.includes("getCommandPublishTopics"), "Expected getCommandPublishTopics to exist in mqttTopics.ts");
 
   // Test 2: useSensor.ts contract
-  const useSensorContent = read("src/hooks/useSensor.ts");
+  const useSensorContent = read("src/features/sensor/hooks/useSensor.ts");
   assert.ok(useSensorContent.includes("getCommandPublishTopics"), "Expected useSensor.ts to import/use getCommandPublishTopics");
   assert.ok(!useSensorContent.includes("/api/telegram/polling"), "Expected useSensor.ts to NOT contain /api/telegram/polling");
 
   // Test 3: iot-hub page contract (checks IoTHubPage.tsx if modularized, else page.tsx)
-  const iotHubContent = existsSync(join(ROOT, "src/features/iothub/IoTHubPage.tsx"))
-    ? read("src/features/iothub/IoTHubPage.tsx")
+  const iotHubContent = existsSync(join(ROOT, "src/features/sensor/view/iothub/IoTHubPage.tsx"))
+    ? read("src/features/sensor/view/iothub/IoTHubPage.tsx")
     : read("src/app/iot-hub/page.tsx");
   assert.ok(iotHubContent.includes("getPairingDiscoveryTopics"), "Expected IoT Hub page to use getPairingDiscoveryTopics");
 
@@ -120,7 +120,7 @@ test("schedule synchronization contract validation", () => {
   assert.ok(runtimeContent.includes("export function evaluateScheduleTransition"), "ScheduleRuntimeService.ts must export evaluateScheduleTransition");
 
   // 5. useSensor.ts uses getCommandPublishTopics for schedule commands
-  const useSensorContent = read("src/hooks/useSensor.ts");
+  const useSensorContent = read("src/features/sensor/hooks/useSensor.ts");
   assert.ok(
     useSensorContent.includes("getCommandPublishTopics(activeDeviceId)"),
     "Expected active device getCommandPublishTopics in schedule commands routing in useSensor.ts"
@@ -153,4 +153,98 @@ test("schedule synchronization contract validation", () => {
   const tgCommandIndex = commandLines.findIndex(line => line.includes("match /telegram_commands/{docId}"));
   assert.ok(tgCommandIndex !== -1, "telegram_commands path not found in firestore.rules");
   assert.ok(commandLines[tgCommandIndex + 1].includes("allow read, write: if false;"), "telegram_commands must block all reads and writes");
+});
+test("landing page contract validation", () => {
+  const content = read("src/app/page.tsx");
+  const layoutContent = read("src/app/layout.tsx");
+  
+  // 1. src/app/page.tsx exists (verified by read() above)
+  
+  // 2. Landing page does not contain "use client"
+  assert.ok(!content.includes('"use client"'), 'Landing page should not contain "use client"');
+  assert.ok(!content.includes("'use client'"), "Landing page should not contain 'use client'");
+
+  // 3. Landing page does not import forbidden systems
+  const forbidden = [
+    "mqttService",
+    "MQTTService",
+    "useSensor",
+    "useSystemState",
+    "FirestoreService",
+    "useAnalyticsData",
+    "firebase",
+    "recharts",
+    "fs",
+    "path",
+    "child_process"
+  ];
+  for (const item of forbidden) {
+    assert.ok(!content.includes(item), `Landing page should not import or refer to: ${item}`);
+  }
+
+  // 4. Landing page does not contain useEffect, useState, localStorage, window, document, fetch
+  const forbiddenJs = [
+    "useEffect",
+    "useState",
+    "localStorage",
+    "window.",
+    "document.",
+    "fetch("
+  ];
+  for (const item of forbiddenJs) {
+    assert.ok(!content.includes(item), `Landing page should not contain JS runtime feature: ${item}`);
+  }
+
+  // 5. src/app/layout.tsx does not import forbidden systems
+  const forbiddenLayout = [
+    "mqttService",
+    "MQTTService",
+    "useSensor",
+    "FirestoreService"
+  ];
+  for (const item of forbiddenLayout) {
+    assert.ok(!layoutContent.includes(item), `Root layout should not import or refer to: ${item}`);
+  }
+
+  // 6. Landing page contains links to required routes
+  const requiredRoutes = [
+    "/dashboard",
+    "/analytics",
+    "/big-data",
+    "/iot-hub"
+  ];
+  for (const route of requiredRoutes) {
+    assert.ok(content.includes(route), `Landing page should link to: ${route}`);
+  }
+
+  // 7. Landing page mentions key product concepts
+  const mentions = [
+    "Smart Clothesline",
+    "rain detection",
+    "dashboard",
+    "Telegram notifications",
+    "analytics"
+  ];
+  for (const item of mentions) {
+    assert.ok(content.toLowerCase().includes(item.toLowerCase()), `Landing page should mention: ${item}`);
+  }
+  assert.ok(
+    content.toLowerCase().includes("hadoop") || content.toLowerCase().includes("big data"),
+    "Landing page should mention Hadoop or Big Data"
+  );
+
+  // 8. Landing page does not contain AI-slop words
+  const slop = [
+    "revolutionary",
+    "AI-powered",
+    "autonomous intelligence",
+    "temporal engine",
+    "synergy"
+  ];
+  for (const word of slop) {
+    assert.ok(!content.toLowerCase().includes(word.toLowerCase()), `Landing page contains AI-slop: ${word}`);
+  }
+
+  // 9. Landing page has accessible text for primary CTA
+  assert.ok(content.includes("Open Dashboard"), "Landing page should have accessible primary CTA 'Open Dashboard'");
 });

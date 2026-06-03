@@ -18,6 +18,12 @@ The system has been stabilized and validated for production release.
 - **Telegram Integration:** Outbound operational event notifications.
 - **Analytics:** Historical trends and data export (CSV/JSON).
 - **IoT Hub:** Device pairing, diagnostics, and sync management.
+ 
+---
+
+## 🌐 Public Landing Page
+
+The root route `/` introduces the Smart Clothesline IoT System for users and demo visitors. It explains the product, features, IoT/cloud architecture, dashboard access, notification model, and analytics capabilities.
 
 ---
 
@@ -56,5 +62,12 @@ The system is optimized for Vercel. See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for
 
 ---
 
+## Landing Page Performance
+
+The public landing page at `/` is intentionally isolated from runtime systems. It does not initialize MQTT, Firebase, Telegram, dashboard hooks, or analytics data fetching. For Lighthouse testing, run a production build and audit in Incognito because stored IndexedDB data from dashboard testing can affect local results.
+
+---
+
 ## 📄 License
 This project is developed for educational and research purposes (PBL).
+

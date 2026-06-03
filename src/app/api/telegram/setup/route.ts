@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { TelegramBotApiService } from "@/services/TelegramBotApiService";
 import { TelegramOpsService } from "@/services/TelegramOpsService";
 import { TelegramEnvConfigService } from "@/services/telegram/TelegramEnvConfigService";
+
+export const dynamic = "force-dynamic";
 import {
   resolveTelegramWebhookUrl,
   resolveAppBaseUrl,

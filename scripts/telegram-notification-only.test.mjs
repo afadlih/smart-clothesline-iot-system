@@ -68,7 +68,7 @@ test("2. Removed command executor/router are not used", () => {
 });
 
 test("3. useSensor.ts has no Telegram bridge fallback", () => {
-  const path = join(ROOT, "src/hooks/useSensor.ts");
+  const path = join(ROOT, "src/features/sensor/hooks/useSensor.ts");
   if (!existsSync(path)) return;
 
   const content = readFileSync(path, "utf-8");

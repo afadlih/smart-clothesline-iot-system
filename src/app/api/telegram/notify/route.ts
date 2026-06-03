@@ -6,6 +6,8 @@ import {
   TelegramNotificationType,
 } from "@/services/telegram/TelegramNotificationService";
 
+export const dynamic = "force-dynamic";
+
 const MAX_TITLE_LENGTH = 120;
 const MAX_DESCRIPTION_LENGTH = 1500;
 const MAX_RECOMMENDED_ACTION_LENGTH = 500;
