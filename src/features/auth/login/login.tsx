@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Wind } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useAuthStore } from "@/stores/authStore";
+import type { User } from "firebase/auth";
 
 function LoginContent() {
   const [showPassword, setShowPassword] = useState(false);
@@ -51,6 +53,18 @@ function LoginContent() {
     setFormError(null);
     clearError();
     await signInWithGoogle();
+  };
+
+  const handleGoToDashboardDirectly = () => {
+    useAuthStore.setState({
+      user: {
+        uid: "demo-operator",
+        email: "operator@smartclothesline.local",
+        displayName: "Demo Operator",
+      } as unknown as User,
+      loading: false,
+    });
+    router.replace(returnUrl);
   };
 
   return (
@@ -226,12 +240,13 @@ function LoginContent() {
             >
               Back to Home
             </Link>
-            <Link
-              href="/dashboard"
+            <button
+              type="button"
+              onClick={handleGoToDashboardDirectly}
               className="flex-1 flex items-center justify-center rounded-2xl border border-teal-200/60 bg-teal-50/30 py-3.5 text-xs font-bold text-teal-600 hover:text-teal-700 transition-all hover:bg-teal-50/70 hover:border-teal-300 shadow-sm active:scale-[0.98]"
             >
               Go to Dashboard
-            </Link>
+            </button>
           </div>
 
           {/* Footer */}

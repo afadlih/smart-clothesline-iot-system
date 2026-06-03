@@ -288,12 +288,6 @@ export default function LandingPage() {
                 >
                   Open Dashboard
                 </Link>
-                <Link
-                  href="/iot-hub"
-                  className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3.5 rounded-2xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors font-bold text-slate-700 dark:text-slate-300 text-base"
-                >
-                  Configure Device
-                </Link>
               </div>
 
               {/* Status Chips */}
@@ -953,12 +947,6 @@ export default function LandingPage() {
               className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3.5 rounded-2xl bg-white text-teal-700 font-extrabold shadow-xl hover:bg-slate-50 transition-colors text-base"
             >
               Open Dashboard
-            </Link>
-            <Link
-              href="/iot-hub"
-              className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3.5 rounded-2xl border border-teal-200/30 text-teal-200 hover:text-white hover:bg-white/5 transition-colors font-semibold text-base"
-            >
-              Configure Device
             </Link>
           </div>
         </div>
