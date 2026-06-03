@@ -68,6 +68,12 @@ export default function LandingHeader({ currentLang = "en" }: LandingHeaderProps
             <a href="#faq" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">
               {t("FAQ", "FAQ")}
             </a>
+            <Link href="/iot-hub" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">
+              {t("IoT Hub", "IoT Hub")}
+            </Link>
+            <Link href="/dashboard" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">
+              {t("Dashboard", "Dasbor")}
+            </Link>
           </nav>
 
           {/* Action Buttons */}
@@ -93,8 +99,14 @@ export default function LandingHeader({ currentLang = "en" }: LandingHeaderProps
               </button>
             )}
             <Link
+              href="/iot-hub"
+              className="inline-flex items-center justify-center px-4 py-2 rounded-xl border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-bold text-sm transition-all focus-visible:outline-2 focus-visible:outline-teal-500"
+            >
+              {t("Set Up Device", "Hubungkan Alat")}
+            </Link>
+            <Link
               href="/dashboard"
-              className="inline-flex items-center justify-center px-6 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-500 text-white font-bold text-sm shadow-sm hover:from-teal-500 hover:to-emerald-400 transition-all active:scale-95 focus-visible:outline-2 focus-visible:outline-teal-500"
+              className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-500 text-white font-bold text-sm shadow-sm hover:from-teal-500 hover:to-emerald-400 transition-all active:scale-95 focus-visible:outline-2 focus-visible:outline-teal-500"
             >
               {t("Open Dashboard", "Buka Dasbor")}
             </Link>
@@ -161,7 +173,28 @@ export default function LandingHeader({ currentLang = "en" }: LandingHeaderProps
           >
             {t("FAQ", "FAQ")}
           </a>
+          <Link
+            href="/iot-hub"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm focus-visible:outline-2 focus-visible:outline-teal-500"
+          >
+            {t("Set Up Device", "Hubungkan Alat")}
+          </Link>
+          <Link
+            href="/dashboard"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm focus-visible:outline-2 focus-visible:outline-teal-500"
+          >
+            {t("Dashboard", "Dasbor")}
+          </Link>
           <div className="pt-2 border-t border-slate-200 dark:border-white/5 flex flex-col gap-2">
+            <Link
+              href="/iot-hub"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-slate-750 dark:text-slate-300 font-bold text-sm"
+            >
+              {t("Set Up Device", "Hubungkan Alat")}
+            </Link>
             <Link
               href="/dashboard"
               onClick={() => setIsMobileMenuOpen(false)}
