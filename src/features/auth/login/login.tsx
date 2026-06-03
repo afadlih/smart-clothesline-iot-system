@@ -74,6 +74,16 @@ function LoginContent() {
         {/* ─── LEFT: Form ─────────────────────────────────── */}
         <div className="flex w-full flex-col justify-center bg-white/80 px-12 py-14 md:w-1/2">
 
+          {/* Back to Home Navigation Link */}
+          <div className="mb-4">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-teal-600 transition-colors"
+            >
+              &larr; Back to Home
+            </Link>
+          </div>
+
           {/* Logo */}
           <div className="mb-8 flex justify-center">
             <div className="relative h-12 w-14 group">
@@ -232,20 +242,14 @@ function LoginContent() {
             Continue with Google
           </button>
  
-          {/* Dashboard / Home CTA */}
-          <div className="mt-4 flex gap-2">
-            <Link
-              href="/"
-              className="flex-1 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-3.5 text-xs font-semibold text-slate-600 hover:text-slate-800 transition-all hover:bg-slate-50 hover:border-slate-300 shadow-sm active:scale-[0.98]"
-            >
-              Back to Home
-            </Link>
+          {/* Demo Bypass Action */}
+          <div className="mt-4">
             <button
               type="button"
               onClick={handleGoToDashboardDirectly}
-              className="flex-1 flex items-center justify-center rounded-2xl border border-teal-200/60 bg-teal-50/30 py-3.5 text-xs font-bold text-teal-600 hover:text-teal-700 transition-all hover:bg-teal-50/70 hover:border-teal-300 shadow-sm active:scale-[0.98]"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-teal-300 bg-teal-50/20 py-3.5 text-sm font-semibold text-teal-600 transition-all hover:bg-teal-50/50 hover:border-teal-400 active:scale-[0.98] shadow-sm"
             >
-              Go to Dashboard
+              ✨ Try Demo Mode (Skip Login)
             </button>
           </div>
 
