@@ -255,7 +255,9 @@ test("landing page contract validation", () => {
     "AI-powered",
     "revolutionary",
     "temporal engine",
-    "synergy"
+    "synergy",
+    "autonomous intelligence",
+    "operational matrix"
   ];
   for (const word of slop) {
     assert.ok(!content.toLowerCase().includes(word.toLowerCase()), `Landing page contains forbidden/AI-slop term: ${word}`);
@@ -273,4 +275,30 @@ test("landing page contract validation", () => {
     simulatorContent.includes("Rain detected. Clothesline is closed for protection."),
     "Simulator should explain rainy weather condition"
   );
+
+  // 13. Hero section does not make /iot-hub or /analytics the primary CTA
+  const heroSection = content.split('id="problems"')[0];
+  assert.ok(!heroSection.includes('href="/iot-hub"'), "Hero section should not make /iot-hub a CTA");
+  assert.ok(!heroSection.includes('href="/analytics"'), "Hero section should not make /analytics a CTA");
+
+  // 14. Header includes language switcher
+  const headerContent = read("src/components/landing/LandingHeader.tsx");
+  assert.ok(headerContent.includes("?lang="), "Header should include language switcher link pattern");
+
+  // 15. Simulator includes visual demo notice
+  assert.ok(
+    simulatorContent.includes("This is a visual demo, not live hardware.") ||
+    simulatorContent.includes("Ini simulasi tampilan, bukan perangkat asli."),
+    "Simulator should notice that it is a visual demo"
+  );
+
+  // 16. Indonesian and English common keywords
+  const indonesianKeywords = ["jemuran", "hujan", "notifikasi", "dasbor"];
+  for (const word of indonesianKeywords) {
+    assert.ok(content.toLowerCase().includes(word), `Landing page should include Indonesian word: ${word}`);
+  }
+  const englishKeywords = ["rain", "notification", "dashboard"];
+  for (const word of englishKeywords) {
+    assert.ok(content.toLowerCase().includes(word), `Landing page should include English word: ${word}`);
+  }
 });
