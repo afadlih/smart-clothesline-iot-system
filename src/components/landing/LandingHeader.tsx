@@ -2,10 +2,14 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Cpu, Sun, Moon, Menu, X } from "lucide-react";
+import { Cpu, Sun, Moon, Menu, X, Globe } from "lucide-react";
 import { useThemeStore } from "@/stores/themeStore";
 
-export default function LandingHeader() {
+interface LandingHeaderProps {
+  currentLang?: "en" | "id";
+}
+
+export default function LandingHeader({ currentLang = "en" }: LandingHeaderProps) {
   const [mounted, setMounted] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const theme = useThemeStore((state) => state.theme);
@@ -32,6 +36,10 @@ export default function LandingHeader() {
     setIsDark(newIsDark);
   };
 
+  const t = (en: string, id: string) => (currentLang === "id" ? id : en);
+  const nextLang = currentLang === "en" ? "id" : "en";
+  const toggleUrl = `/?lang=${nextLang}`;
+
   return (
     <header className="sticky top-0 z-50 bg-white/90 dark:bg-slate-950/90 backdrop-blur border-b border-slate-200/60 dark:border-white/10 transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -48,15 +56,35 @@ export default function LandingHeader() {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex space-x-6 text-sm font-semibold text-slate-600 dark:text-slate-300" aria-label="Desktop Navigation">
-            <a href="#features" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">Features</a>
-            <a href="#how-it-works" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">How It Works</a>
-            <a href="#safety" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">Safety</a>
-            <Link href="/iot-hub" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">IoT Hub</Link>
-            <Link href="/dashboard" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">Dashboard</Link>
+            <a href="#how-it-works" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">
+              {t("How it works", "Cara kerja")}
+            </a>
+            <a href="#features" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">
+              {t("Features", "Fitur")}
+            </a>
+            <a href="#safety" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">
+              {t("Safety", "Keamanan")}
+            </a>
+            <a href="#faq" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">
+              {t("FAQ", "FAQ")}
+            </a>
+            <Link href="/dashboard" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">
+              {t("Dashboard", "Dasbor")}
+            </Link>
           </nav>
 
           {/* Action Buttons */}
           <div className="hidden md:flex items-center gap-3">
+            {/* Language Switcher */}
+            <Link
+              href={toggleUrl}
+              className="flex h-10 px-3 items-center gap-1.5 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors text-xs font-bold text-slate-600 dark:text-slate-300 focus-visible:outline-2 focus-visible:outline-teal-500"
+              title={t("Switch to Indonesian", "Ubah ke Bahasa Inggris")}
+            >
+              <Globe className="h-3.5 w-3.5" />
+              <span>{currentLang === "en" ? "ID" : "EN"}</span>
+            </Link>
+
             {mounted && (
               <button
                 onClick={handleThemeToggle}
@@ -68,15 +96,29 @@ export default function LandingHeader() {
               </button>
             )}
             <Link
+              href="/iot-hub"
+              className="inline-flex items-center justify-center px-4 py-2 rounded-xl border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-bold text-sm transition-all focus-visible:outline-2 focus-visible:outline-teal-500"
+            >
+              {t("Set Up Device", "Atur Perangkat")}
+            </Link>
+            <Link
               href="/dashboard"
               className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-500 text-white font-bold text-sm shadow-sm hover:from-teal-500 hover:to-emerald-400 transition-all active:scale-95 focus-visible:outline-2 focus-visible:outline-teal-500"
             >
-              Open Dashboard
+              {t("Open Dashboard", "Buka Dasbor")}
             </Link>
           </div>
 
           {/* Mobile Menu Button */}
           <div className="flex md:hidden items-center gap-2">
+            <Link
+              href={toggleUrl}
+              className="flex h-10 px-2.5 items-center gap-1 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors text-xs font-bold text-slate-600 dark:text-slate-300 focus-visible:outline-2 focus-visible:outline-teal-500"
+            >
+              <Globe className="h-3.5 w-3.5" />
+              <span>{currentLang === "en" ? "ID" : "EN"}</span>
+            </Link>
+
             {mounted && (
               <button
                 onClick={handleThemeToggle}
@@ -101,47 +143,61 @@ export default function LandingHeader() {
       {isMobileMenuOpen && (
         <div className="md:hidden border-t border-slate-200 dark:border-white/10 bg-white dark:bg-slate-950 px-4 py-4 space-y-3 transition-all duration-300">
           <a
-            href="#features"
-            onClick={() => setIsMobileMenuOpen(false)}
-            className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm focus-visible:outline-2 focus-visible:outline-teal-500"
-          >
-            Features
-          </a>
-          <a
             href="#how-it-works"
             onClick={() => setIsMobileMenuOpen(false)}
             className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm focus-visible:outline-2 focus-visible:outline-teal-500"
           >
-            How It Works
+            {t("How it works", "Cara kerja")}
+          </a>
+          <a
+            href="#features"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm focus-visible:outline-2 focus-visible:outline-teal-500"
+          >
+            {t("Features", "Fitur")}
           </a>
           <a
             href="#safety"
             onClick={() => setIsMobileMenuOpen(false)}
             className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm focus-visible:outline-2 focus-visible:outline-teal-500"
           >
-            Safety
+            {t("Safety", "Keamanan")}
+          </a>
+          <a
+            href="#faq"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm focus-visible:outline-2 focus-visible:outline-teal-500"
+          >
+            {t("FAQ", "FAQ")}
           </a>
           <Link
             href="/iot-hub"
             onClick={() => setIsMobileMenuOpen(false)}
             className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm focus-visible:outline-2 focus-visible:outline-teal-500"
           >
-            IoT Hub
+            {t("Set Up Device", "Atur Perangkat")}
           </Link>
           <Link
             href="/dashboard"
             onClick={() => setIsMobileMenuOpen(false)}
             className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm focus-visible:outline-2 focus-visible:outline-teal-500"
           >
-            Dashboard
+            {t("Dashboard", "Dasbor")}
           </Link>
-          <div className="pt-2 border-t border-slate-200 dark:border-white/5">
+          <div className="pt-2 border-t border-slate-200 dark:border-white/5 flex flex-col gap-2">
+            <Link
+              href="/iot-hub"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-slate-750 dark:text-slate-300 font-bold text-sm"
+            >
+              {t("Set Up Device", "Atur Perangkat")}
+            </Link>
             <Link
               href="/dashboard"
               onClick={() => setIsMobileMenuOpen(false)}
               className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-500 text-white font-bold text-sm shadow-md"
             >
-              Open Dashboard
+              {t("Open Dashboard", "Buka Dasbor")}
             </Link>
           </div>
         </div>
