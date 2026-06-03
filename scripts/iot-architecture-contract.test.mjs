@@ -157,19 +157,58 @@ test("schedule synchronization contract validation", () => {
 test("landing page contract validation", () => {
   const content = read("src/app/page.tsx");
   
-  // 1. Landing page mentions key keywords
-  const required = [
-    "Smart Clothesline",
-    "Realtime Monitoring",
-    "Rain Detection",
-    "Dashboard",
-    "Telegram Alerts"
+  // 1. src/app/page.tsx existence is verified by read() above.
+  
+  // 2. Landing page does not import forbidden imports
+  const forbidden = [
+    "useSensor",
+    "mqttService",
+    "FirestoreService",
+    "useAnalyticsData",
+    "firebase",
+    "recharts",
+    "fs",
+    "path",
+    "child_process"
   ];
-  for (const token of required) {
-    assert.ok(content.toLowerCase().includes(token.toLowerCase()), `Landing page should mention: ${token}`);
+  for (const item of forbidden) {
+    assert.ok(!content.includes(item), `Landing page should not import or refer to: ${item}`);
   }
 
-  // 2. Landing page does not contain AI-slop words
+  // 3. Landing page does not contain useEffect
+  assert.ok(!content.includes("useEffect"), "Landing page should not contain useEffect");
+
+  // 4. Landing page does not contain localStorage
+  assert.ok(!content.includes("localStorage"), "Landing page should not contain localStorage");
+
+  // 5. Landing page contains links to required routes
+  const requiredRoutes = [
+    "/dashboard",
+    "/analytics",
+    "/big-data",
+    "/iot-hub"
+  ];
+  for (const route of requiredRoutes) {
+    assert.ok(content.includes(route), `Landing page should link to: ${route}`);
+  }
+
+  // 6. Landing page mentions key product concepts
+  const mentions = [
+    "Smart Clothesline",
+    "rain detection",
+    "dashboard",
+    "Telegram notifications",
+    "analytics"
+  ];
+  for (const item of mentions) {
+    assert.ok(content.toLowerCase().includes(item.toLowerCase()), `Landing page should mention: ${item}`);
+  }
+  assert.ok(
+    content.toLowerCase().includes("hadoop") || content.toLowerCase().includes("big data"),
+    "Landing page should mention Hadoop or Big Data"
+  );
+
+  // 7. Landing page does not contain AI-slop words
   const slop = [
     "revolutionary",
     "AI-powered",
@@ -181,31 +220,6 @@ test("landing page contract validation", () => {
     assert.ok(!content.toLowerCase().includes(word.toLowerCase()), `Landing page contains AI-slop: ${word}`);
   }
 
-  // 3. Landing page links to dashboard and iot-hub
-  const routes = [
-    "/dashboard",
-    "/iot-hub"
-  ];
-  for (const route of routes) {
-    assert.ok(content.includes(route), `Landing page should link to: ${route}`);
-  }
-
-  // 4. Telegram copy says notification-only or equivalent
-  assert.ok(
-    content.toLowerCase().includes("notifications only") || 
-    content.toLowerCase().includes("notification-only"),
-    "Telegram copy must state it is notification-only"
-  );
-
-  // 5. Landing page does not import useSensor or MQTT runtime hooks
-  assert.ok(!content.includes("useSensor"), "Landing page should not import useSensor");
-
-  // 6. Landing page does not import Node-only modules
-  const nodeModules = [
-    'import fs ', 'import * as fs', 'from "fs"', "from 'path'",
-    'import child_process', "from 'child_process'"
-  ];
-  for (const mod of nodeModules) {
-    assert.ok(!content.includes(mod), `Landing page imports Node module: ${mod}`);
-  }
+  // 8. Landing page has accessible text for primary CTA
+  assert.ok(content.includes("Open Dashboard"), "Landing page should have accessible primary CTA 'Open Dashboard'");
 });

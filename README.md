@@ -62,5 +62,12 @@ The system is optimized for Vercel. See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for
 
 ---
 
+## Landing Page Performance
+
+The public landing page at `/` is designed as a lightweight product page. It does not initialize MQTT, Firebase, dashboard runtime hooks, or analytics data fetches. Run Lighthouse in an incognito window for a clean measurement because local IndexedDB data may affect scores during development.
+
+---
+
 ## 📄 License
 This project is developed for educational and research purposes (PBL).
+
