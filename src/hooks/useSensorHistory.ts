@@ -1,0 +1,1 @@
+export { useSensorHistory } from "@/features/sensor/hooks/useSensorHistory";

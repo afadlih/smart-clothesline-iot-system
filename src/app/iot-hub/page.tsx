@@ -1,3 +1,5 @@
+// getPairingDiscoveryTopics
+
 import IoTHubPage from "@/features/sensor/view/iothub/IoTHubPage";
 
 export default function IoTHub() {

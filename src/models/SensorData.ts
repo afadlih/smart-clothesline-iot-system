@@ -27,7 +27,7 @@ export class SensorData {
         this.temperature = data.temp ?? 0;
         this.humidity = data.humidity ?? 0;
         this.light = data.light ?? 0;
-        this.lightRaw = data.lightRaw;
+        this.lightRaw = data.lightRaw; // ini apa ya? 
         this.lightThreshold = data.lightThreshold;
         this.rainVal = data.rainVal;
         this.rainRaw = data.rainRaw;
