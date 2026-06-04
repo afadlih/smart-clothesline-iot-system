@@ -1,7 +1,12 @@
 import AutomationPage from "@/features/sensor/view/automation/AutomationPage";
 
-export default function automation() {
+interface PageProps {
+  searchParams?: { lang?: string };
+}
+
+export default function automation({ searchParams }: PageProps) {
+  const lang = searchParams?.lang === "id" ? "id" : "en";
   return(
-    <AutomationPage></AutomationPage>
+    <AutomationPage lang={lang}></AutomationPage>
   )
 }

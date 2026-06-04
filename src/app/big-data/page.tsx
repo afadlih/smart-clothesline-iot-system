@@ -1,7 +1,12 @@
-﻿import BigDataPage from "@/features/big-data/BigDataPage";
+import BigDataPage from "@/features/big-data/BigDataPage";
 
-export default function bigdata() {
+interface PageProps {
+  searchParams?: { lang?: string };
+}
+
+export default function bigdata({ searchParams }: PageProps) {
+  const lang = searchParams?.lang === "id" ? "id" : "en";
   return (
-    <BigDataPage></BigDataPage>
-  )
+    <BigDataPage lang={lang} />
+  );
 }

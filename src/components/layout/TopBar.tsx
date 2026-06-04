@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Menu,
   Bell,
@@ -31,6 +31,9 @@ const SETTINGS_STORAGE_KEY = "smart-clothesline-settings-v1";
 
 export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: TopBarProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const lang = searchParams?.get("lang") === "id" ? "id" : "en";
+  const t = (en: string, id: string) => (lang === "id" ? id : en);
   const { runtime } = useSystemState();
   const {
     events: notificationEvents,
@@ -119,17 +122,20 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
 
   const goToProfileSettings = () => {
     setIsUserMenuOpen(false);
-    router.push("/settings?tab=profile");
+    router.push(`/settings?tab=profile${lang === "id" ? "&lang=id" : ""}`);
   };
 
   const goToNotificationSettings = () => {
     setIsNotificationOpen(false);
-    router.push("/notifications");
+    router.push(`/notifications${lang === "id" ? "?lang=id" : ""}`);
   };
 
   const handleResetLocalPreferences = () => {
     const confirmed = window.confirm(
-      "Reset local dashboard preferences (profile, notifications, and theme)?",
+      t(
+        "Reset local dashboard preferences (profile, notifications, and theme)?",
+        "Atur ulang preferensi dasbor lokal (profil, notifikasi, dan tema)?"
+      )
     );
     if (!confirmed) {
       return;
@@ -140,7 +146,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
     setProfileName("Operator");
     setIsUserMenuOpen(false);
     setIsNotificationOpen(false);
-    router.push("/settings?tab=profile");
+    router.push(`/settings?tab=profile${lang === "id" ? "&lang=id" : ""}`);
   };
 
   const clearSmartClothesLineStorage = () => {
@@ -168,7 +174,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
     clearSmartClothesLineStorage();
     setIsUserMenuOpen(false);
     await signOutUser();
-    router.replace("/auth/login");
+    router.replace(`/auth/login${lang === "id" ? "?lang=id" : ""}`);
   };
 
   const profileInitials =
@@ -181,51 +187,57 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
 
   const deviceStatus =
     runtime.deviceConnectivity === "ONLINE"
-      ? "Online"
+      ? t("Online", "Online")
       : runtime.deviceConnectivity === "DELAYED"
-        ? "Delayed"
-        : "Offline";
+        ? t("Delayed", "Terlambat")
+        : t("Offline", "Offline");
 
   const modeLabel =
     runtime.actualDeviceMode === "MANUAL"
-      ? "Manual"
+      ? t("Manual", "Manual")
       : runtime.actualDeviceMode === "AUTO"
-        ? "Auto"
-        : "Unknown";
+        ? t("Auto", "Otomatis")
+        : t("Unknown", "Tidak Diketahui");
 
   const systemState =
     runtime.decisionSource === "MANUAL"
-      ? "Manual Override"
+      ? t("Manual Override", "Kontrol Manual")
       : runtime.decisionSource === "SAFETY"
-        ? runtime.safetyLabel
-        : "Monitoring";
+        ? (runtime.safetyLabel === "RAIN ALERT"
+            ? t("Rain Alert", "Peringatan Hujan")
+            : runtime.safetyLabel === "LOW LIGHT"
+              ? t("Low Light", "Kurang Cahaya")
+              : runtime.safetyLabel === "OVERRIDE"
+                ? t("Manual Override", "Kontrol Manual")
+                : runtime.safetyLabel)
+        : t("Monitoring", "Memantau");
 
   const deviceDotClass =
-    deviceStatus === "Online"
+    runtime.deviceConnectivity === "ONLINE"
       ? "bg-emerald-500"
-      : deviceStatus === "Delayed"
+      : runtime.deviceConnectivity === "DELAYED"
         ? "bg-amber-500"
         : "bg-red-500";
   const deviceValueClass =
-    deviceStatus === "Online"
+    runtime.deviceConnectivity === "ONLINE"
       ? "text-emerald-700 dark:text-emerald-300"
-      : deviceStatus === "Delayed"
+      : runtime.deviceConnectivity === "DELAYED"
         ? "text-amber-700 dark:text-amber-300"
         : "text-red-700 dark:text-red-300";
   const modeDotClass = "bg-indigo-500";
   const modeValueClass = "text-indigo-700 dark:text-indigo-300";
   const systemDotClass =
-    systemState === "Monitoring"
-      ? "bg-emerald-500"
-      : systemState === "Manual Override"
-        ? "bg-slate-500"
-        : "bg-rose-500";
+    runtime.decisionSource === "MANUAL"
+      ? "bg-slate-500"
+      : runtime.decisionSource === "SAFETY"
+        ? "bg-rose-500"
+        : "bg-emerald-500";
   const systemValueClass =
-    systemState === "Monitoring"
-      ? "text-emerald-700 dark:text-emerald-300"
-      : systemState === "Manual Override"
-        ? "text-slate-700 dark:text-slate-300"
-        : "text-rose-700 dark:text-rose-300";
+    runtime.decisionSource === "MANUAL"
+      ? "text-slate-700 dark:text-slate-300"
+      : runtime.decisionSource === "SAFETY"
+        ? "text-rose-700 dark:text-rose-300"
+        : "text-emerald-700 dark:text-emerald-300";
 
   if (!mounted) {
     return (
@@ -256,7 +268,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
                 Smart Clothesline
               </p>
               <p className="hidden md:block text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                Operational Workspace
+                {t("Operational Workspace", "Ruang Kerja Operasional")}
               </p>
             </div>
           </div>
@@ -267,7 +279,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
           <div className="flex items-center gap-6 px-6 py-1.5 rounded-2xl bg-slate-50/50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5">
             <StatusBadge
               icon={<Monitor className="h-4 w-4" aria-hidden="true" />}
-              label="Device"
+              label={t("Device", "Alat")}
               value={deviceStatus}
               valueClass={deviceValueClass}
               dotClass={deviceDotClass}
@@ -276,15 +288,18 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
               iconTextClass="text-slate-500 dark:text-slate-300"
               title={
                 runtime.freshnessSeconds === null
-                  ? "Last update: -"
-                  : `Last update: ${runtime.freshnessSeconds}s ago`
+                  ? t("Last update: -", "Terakhir update: -")
+                  : t(
+                      `Last update: ${runtime.freshnessSeconds}s ago`,
+                      `Terakhir update: ${runtime.freshnessSeconds} detik lalu`
+                    )
               }
             />
             <div className="h-6 w-px bg-slate-200 dark:bg-white/10" />
 
             <StatusBadge
               icon={<Clock className="h-4 w-4" aria-hidden="true" />}
-              label="Mode"
+              label={t("Mode", "Mode")}
               value={modeLabel}
               valueClass={modeValueClass}
               dotClass={modeDotClass}
@@ -295,13 +310,13 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
 
             <StatusBadge
               icon={<Shield className="h-4 w-4" aria-hidden="true" />}
-              label="Guard"
+              label={t("Guard", "Keamanan")}
               value={systemState}
               valueClass={systemValueClass}
               dotClass={systemDotClass}
               iconBgClass="bg-emerald-50 dark:bg-emerald-500/10 shadow-sm"
               iconTextClass="text-emerald-600 dark:text-emerald-400"
-              title="Automated safety status"
+              title={t("Automated safety status", "Status keamanan otomatis")}
             />
           </div>
         </div>
@@ -315,7 +330,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
                 markAllRead();
               }}
               className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/60 text-slate-600 transition-all hover:bg-slate-50 hover:border-slate-300 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
-              aria-label="Notifications"
+              aria-label={t("Notifications", "Notifikasi")}
             >
               <Bell className="h-5 w-5" />
               {unreadCount > 0 && (
@@ -327,13 +342,13 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
               <div className="fixed bottom-auto top-20 left-1/2 -translate-x-1/2 sm:absolute sm:top-full sm:bottom-auto sm:left-auto sm:right-0 sm:translate-x-0 z-50 mt-4 w-[calc(100vw-2rem)] sm:w-80 rounded-2xl border border-slate-200 bg-white/95 py-2 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/95 animate-in fade-in zoom-in-95 duration-200">
                 <div className="mb-1 border-b border-slate-100 px-5 pb-3 pt-2 dark:border-white/5">
                   <p className="text-sm font-bold text-slate-800 dark:text-white">
-                    Notifications
+                    {t("Notifications", "Notifikasi")}
                   </p>
                 </div>
                 <div className="max-h-80 overflow-y-auto px-2">
                   {notifications.length === 0 ? (
                     <div className="px-4 py-8 text-center">
-                      <p className="text-xs font-medium text-slate-400">No operational events yet.</p>
+                      <p className="text-xs font-medium text-slate-400">{t("No operational events yet.", "Belum ada kejadian operasional.")}</p>
                     </div>
                   ) : (
                     notifications.map((item) => (
@@ -360,7 +375,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
                     onClick={goToNotificationSettings}
                     className="w-full rounded-xl bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-600 transition-all hover:bg-slate-100 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
                   >
-                    Manage Settings
+                    {t("Manage Settings", "Atur Setelan")}
                   </button>
                 </div>
               </div>
@@ -371,7 +386,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
             onClick={handleThemeToggle}
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/60 text-slate-600 transition-all hover:bg-slate-50 hover:border-slate-300 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
             aria-label="Toggle dark mode"
-            title={isDark ? "Light mode" : "Dark mode"}
+            title={isDark ? t("Light mode", "Mode terang") : t("Dark mode", "Mode gelap")}
           >
             {isDark ? (
               <Sun className="h-5 w-5" />
@@ -396,7 +411,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
               <div className="absolute right-0 z-50 mt-4 min-w-[200px] rounded-2xl border border-slate-200 bg-white/95 py-2 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/95 animate-in fade-in zoom-in-95 duration-200">
                 <div className="px-5 py-3">
                   <p className="text-[10px] font-black uppercase tracking-widest text-teal-600 dark:text-teal-400 leading-none mb-1.5">
-                    Operator
+                    {t("Operator", "Operator")}
                   </p>
                   <p className="truncate text-sm font-bold text-slate-800 dark:text-white">
                     {profileName}
@@ -409,7 +424,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
                   className="flex w-full items-center gap-3 px-5 py-2.5 text-left text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-white/5"
                 >
                   <User className="h-4 w-4" />
-                  Account Profile
+                  {t("Account Profile", "Profil Akun")}
                 </button>
                 <button
                   type="button"
@@ -417,7 +432,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
                   className="flex w-full items-center gap-3 px-5 py-2.5 text-left text-sm font-semibold text-amber-600 transition-colors hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
                 >
                   <RefreshCcw className="h-4 w-4" />
-                  Reset UI Settings
+                  {t("Reset UI Settings", "Atur Ulang UI")}
                 </button>
                 <div className="mx-2 my-1.5 h-px bg-slate-100 dark:bg-white/5" />
                 <button
@@ -427,7 +442,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
                   className="flex w-full items-center gap-3 px-5 py-2.5 text-left text-sm font-bold text-rose-600 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-rose-400 dark:hover:bg-rose-900/20"
                 >
                   <LogOut className="h-4 w-4" />
-                  Sign Out
+                  {t("Sign Out", "Keluar")}
                 </button>
               </div>
             )}

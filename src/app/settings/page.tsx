@@ -1,7 +1,12 @@
 import SettingsPage from "@/features/settings/MainSettingsPage";
 
-export default function settings() {
+interface PageProps {
+  searchParams?: { lang?: string };
+}
+
+export default function settings({ searchParams }: PageProps) {
+  const lang = searchParams?.lang === "id" ? "id" : "en";
   return (
-    <SettingsPage></SettingsPage>
+    <SettingsPage lang={lang}></SettingsPage>
   )
 }

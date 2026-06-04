@@ -43,7 +43,31 @@ function getCachedDeviceById(deviceId: string) {
   }
 }
 
-export default function IoTHubPage() {
+export default function IoTHubPage({ lang = "en" }: { lang?: "en" | "id" }) {
+  const t = (en: string, id: string) => (lang === "id" ? id : en);
+
+  const getBrokerStateLabel = (state: string) => {
+    if (state === "CONNECTED") return t("CONNECTED", "TERHUBUNG");
+    if (state === "DISCONNECTED") return t("DISCONNECTED", "TERPUTUS");
+    if (state === "CONNECTING") return t("CONNECTING", "MENGHUBUNGKAN");
+    return state;
+  };
+
+  const getAckResultLabel = (res: string) => {
+    if (res === "TIMEOUT") return t("TIMEOUT", "HABIS WAKTU");
+    if (res === "ACK_RECEIVED") return t("ACK RECEIVED", "ACK DITERIMA");
+    if (res === "PENDING") return t("PENDING", "TERTUNDA");
+    if (res === "NONE") return t("NONE", "TIDAK ADA");
+    return res;
+  };
+
+  const getSyncStateLabel = (state: string) => {
+    if (state === "SYNCED") return t("SYNCED", "TERSINKRONISASI");
+    if (state === "DIRTY") return t("DIRTY", "BELUM SINKRON");
+    if (state === "WAITING_ACK") return t("WAITING ACK", "MENUNGGU ACK");
+    return state;
+  };
+
   const { connection, mqttConnected, deviceConfig, serialLogs, lastUpdate, debug, operationalHealth, runtime } = useSystemState();
   const [devices, setDevices] = useState<PairableDevice[]>(initialDevices);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
@@ -223,25 +247,29 @@ export default function IoTHubPage() {
                   <Wifi className="h-5 w-5" />
                 </div>
                 <span className="text-[11px] font-black uppercase tracking-[0.25em] text-teal-600 dark:text-teal-400">
-                  Connectivity Core
+                  {t("Connectivity Core", "Inti Konektivitas")}
                 </span>
               </div>
-              <h1 className="text-4xl font-black text-slate-800 dark:text-white tracking-tight">IoT Hub Management</h1>
-              <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Pairing, orchestration, and real-time telemetry synchronization.</p>
+              <h1 className="text-4xl font-black text-slate-800 dark:text-white tracking-tight">
+                {t("Connect your clothesline device", "Hubungkan alat jemuran Anda")}
+              </h1>
+              <p className="text-sm font-bold text-slate-500 dark:text-slate-400">
+                {t("Use this page to choose the device you want to monitor and control.", "Gunakan halaman ini untuk memilih alat yang ingin dipantau dan dikontrol.")}
+              </p>
             </div>
 
             <div className={`px-6 py-3 rounded-2xl flex items-center gap-3 font-black text-xs tracking-widest ${mqttConnected ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'}`}>
               <Radio className={`h-4 w-4 ${mqttConnected ? 'animate-pulse' : ''}`} />
-              {mqttConnected ? 'BROKER CONNECTED' : 'BROKER OFFLINE'}
+              {mqttConnected ? t("BROKER CONNECTED", "BROKER TERHUBUNG") : t("BROKER OFFLINE", "BROKER OFFLINE")}
             </div>
           </div>
         </header>
 
         <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-          <HubStat label="Sync State" value={deviceConfig.syncState} icon={<RefreshCw className="h-4 w-4" />} />
-          <HubStat label="Heartbeat" value={lastUpdate ? new Date(lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "-"} icon={<Activity className="h-4 w-4" />} color="blue" />
-          <HubStat label="Queue" value={operationalHealth.queueBacklog} icon={<Binary className="h-4 w-4" />} color="amber" />
-          <HubStat label="Attempts" value={reconnectAttempts} icon={<ShieldAlert className="h-4 w-4" />} color="rose" />
+          <HubStat label={t("Sync State", "Sinkronisasi")} value={getSyncStateLabel(deviceConfig.syncState)} icon={<RefreshCw className="h-4 w-4" />} />
+          <HubStat label={t("Last active", "Terakhir aktif")} value={lastUpdate ? new Date(lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "-"} icon={<Activity className="h-4 w-4" />} color="blue" />
+          <HubStat label={t("Queue", "Antrean")} value={operationalHealth.queueBacklog} icon={<Binary className="h-4 w-4" />} color="amber" />
+          <HubStat label={t("Attempts", "Percobaan")} value={reconnectAttempts} icon={<ShieldAlert className="h-4 w-4" />} color="rose" />
         </section>
 
         <div className="grid grid-cols-1 gap-8 xl:grid-cols-12">
@@ -252,28 +280,34 @@ export default function IoTHubPage() {
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
                     <Cpu className="h-5 w-5" />
                   </div>
-                  <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Provisioning</h2>
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">{t("Provisioning", "Pengaturan Alat")}</h2>
                 </div>
               </div>
               <div className="p-6 border-b border-slate-100 dark:border-white/5">
-                <div className="flex gap-3">
-                  <input
-                    value={deviceIdQuery}
-                    onChange={(event) => setDeviceIdQuery(event.target.value)}
-                    placeholder="Enter deviceId, e.g. ESP32-01"
-                    className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-900"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleFindDevice}
-                    className="rounded-xl bg-teal-600 px-4 py-3 text-sm font-bold text-white"
-                  >
-                    Find Device
-                  </button>
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    {t("Enter the pairing code shown by your device or simulator.", "Masukkan kode pairing yang ditampilkan oleh alat atau simulator.")}
+                  </label>
+                  <div className="flex gap-3">
+                    <input
+                      value={deviceIdQuery}
+                      onChange={(event) => setDeviceIdQuery(event.target.value)}
+                      placeholder={t("Enter device ID (e.g. ESP32-01)", "Masukkan ID alat (contoh: ESP32-01)")}
+                      className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-900"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleFindDevice}
+                      className="rounded-xl bg-teal-600 px-4 py-3 text-sm font-bold text-white hover:bg-teal-700 active:scale-95 transition-all"
+                    >
+                      {t("Find Device", "Cari Alat")}
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className="p-2">
                 <PairingDeviceSettings
+                  lang={lang}
                   discoveredDevices={devices}
                   selectedDeviceId={selectedDeviceId}
                   activeDeviceStatus={activeDeviceRuntimeStatus}
@@ -286,31 +320,31 @@ export default function IoTHubPage() {
           </div>
 
           <aside className="space-y-8 xl:col-span-4">
-            <TelegramNotificationStatus />
+            <TelegramNotificationStatus lang={lang} />
 
             <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-8 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
               <div className="flex items-center gap-3 mb-6">
                 <Zap className="h-5 w-5 text-teal-600 dark:text-teal-400" />
-                <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">Bridge Diagnostics</h2>
+                <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">{t("Bridge Diagnostics", "Diagnostik Jembatan")}</h2>
               </div>
 
               <div className="space-y-4">
-                <DiagItem label="Device Target" value={selectedDevice?.name ?? "None"} icon={<Cpu className="h-3.5 w-3.5" />} />
-                <DiagItem label="Broker Mode" value={connection.state} icon={<Wifi className="h-3.5 w-3.5" />} />
-                <DiagItem label="Last Transaction" value={debug.lastAckResult} icon={<Activity className="h-3.5 w-3.5" />} />
-                <DiagItem label="Latency Drift" value={`${operationalHealth.statusDriftMs ?? 0}ms`} icon={<RefreshCw className="h-3.5 w-3.5" />} />
+                <DiagItem label={t("Device Target", "Alat Target")} value={selectedDevice?.name ?? t("None", "Tidak Ada")} icon={<Cpu className="h-3.5 w-3.5" />} />
+                <DiagItem label={t("Broker Mode", "Mode Broker")} value={getBrokerStateLabel(connection.state)} icon={<Wifi className="h-3.5 w-3.5" />} />
+                <DiagItem label={t("Last Transaction", "Transaksi Terakhir")} value={getAckResultLabel(debug.lastAckResult)} icon={<Activity className="h-3.5 w-3.5" />} />
+                <DiagItem label={t("Latency Drift", "Drift Latensi")} value={`${operationalHealth.statusDriftMs ?? 0}ms`} icon={<RefreshCw className="h-3.5 w-3.5" />} />
               </div>
             </section>
 
             <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-8 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
               <div className="flex items-center gap-3 mb-6">
                 <Binary className="h-5 w-5 text-teal-600 dark:text-teal-400" />
-                <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">Firmware Manifest</h2>
+                <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">{t("Firmware Manifest", "Manifest Firmware")}</h2>
               </div>
               <div className="space-y-3">
-                <ManifestRow label="Revision" value="v1.0-sim" />
-                <ManifestRow label="Last Sync" value={deviceConfig.lastSyncAt ? new Date(deviceConfig.lastSyncAt).toLocaleDateString() : "Never"} />
-                <ManifestRow label="Sync Code" value={deviceConfig.syncMessage.split(' ')[0]} />
+                <ManifestRow label={t("Revision", "Revisi")} value="v1.0-sim" />
+                <ManifestRow label={t("Last Sync", "Sinkronisasi Terakhir")} value={deviceConfig.lastSyncAt ? new Date(deviceConfig.lastSyncAt).toLocaleDateString() : t("Never", "Tidak Pernah")} />
+                <ManifestRow label={t("Sync Code", "Kode Sinkronisasi")} value={deviceConfig.syncMessage.split(' ')[0]} />
               </div>
             </section>
           </aside>

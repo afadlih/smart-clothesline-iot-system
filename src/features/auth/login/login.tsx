@@ -28,11 +28,53 @@ function LoginContent() {
     return param && param.startsWith("/") ? param : "/dashboard";
   }, [searchParams]);
 
+  const lang = (searchParams?.get("lang") === "id" || returnUrl.includes("lang=id")) ? "id" : "en";
+  const t = (en: string, id: string) => (lang === "id" ? id : en);
+
+  const translateAuthError = (errStr: string | null) => {
+    if (!errStr) return null;
+    if (errStr.includes("Invalid email or password.")) {
+      return t("Invalid email or password.", "Email atau kata sandi salah.");
+    }
+    if (errStr.includes("Account not found.")) {
+      return t("Account not found.", "Akun tidak ditemukan.");
+    }
+    if (errStr.includes("Too many attempts. Try again later.")) {
+      return t("Too many attempts. Try again later.", "Terlalu banyak percobaan. Coba lagi nanti.");
+    }
+    if (errStr.includes("Email is already in use.")) {
+      return t("Email is already in use.", "Email sudah digunakan.");
+    }
+    if (errStr.includes("Invalid email address.")) {
+      return t("Invalid email address.", "Alamat email tidak valid.");
+    }
+    if (errStr.includes("Password is too weak.")) {
+      return t("Password is too weak.", "Kata sandi terlalu lemah.");
+    }
+    if (errStr.includes("Google sign-in was closed before completion.")) {
+      return t("Google sign-in was closed before completion.", "Pendaftaran Google ditutup sebelum selesai.");
+    }
+    if (errStr.includes("Popup blocked. Please allow popups and try again.")) {
+      return t("Popup blocked. Please allow popups and try again.", "Popup diblokir. Harap izinkan popup dan coba lagi.");
+    }
+    if (errStr.includes("Another sign-in window is already open.")) {
+      return t("Another sign-in window is already open.", "Jendela masuk lainnya sedang terbuka.");
+    }
+    if (errStr.includes("Authentication failed.")) {
+      return t("Authentication failed.", "Autentikasi gagal.");
+    }
+    return errStr;
+  };
+
   useEffect(() => {
     if (user) {
-      router.replace(returnUrl);
+      let targetUrl = returnUrl;
+      if (lang === "id" && !targetUrl.includes("lang=id")) {
+        targetUrl += targetUrl.includes("?") ? "&lang=id" : "?lang=id";
+      }
+      router.replace(targetUrl);
     }
-  }, [router, returnUrl, user]);
+  }, [router, returnUrl, user, lang]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +82,7 @@ function LoginContent() {
     clearError();
 
     if (!email.trim() || !password) {
-      setFormError("Email and password are required.");
+      setFormError(t("Email and password are required.", "Email dan kata sandi wajib diisi."));
       return;
     }
 
@@ -53,8 +95,6 @@ function LoginContent() {
     await signInWithGoogle();
   };
 
-
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-teal-50 via-white to-emerald-50 p-4">
       <div className="flex w-full max-w-4xl overflow-hidden rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-white/20 backdrop-blur-sm">
@@ -65,10 +105,10 @@ function LoginContent() {
           {/* Back to Home Navigation Link */}
           <div className="mb-4">
             <Link
-              href="/"
+              href={`/?lang=${lang}`}
               className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-teal-600 transition-colors"
             >
-              &larr; Back to Home
+              &larr; {t("Back to Home", "Kembali ke Beranda")}
             </Link>
           </div>
 
@@ -83,9 +123,9 @@ function LoginContent() {
           {/* Heading */}
           <div className="mb-8 text-center">
             <h1 className="text-3xl font-bold tracking-tight text-slate-800">
-              Welcome Back!
+              {t("Welcome Back!", "Selamat Datang Kembali!")}
             </h1>
-            <p className="mt-2 text-sm text-slate-500">Access your smart clothesline dashboard</p>
+            <p className="mt-2 text-sm text-slate-500">{t("Access your smart clothesline dashboard", "Akses dasbor jemuran pintar Anda")}</p>
           </div>
 
           {/* Form */}
@@ -93,7 +133,7 @@ function LoginContent() {
             {/* Email */}
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-slate-700 ml-1">
-                Email Address<span className="ml-0.5 text-rose-500">*</span>
+                {t("Email Address", "Alamat Email")}<span className="ml-0.5 text-rose-500">*</span>
               </label>
               <input
                 type="email"
@@ -112,7 +152,7 @@ function LoginContent() {
             {/* Password */}
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-slate-700 ml-1">
-                Password<span className="ml-0.5 text-rose-500">*</span>
+                {t("Password", "Kata Sandi")}<span className="ml-0.5 text-rose-500">*</span>
               </label>
               <div className="relative">
                 <input
@@ -168,21 +208,21 @@ function LoginContent() {
                     </svg>
                   )}
                 </div>
-                <span className="text-sm font-medium text-slate-600 group-hover:text-slate-800 transition-colors">Remember Me</span>
+                <span className="text-sm font-medium text-slate-600 group-hover:text-slate-800 transition-colors">{t("Remember Me", "Ingat Saya")}</span>
               </label>
 
               <Link
-                href="/forgot-password"
+                href={`/forgot-password?lang=${lang}`}
                 className="text-sm font-semibold text-teal-600 hover:text-teal-700 hover:underline decoration-teal-600/30 underline-offset-4 transition-all"
               >
-                Forgot Password?
+                {t("Forgot Password?", "Lupa Kata Sandi?")}
               </Link>
             </div>
 
             {(formError || error) && (
               <div className="flex items-center gap-2 rounded-2xl border border-rose-100 bg-rose-50/50 p-4 text-sm text-rose-600 animate-in fade-in slide-in-from-top-1">
                 <div className="h-1.5 w-1.5 rounded-full bg-rose-500 flex-shrink-0" />
-                {formError || error}
+                {formError || translateAuthError(error)}
               </div>
             )}
 
@@ -199,10 +239,10 @@ function LoginContent() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  Processing...
+                  {t("Processing...", "Memproses...")}
                 </span>
               ) : (
-                "Login to Dashboard"
+                t("Login to Dashboard", "Masuk ke Dasbor")
               )}
             </button>
           </form>
@@ -210,7 +250,7 @@ function LoginContent() {
           {/* Divider */}
           <div className="my-7 flex items-center gap-4">
             <div className="h-px flex-1 bg-slate-100" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Secure Social Login</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t("Secure Social Login", "Masuk Sosial Aman")}</span>
             <div className="h-px flex-1 bg-slate-100" />
           </div>
 
@@ -227,18 +267,18 @@ function LoginContent() {
               <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
             </svg>
-            Continue with Google
+            {t("Continue with Google", "Lanjutkan dengan Google")}
           </button>
 
 
           {/* Footer */}
           <p className="mt-8 text-center text-sm text-slate-500">
-            Don&apos;t have an account?{" "}
+            {t("Don't have an account?", "Belum punya akun?")}{" "}
             <Link
-              href="/auth/register"
+              href={`/auth/register?lang=${lang}`}
               className="font-bold text-teal-600 hover:text-teal-700 transition-colors"
             >
-              Create Free Account
+              {t("Create Free Account", "Buat Akun Gratis")}
             </Link>
           </p>
         </div>
@@ -280,16 +320,16 @@ function LoginContent() {
             {/* Bottom copy */}
             <div className="space-y-6">
               <h2 className="text-4xl font-extrabold leading-tight text-white">
-                Smart laundry,
+                {t("Smart laundry,", "Jemuran pintar,")}
                 <br />
-                <span className="bg-gradient-to-r from-teal-300 to-emerald-400 bg-clip-text text-transparent italic">smarter living.</span>
+                <span className="bg-gradient-to-r from-teal-300 to-emerald-400 bg-clip-text text-transparent italic">{t("smarter living.", "hidup lebih cerdas.")}</span>
               </h2>
               <p className="max-w-xs text-base leading-relaxed text-slate-300 font-medium">
-                Monitor and automate your clothesline from anywhere with real-time IoT sensors.
+                {t("Monitor and automate your clothesline from anywhere with real-time IoT sensors.", "Pantau dan otomatiskan jemuran Anda dari mana saja dengan sensor IoT realtime.")}
               </p>
               
               <div className="flex flex-wrap gap-2 pt-2">
-                {["Auto Retract", "Rain Sensor", "Remote Control"].map((feat) => (
+                {[t("Auto Retract", "Tarik Otomatis"), t("Rain Sensor", "Sensor Hujan"), t("Remote Control", "Kontrol Jarak Jauh")].map((feat) => (
                   <span
                     key={feat}
                     className="rounded-xl border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-semibold text-teal-100 backdrop-blur-sm hover:bg-white/10 transition-colors"

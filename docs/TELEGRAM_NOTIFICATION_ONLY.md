@@ -1,4 +1,4 @@
-﻿# Telegram Notification-Only Integration
+# Telegram Notification-Only Integration
 
 As of refactor `refactor/telegram-notification-only`, the Telegram integration has been transitioned to a **notification-only** model.
 
@@ -121,4 +121,37 @@ curl -X POST "$APP_BASE_URL/api/telegram/notify" \
     "dashboardPath": "/big-data"
   }'
 ```
+
+## User-Friendly Formatted Message Examples
+
+Below are examples of how messages are formatted and sent to Telegram:
+
+### English Rain Example
+
+```txt
+🌧️ Rain detected
+
+Device: Wokwi Clothesline
+Condition: Rain is detected near the clothesline.
+Status: OPEN
+Time: 19 May 2026, 21:15
+
+Recommended action:
+Open the dashboard to confirm the clothesline position.
+```
+
+### Indonesian Rain Example
+
+```txt
+🌧️ Hujan terdeteksi
+
+Alat: Wokwi Clothesline
+Kondisi: Hujan terdeteksi di sekitar jemuran.
+Status: TERBUKA
+Waktu: 19 Mei 2026, 21:15
+
+Saran:
+Buka dasbor untuk memastikan posisi jemuran.
+```
+
 

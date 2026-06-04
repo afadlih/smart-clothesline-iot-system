@@ -21,9 +21,11 @@ The system has been stabilized and validated for production release.
  
 ---
 
-## Public Landing Page
+## User-Friendly Interface
 
-The root route `/` introduces Smart Clothesline for common users with English and Indonesian copy. It explains the rain-monitoring benefit, dashboard control, Telegram notification-only model, and a visual rain simulation.
+The project includes a public landing page and user-facing dashboard copy designed for common users. The landing page supports Indonesian and English, explains the rain-monitoring benefit, and keeps device control in the dashboard.
+
+Telegram is notification-only. Users receive alerts and open the dashboard when action is needed.
 
 ---
 
