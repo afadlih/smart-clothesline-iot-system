@@ -1,9 +1,12 @@
-// getPairingDiscoveryTopics
-
 import IoTHubPage from "@/features/sensor/view/iothub/IoTHubPage";
 
-export default function IoTHub() {
-  return(
-    <IoTHubPage></IoTHubPage>
-  )
+interface PageProps {
+  searchParams?: { lang?: string };
+}
+
+export default function IoTHub({ searchParams }: PageProps) {
+  const lang = searchParams?.lang === "id" ? "id" : "en";
+  return (
+    <IoTHubPage lang={lang} />
+  );
 }

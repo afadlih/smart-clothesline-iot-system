@@ -61,8 +61,8 @@ function formatDateValue(timestamp: string): string {
   return `${year}-${month}-${day}`;
 }
 
-function formatDateLabel(dateKey: string): string {
-  return new Date(dateKey).toLocaleDateString("en-US", {
+function formatDateLabel(dateKey: string, lang = "en"): string {
+  return new Date(dateKey).toLocaleDateString(lang === "id" ? "id-ID" : "en-US", {
     day: "2-digit",
     month: "long",
     year: "numeric",
@@ -73,7 +73,8 @@ function formatTime(timestamp: string): string {
   return formatClock(timestamp);
 }
 
-export default function HistoryPage() {
+export default function HistoryPage({ lang = "en" }: { lang?: "en" | "id" }) {
+  const t = (en: string, id: string) => (lang === "id" ? id : en);
   const { history, loading, error, lastFetchedAt } = useSensorHistory(0);
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -269,8 +270,6 @@ export default function HistoryPage() {
     });
   };
 
-
-
   const buildChartPoints = (values: number[]) => {
     if (values.length === 0) return "";
 
@@ -300,8 +299,8 @@ export default function HistoryPage() {
        const normalized = (sampled[i] - min) / range;
        const y = bottom - normalized * (bottom - top);
        points += `${x.toFixed(1)},${y.toFixed(1)} `;
-    }
-    return points.trim();
+     }
+     return points.trim();
   };
 
   const renderChartCard = (
@@ -332,18 +331,18 @@ export default function HistoryPage() {
               <div className="flex items-baseline gap-2">
                 <span className="text-6xl font-black text-slate-800 dark:text-white tracking-tighter leading-none">{avgValue}</span>
                 <span className="text-xl font-black text-slate-400 uppercase tracking-widest">{unit}</span>
-                <span className="ml-2 text-[10px] font-black text-teal-500 uppercase tracking-widest opacity-40">Average</span>
+                <span className="ml-2 text-[10px] font-black text-teal-500 uppercase tracking-widest opacity-40">{t("Average", "Rata-rata")}</span>
               </div>
             </div>
             
             <div className="flex items-center gap-6 pb-2">
               <div className="flex flex-col">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Peak</span>
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{t("Peak", "Puncak")}</span>
                 <span className="text-base font-black text-emerald-600 dark:text-emerald-400">{maxValue}{unit}</span>
               </div>
               <div className="h-8 w-px bg-slate-100 dark:bg-white/5" />
               <div className="flex flex-col">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Floor</span>
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{t("Floor", "Dasar")}</span>
                 <span className="text-base font-black text-rose-600 dark:text-rose-400">{minValue}{unit}</span>
               </div>
             </div>
@@ -373,7 +372,7 @@ export default function HistoryPage() {
             <div className="absolute right-8 top-8">
                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white dark:bg-slate-800 shadow-lg border border-slate-100 dark:border-white/10">
                   <TrendingUp size={12} style={{ color: themeColor }} />
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Trend Active</span>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">{t("Trend Active", "Tren Aktif")}</span>
                </div>
             </div>
           </div>
@@ -391,7 +390,7 @@ export default function HistoryPage() {
     return (
       <article className="rounded-[2rem] border border-slate-200/50 bg-slate-50 dark:bg-white/5 p-8 dark:border-white/5">
         <div className="mb-6 flex items-center justify-between">
-          <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Status Distribution</h3>
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t("Status Distribution", "Distribusi Status")}</h3>
           <span
             className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
               summary.status === "OPEN"
@@ -399,14 +398,14 @@ export default function HistoryPage() {
                 : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
             }`}
           >
-            {summary.status} Dominant
+            {summary.status === "OPEN" ? t("OPEN", "TERBUKA") : t("CLOSED", "TERTUTUP")} {t("Dominant", "Dominan")}
           </span>
         </div>
         <div className="space-y-6">
           <div>
             <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
-              <span className="text-emerald-600 dark:text-emerald-400">OPEN</span>
-              <span className="text-slate-400">{summary.openCount} reads ({openPercent.toFixed(1)}%)</span>
+              <span className="text-emerald-600 dark:text-emerald-400">{t("OPEN", "TERBUKA")}</span>
+              <span className="text-slate-400">{summary.openCount} {t("readings", "pembacaan")} ({openPercent.toFixed(1)}%)</span>
             </div>
             <div className="h-2 rounded-full bg-slate-200 dark:bg-white/5 overflow-hidden">
               <div className="h-full rounded-full bg-emerald-500" style={{ width: `${openPercent}%` }} />
@@ -414,8 +413,8 @@ export default function HistoryPage() {
           </div>
           <div>
             <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
-              <span className="text-rose-600 dark:text-rose-400">CLOSED</span>
-              <span className="text-slate-400">{summary.closedCount} reads ({closedPercent.toFixed(1)}%)</span>
+              <span className="text-rose-600 dark:text-rose-400">{t("CLOSED", "TERTUTUP")}</span>
+              <span className="text-slate-400">{summary.closedCount} {t("readings", "pembacaan")} ({closedPercent.toFixed(1)}%)</span>
             </div>
             <div className="h-2 rounded-full bg-slate-200 dark:bg-white/5 overflow-hidden">
               <div className="h-full rounded-full bg-rose-500" style={{ width: `${closedPercent}%` }} />
@@ -425,6 +424,18 @@ export default function HistoryPage() {
       </article>
     );
   };
+
+  const getChevronUp = () => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="inline-block ml-1">
+      <path d="m18 15-6-6-6 6"/>
+    </svg>
+  );
+
+  const getChevronDown = () => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="inline-block ml-1">
+      <path d="m6 9 6 6 6-6"/>
+    </svg>
+  );
 
   return (
     <main className="min-h-screen bg-[#f8fafc] dark:bg-[#020617] transition-colors duration-500 pb-20">
@@ -437,20 +448,20 @@ export default function HistoryPage() {
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="space-y-2">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500 text-white shadow-lg shadow-teal-500/20">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-50 text-white shadow-lg shadow-teal-500/20">
                   <History className="h-5 w-5" />
                 </div>
                 <span className="text-[11px] font-black uppercase tracking-[0.25em] text-teal-600 dark:text-teal-400">
-                  Operational Archive
+                  {t("Operational Archive", "Arsip Operasional")}
                 </span>
               </div>
-              <h1 className="text-5xl md:text-6xl font-black text-slate-800 dark:text-white tracking-tighter">System History</h1>
-              <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Browse and analyze historical operational data.</p>
+              <h1 className="text-5xl md:text-6xl font-black text-slate-800 dark:text-white tracking-tighter">{t("System History", "Riwayat Sistem")}</h1>
+              <p className="text-sm font-bold text-slate-500 dark:text-slate-400">{t("Browse and analyze historical operational data.", "Telusuri dan analisis data operasional historis.")}</p>
             </div>
 
             <div className="flex items-center gap-4">
                 <div className="px-5 py-2.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 shadow-sm">
-                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Last Sync</p>
+                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{t("Last Sync", "Sinkronisasi Terakhir")}</p>
                    <p className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">{lastFetchedAt ? formatDateTime(lastFetchedAt) : "-"}</p>
                 </div>
             </div>
@@ -459,10 +470,10 @@ export default function HistoryPage() {
 
         {/* Global Stats Grid */}
         <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-           <HistoryStatCard label="Stored Days" value={dailyHistory.length} icon={<Calendar className="h-4 w-4" />} color="teal" />
-           <HistoryStatCard label="Avg Temp" value={formatMetric(averageTemperatureGlobal, "°C")} icon={<Thermometer className="h-4 w-4" />} color="rose" />
-           <HistoryStatCard label="Rainy Days" value={totalRainyDays} icon={<CloudRain className="h-4 w-4" />} color="blue" />
-           <HistoryStatCard label="Open Days" value={totalOpenDominantDays} icon={<Zap className="h-4 w-4" />} color="emerald" />
+           <HistoryStatCard label={t("Stored Days", "Hari Tersimpan")} value={dailyHistory.length} icon={<Calendar className="h-4 w-4" />} color="teal" />
+           <HistoryStatCard label={t("Avg Temp", "Suhu Rata-rata")} value={formatMetric(averageTemperatureGlobal, "°C")} icon={<Thermometer className="h-4 w-4" />} color="rose" />
+           <HistoryStatCard label={t("Rainy Days", "Hari Hujan")} value={totalRainyDays} icon={<CloudRain className="h-4 w-4" />} color="blue" />
+           <HistoryStatCard label={t("Open Days", "Hari Terbuka")} value={totalOpenDominantDays} icon={<Zap className="h-4 w-4" />} color="emerald" />
         </section>
 
         {/* Filter Section */}
@@ -471,45 +482,45 @@ export default function HistoryPage() {
               <div className="space-y-2">
                  <div className="flex items-center gap-3">
                     <Filter className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">Filter Archive</h2>
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">{t("Filter Archive", "Filter Arsip")}</h2>
                  </div>
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Refine results by status or condition</p>
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t("Refine results by status or condition", "Saring hasil berdasarkan status atau kondisi")}</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 flex-1 max-w-2xl">
                  <div className="space-y-3">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Status</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">{t("Status", "Status")}</span>
                     <select
                       value={statusFilter}
                       onChange={(e) => { setStatusFilter(e.target.value as StatusFilter); setCurrentPage(1); }}
                       className="w-full rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 p-5 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-1 ring-teal-500/50 transition-all appearance-none"
                     >
-                      <option value="all">All statuses</option>
-                      <option value="OPEN">Open Only</option>
-                      <option value="CLOSED">Closed Only</option>
+                      <option value="all">{t("All statuses", "Semua status")}</option>
+                      <option value="OPEN">{t("Open Only", "Hanya Terbuka")}</option>
+                      <option value="CLOSED">{t("Closed Only", "Hanya Tertutup")}</option>
                     </select>
                  </div>
                  <div className="space-y-3">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Condition</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">{t("Condition", "Kondisi")}</span>
                     <select
                       value={weatherFilter}
                       onChange={(e) => { setWeatherFilter(e.target.value as WeatherFilter); setCurrentPage(1); }}
                       className="w-full rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 p-5 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-1 ring-teal-500/50 transition-all appearance-none"
                     >
-                      <option value="all">Any Condition</option>
-                      <option value="dry">Dry Only</option>
-                      <option value="rainy">Rainy Only</option>
+                      <option value="all">{t("Any Condition", "Semua Kondisi")}</option>
+                      <option value="dry">{t("Dry Only", "Hanya Kering")}</option>
+                      <option value="rainy">{t("Rainy Only", "Hanya Hujan")}</option>
                     </select>
                  </div>
               </div>
 
               <div className="flex gap-4">
                  <div className="px-8 py-5 rounded-[2rem] bg-teal-500/10 border border-teal-500/20 text-center">
-                    <p className="text-[10px] font-black text-teal-600 dark:text-teal-400 uppercase tracking-widest mb-1">Avg Humidity</p>
+                    <p className="text-[10px] font-black text-teal-600 dark:text-teal-400 uppercase tracking-widest mb-1">{t("Avg Humidity", "Kelembapan Rata-rata")}</p>
                     <p className="text-xl font-black text-teal-700 dark:text-teal-300">{averageHumidityGlobal.toFixed(1)}%</p>
                  </div>
                  <div className="px-8 py-5 rounded-[2rem] bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/5 text-center">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Readings</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t("Readings", "Pembacaan")}</p>
                     <p className="text-xl font-black text-slate-800 dark:text-white">{history.length}</p>
                  </div>
               </div>
@@ -525,9 +536,9 @@ export default function HistoryPage() {
                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
                     <Activity className="h-5 w-5" />
                  </div>
-                 <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">Daily Summary</h2>
+                 <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">{t("Daily Summary", "Ringkasan Harian")}</h2>
               </div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{filteredDailyHistory.length} Days Found</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{filteredDailyHistory.length} {t("Days Found", "Hari Ditemukan")}</p>
             </div>
 
             <div className="overflow-x-auto flex-1">
@@ -536,23 +547,23 @@ export default function HistoryPage() {
                   <tr>
                     <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-white/5">
                        <button onClick={() => toggleSort("date")} className="flex items-center gap-2 hover:text-teal-500 transition-colors">
-                          Date {sortKey === "date" && (sortDirection === "asc" ? <ChevronUp size={12}/> : <ChevronDown size={12}/>)}
+                          {t("Date", "Tanggal")} {sortKey === "date" && (sortDirection === "asc" ? getChevronUp() : getChevronDown())}
                        </button>
                     </th>
-                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-white/5 text-center">Temp</th>
-                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-white/5 text-center">Hum</th>
-                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-white/5 text-center text-rose-500/70">Rain</th>
-                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-white/5">Status</th>
-                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-white/5 text-right">Details</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-white/5 text-center">{t("Temp", "Suhu")}</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-white/5 text-center">{t("Hum", "Kelembapan")}</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-white/5 text-center text-rose-500/70">{t("Rain", "Hujan")}</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-white/5">{t("Status", "Status")}</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-white/5 text-right">{t("Details", "Detail")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                   {loading ? (
-                    <tr><td colSpan={6} className="p-24 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Synchronizing Archive...</td></tr>
+                    <tr><td colSpan={6} className="p-24 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">{t("Synchronizing Archive...", "Menyelaraskan Arsip...")}</td></tr>
                   ) : error ? (
-                    <tr><td colSpan={6} className="p-24 text-center text-[10px] font-black text-rose-500 uppercase tracking-widest">Failed: {error}</td></tr>
+                    <tr><td colSpan={6} className="p-24 text-center text-[10px] font-black text-rose-500 uppercase tracking-widest">{t("Failed:", "Gagal:")} {error}</td></tr>
                   ) : paginatedHistory.length === 0 ? (
-                    <tr><td colSpan={6} className="p-24 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">No matching records found.</td></tr>
+                    <tr><td colSpan={6} className="p-24 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">{t("No matching records found.", "Tidak ditemukan catatan yang cocok.")}</td></tr>
                   ) : (
                     paginatedHistory.map((item) => (
                       <tr 
@@ -561,7 +572,7 @@ export default function HistoryPage() {
                         onClick={() => setSelectedDataKey(item.dateKey)}
                       >
                         <td className="px-8 py-8">
-                           <p className="text-base font-black text-slate-800 dark:text-white tracking-tight">{formatDateLabel(item.dateKey)}</p>
+                           <p className="text-base font-black text-slate-800 dark:text-white tracking-tight">{formatDateLabel(item.dateKey, lang)}</p>
                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{formatTime(item.firstReadingAt)} - {formatTime(item.lastReadingAt)}</p>
                         </td>
                         <td className="px-8 py-8 text-center">
@@ -570,22 +581,22 @@ export default function HistoryPage() {
                         <td className="px-8 py-8 text-center">
                            <p className="text-base font-black text-slate-700 dark:text-slate-200">{item.averageHumidity.toFixed(0)}%</p>
                            <div className={`text-[10px] font-black uppercase flex items-center justify-center gap-1 mt-1 ${item.humidityTrend === 'up' ? 'text-rose-500' : item.humidityTrend === 'down' ? 'text-teal-500' : 'text-slate-400'}`}>
-                              {item.humidityTrend} {item.humidityTrend !== 'flat' && (item.humidityTrend === 'up' ? <ChevronUp size={10}/> : <ChevronDown size={10}/>)}
+                              {item.humidityTrend === 'up' ? t("up", "naik") : item.humidityTrend === 'down' ? t("down", "turun") : t("flat", "stabil")} {item.humidityTrend !== 'flat' && (item.humidityTrend === 'up' ? getChevronUp() : getChevronDown())}
                            </div>
                         </td>
                         <td className="px-8 py-8 text-center">
                            {item.rainyReadings > 0 ? (
                              <span className="text-[10px] font-black text-rose-600 dark:text-rose-400 bg-rose-500/10 px-4 py-1.5 rounded-full">{item.rainyReadings}x</span>
                            ) : (
-                             <span className="text-[10px] font-black text-slate-300 dark:text-slate-700">None</span>
+                             <span className="text-[10px] font-black text-slate-300 dark:text-slate-700">{t("None", "Tidak Ada")}</span>
                            )}
                         </td>
                         <td className="px-8 py-8">
                            <div className="flex flex-col items-start gap-1">
                               <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${item.status === 'OPEN' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'}`}>
-                                {item.status}
+                                {item.status === 'OPEN' ? t("OPEN", "TERBUKA") : t("CLOSED", "TERTUTUP")}
                               </span>
-                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest opacity-70 ml-1">{item.dominantRatio.toFixed(0)}% dominant</span>
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest opacity-70 ml-1">{item.dominantRatio.toFixed(0)}% {t("dominant", "dominan")}</span>
                            </div>
                         </td>
                          <td className="px-8 py-8 text-right">
@@ -606,7 +617,7 @@ export default function HistoryPage() {
                              className={`inline-flex items-center gap-2 px-5 py-3.5 rounded-2xl transition-all duration-300 ${selectedDateKey === item.dateKey ? 'bg-teal-500 text-white shadow-lg shadow-teal-500/20' : 'bg-slate-100 dark:bg-white/5 text-slate-400 group-hover:bg-teal-500/10 group-hover:text-teal-500'} ${loadingDetailsKey === item.dateKey ? 'opacity-80' : ''}`}
                            >
                               <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">
-                                {loadingDetailsKey === item.dateKey ? 'Processing' : 'Details'}
+                                {loadingDetailsKey === item.dateKey ? t("Processing", "Memproses") : t("Details", "Detail")}
                               </span>
                               {loadingDetailsKey === item.dateKey ? (
                                 <Loader2 size={18} className="animate-spin" />
@@ -623,7 +634,7 @@ export default function HistoryPage() {
             </div>
 
             <div className="p-10 border-t border-slate-100 dark:border-white/5 flex items-center justify-between">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Page {safeCurrentPage} of {totalPages}</span>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t("Page", "Halaman")} {safeCurrentPage} {t("of", "dari")} {totalPages}</span>
               <div className="flex gap-4">
                 <PaginationButton onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={safeCurrentPage === 1} icon={<ChevronLeft size={20}/>} />
                 <PaginationButton onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={safeCurrentPage === totalPages} icon={<ChevronRight size={20}/>} />
@@ -650,10 +661,10 @@ export default function HistoryPage() {
                 </div>
                 <div>
                   <h2 className="text-3xl md:text-4xl font-black text-slate-800 dark:text-white tracking-tight">
-                    {formatDateLabel(selectedSummary.dateKey)}
+                    {formatDateLabel(selectedSummary.dateKey, lang)}
                   </h2>
                   <p className="text-[11px] font-black text-teal-600 dark:text-teal-400 uppercase tracking-[0.2em] mt-1">
-                    Operational Analytics • {selectedSummary.totalReadings} Readings Recorded
+                    {t("Operational Analytics", "Analitik Operasional")} • {selectedSummary.totalReadings} {t("Readings Recorded", "Pembacaan Tercatat")}
                   </p>
                 </div>
               </div>
@@ -672,20 +683,20 @@ export default function HistoryPage() {
                 <div className="lg:col-span-7 space-y-10 h-full">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div className="p-8 rounded-[2.5rem] bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/30 transition-all">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Dominant System State</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">{t("Dominant System State", "Status Sistem Dominan")}</p>
                       <div className="flex items-center gap-4">
                         <div className={`h-4 w-4 rounded-full ${selectedSummary.status === 'OPEN' ? 'bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.5)]' : 'bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.5)]'}`} />
                         <p className={`text-3xl font-black uppercase tracking-tight ${selectedSummary.status === 'OPEN' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {selectedSummary.status}
+                          {selectedSummary.status === 'OPEN' ? t("OPEN", "TERBUKA") : t("CLOSED", "TERTUTUP")}
                         </p>
                       </div>
                     </div>
                     <div className="p-8 rounded-[2.5rem] bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/30 transition-all">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Weather Condition</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">{t("Weather Condition", "Kondisi Cuaca")}</p>
                       <div className="flex items-center gap-4">
                         <CloudRain className={`h-6 w-6 ${selectedSummary.rainyReadings > 0 ? 'text-blue-500' : 'text-slate-300'}`} />
                         <p className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">
-                          {selectedSummary.rainyReadings} <span className="text-xs font-black text-slate-400 uppercase">Rain Hits</span>
+                          {selectedSummary.rainyReadings} <span className="text-xs font-black text-slate-400 uppercase">{t("Rain Hits", "Deteksi Hujan")}</span>
                         </p>
                       </div>
                     </div>
@@ -696,12 +707,12 @@ export default function HistoryPage() {
                   <div className="space-y-6">
                     <div className="flex items-center gap-3 ml-2">
                        <TrendingUp size={16} className="text-teal-500" />
-                       <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Environmental Trends</h3>
+                       <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">{t("Environmental Trends", "Tren Lingkungan")}</h3>
                     </div>
                     <div className="grid grid-cols-1 gap-6">
-                       {renderChartCard("Thermal Variance", selectedDayMetrics.temp, "#f43f5e", "°C")}
-                       {renderChartCard("Humidity Path", selectedDayMetrics.hum, "#3b82f6", "%")}
-                       {renderChartCard("Photon Flux", selectedDayMetrics.light, "#fbbf24", "lx")}
+                       {renderChartCard(t("Thermal Variance", "Variasi Suhu"), selectedDayMetrics.temp, "#f43f5e", "°C")}
+                       {renderChartCard(t("Humidity Path", "Alur Kelembapan"), selectedDayMetrics.hum, "#3b82f6", "%")}
+                       {renderChartCard(t("Photon Flux", "Intensitas Cahaya"), selectedDayMetrics.light, "#fbbf24", "lx")}
                     </div>
                   </div>
                 </div>
@@ -713,13 +724,13 @@ export default function HistoryPage() {
                       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
                         <Clock className="h-5 w-5" />
                       </div>
-                      <h3 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Sequence Stream</h3>
+                      <h3 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">{t("Sequence Stream", "Aliran Urutan")}</h3>
                     </div>
                     
                     <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
                       {orderedSelectedDayHistory.length > 300 && (
                          <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest text-center mb-4 shrink-0">
-                            Showing latest 300 of {orderedSelectedDayHistory.length} readings for performance
+                            {t("Showing latest 300 of", "Menampilkan")} 300 {t("readings for performance", "pembacaan terakhir untuk performa")}
                          </div>
                       )}
                       {orderedSelectedDayHistory.slice(-300).reverse().map((item, idx) => (
@@ -727,14 +738,14 @@ export default function HistoryPage() {
                            <div className="flex items-center justify-between mb-5">
                               <p className="text-sm font-black text-slate-800 dark:text-white tracking-tight">{formatTime(item.timestamp)}</p>
                               <span className={`text-[9px] font-black px-3 py-1.5 rounded-full uppercase tracking-widest ${item.isRaining() ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'}`}>
-                                 {item.isRaining() ? 'Rain' : 'Dry'}
+                                 {item.isRaining() ? t("Rain", "Hujan") : t("Dry", "Kering")}
                               </span>
                            </div>
                            <div className="grid grid-cols-2 gap-4">
-                              <ReadingMetric label="Temp" value={`${item.temperature.toFixed(1)}°`} icon={<Thermometer size={12}/>} />
-                              <ReadingMetric label="Humid" value={`${item.humidity.toFixed(0)}%`} icon={<Droplets size={12}/>} />
-                              <ReadingMetric label="Light" value={`${item.light.toFixed(0)}`} icon={<Sun size={12}/>} />
-                              <ReadingMetric label="State" value={item.status} icon={<Zap size={12}/>} />
+                              <ReadingMetric label={t("Temp", "Suhu")} value={`${item.temperature.toFixed(1)}°`} icon={<Thermometer size={12}/>} />
+                              <ReadingMetric label={t("Humid", "Kelembapan")} value={`${item.humidity.toFixed(0)}%`} icon={<Droplets size={12}/>} />
+                              <ReadingMetric label={t("Light", "Cahaya")} value={`${item.light.toFixed(0)}`} icon={<Sun size={12}/>} />
+                              <ReadingMetric label={t("State", "Status")} value={item.status === 'OPEN' ? t("OPEN", "TERBUKA") : t("CLOSED", "TERTUTUP")} icon={<Zap size={12}/>} />
                            </div>
                         </div>
                       ))}
@@ -743,8 +754,6 @@ export default function HistoryPage() {
                 </div>
               </div>
             </div>
-            
-
           </div>
         </div>
       )}
@@ -757,8 +766,8 @@ export default function HistoryPage() {
               <Activity className="absolute inset-0 m-auto h-8 w-8 text-teal-500 animate-pulse" />
            </div>
            <div className="mt-8 text-center">
-              <p className="text-xl font-black text-slate-800 dark:text-white tracking-tight">Analyzing Archive</p>
-              <p className="text-[10px] font-black text-teal-600 dark:text-teal-400 uppercase tracking-[0.2em] mt-2">Preparing detailed operational insights...</p>
+              <p className="text-xl font-black text-slate-800 dark:text-white tracking-tight">{t("Analyzing Archive", "Menganalisis Arsip")}</p>
+              <p className="text-[10px] font-black text-teal-600 dark:text-teal-400 uppercase tracking-[0.2em] mt-2">{t("Preparing detailed operational insights...", "Menyiapkan informasi operasional terperinci...")}</p>
            </div>
         </div>
       )}
@@ -808,22 +817,3 @@ function ReadingMetric({ label, value, icon }: { label: string; value: string; i
       </div>
    );
 }
-
-function ChevronDown({ size, className }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="m6 9 6 6 6-6"/>
-    </svg>
-  );
-}
-
-function ChevronUp({ size, className }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="m18 15-6-6-6 6"/>
-    </svg>
-  );
-}
-
-
-

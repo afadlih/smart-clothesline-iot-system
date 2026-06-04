@@ -57,22 +57,22 @@ const content = {
     howItWorksSteps: [
       {
         step: "1",
-        title: "Sensors monitor the area",
+        title: "Sensors monitor the drying area.",
         desc: "Weather sensors continuously track moisture and rain conditions around your clothesline."
       },
       {
         step: "2",
-        title: "Dashboard shows status",
+        title: "The dashboard shows the latest condition.",
         desc: "The dashboard displays the current weather readings and clothesline status in real time."
       },
       {
         step: "3",
-        title: "Telegram sends alerts",
+        title: "Telegram sends important alerts.",
         desc: "Telegram sends important alerts immediately when rain is detected or when device status changes."
       },
       {
         step: "4",
-        title: "Control from dashboard",
+        title: "You can open or close the clothesline from the dashboard.",
         desc: "You can easily open or close the clothesline from the dashboard with a single click."
       }
     ],
@@ -84,27 +84,27 @@ const content = {
     featuresSubtitle: "Everything you need to protect your laundry and monitor drying conditions.",
     featuresList: [
       {
-        title: "Rain detection",
+        title: "Rain Detection",
         desc: "Detects rain drops early to help protect your clothes from getting wet."
       },
       {
-        title: "Realtime status",
+        title: "Realtime Status",
         desc: "Check weather data, temperature, and drying conditions from any device."
       },
       {
-        title: "Dashboard control",
+        title: "Dashboard Control",
         desc: "Easily open or close the clothesline remotely through the web application."
       },
       {
-        title: "Telegram alerts",
+        title: "Telegram Alerts",
         desc: "Get instant notifications on your phone. Telegram is only used to send alerts, not for controls."
       },
       {
-        title: "Weather sensors",
+        title: "Weather Sensors",
         desc: "Monitor temperature, humidity, and light intensity in your laundry area."
       },
       {
-        title: "Drying history",
+        title: "Drying History",
         desc: "Review past rain and drying conditions from saved records."
       }
     ],
@@ -115,15 +115,15 @@ const content = {
     safetySubtitle: "Our system is built with clear boundaries to ensure reliable and secure operation.",
     safetyPoints: [
       {
-        title: "Dashboard is the place for control",
+        title: "The dashboard is the place for control.",
         desc: "Only authorized users can adjust the clothesline settings through the dashboard."
       },
       {
-        title: "Telegram only sends notifications",
+        title: "Telegram only sends notifications.",
         desc: "Telegram only sends alerts and warnings to keep transactions simple and prevent remote command hacking."
       },
       {
-        title: "Firestore stores history",
+        title: "History is stored for review, not for direct motor control.",
         desc: "Firestore database is used to record past readings and logs, not for direct motor control."
       }
     ],
@@ -144,12 +144,12 @@ const content = {
         a: "No. Telegram only sends notifications. Device control stays in the dashboard."
       },
       {
-        q: "Does it work without opening the dashboard all day?",
-        a: "The device can monitor conditions, but the dashboard is used to check status and control the clothesline."
+        q: "Do I need to keep the dashboard open all day?",
+        a: "No. The device can monitor conditions, while the dashboard is used to check status and control the clothesline when needed."
       },
       {
         q: "What happens when rain is detected?",
-        a: "The system sends an alert and helps users respond faster from the dashboard."
+        a: "The system sends an alert and helps you respond faster from the dashboard."
       },
       {
         q: "Can I try it without real hardware?",
@@ -200,22 +200,22 @@ const content = {
     howItWorksSteps: [
       {
         step: "1",
-        title: "Sensor memantau area",
+        title: "Sensor memantau area jemuran.",
         desc: "Sensor cuaca terus memantau kelembapan dan kondisi hujan di sekitar jemuran Anda secara realtime."
       },
       {
         step: "2",
-        title: "Dasbor menampilkan kondisi",
+        title: "Dasbor menampilkan kondisi terbaru.",
         desc: "Dasbor menampilkan pembacaan cuaca terbaru dan status jemuran secara langsung."
       },
       {
         step: "3",
-        title: "Telegram mengirim notifikasi",
+        title: "Telegram mengirim notifikasi penting.",
         desc: "Telegram mengirimkan notifikasi penting saat hujan terdeteksi atau saat status alat berubah."
       },
       {
         step: "4",
-        title: "Kontrol dari dasbor",
+        title: "Anda bisa membuka atau menutup jemuran dari dasbor.",
         desc: "Anda dapat membuka atau menutup jemuran dengan mudah dari dasbor hanya dengan satu klik."
       }
     ],
@@ -227,15 +227,15 @@ const content = {
     featuresSubtitle: "Semua yang Anda butuhkan untuk melindungi cucian dan memantau kondisi penjemuran.",
     featuresList: [
       {
-        title: "Deteksi hujan",
+        title: "Deteksi Hujan",
         desc: "Mendeteksi tetesan air hujan lebih awal untuk membantu melindungi pakaian Anda dari basah."
       },
       {
-        title: "Status realtime",
+        title: "Status Realtime",
         desc: "Periksa data cuaca, suhu, dan kondisi penjemuran dari perangkat apa saja."
       },
       {
-        title: "Kontrol dasbor",
+        title: "Kontrol Dasbor",
         desc: "Buka atau tutup jemuran dengan mudah dari jarak jauh melalui aplikasi web."
       },
       {
@@ -243,11 +243,11 @@ const content = {
         desc: "Terima peringatan instan di HP Anda. Telegram hanya digunakan mengirim notifikasi, bukan kontrol."
       },
       {
-        title: "Sensor cuaca",
+        title: "Sensor Cuaca",
         desc: "Pantau suhu, kelembapan, dan intensitas cahaya di sekitar area jemuran Anda."
       },
       {
-        title: "Riwayat jemuran",
+        title: "Riwayat Jemuran",
         desc: "Lihat kembali kondisi hujan dan penjemuran dari catatan yang tersimpan."
       }
     ],
@@ -258,15 +258,15 @@ const content = {
     safetySubtitle: "Sistem kami dirancang dengan batasan yang jelas untuk memastikan pengoperasian yang andal dan aman.",
     safetyPoints: [
       {
-        title: "Dasbor adalah tempat utama untuk kontrol",
+        title: "Dasbor adalah tempat utama untuk kontrol.",
         desc: "Hanya pengguna terdaftar yang dapat mengubah pengaturan jemuran melalui dasbor."
       },
       {
-        title: "Telegram hanya mengirim notifikasi",
+        title: "Telegram hanya mengirim notifikasi.",
         desc: "Telegram hanya mengirim notifikasi dan peringatan untuk menjaga kesederhanaan operasi dan mencegah peretasan perintah jarak jauh."
       },
       {
-        title: "Firestore menyimpan riwayat",
+        title: "Riwayat disimpan untuk ditinjau, bukan untuk mengontrol motor secara langsung.",
         desc: "Database Firestore digunakan untuk mencatat data sensor masa lalu, bukan mengontrol motor secara langsung."
       }
     ],
@@ -357,7 +357,7 @@ export default function LandingPage({ searchParams }: PageProps) {
               {/* CTAs */}
               <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-2">
                 <Link
-                  href="/dashboard"
+                  href={`/dashboard?lang=${lang}`}
                   className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3.5 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-500 text-white font-extrabold shadow-md hover:from-teal-500 hover:to-emerald-400 hover:shadow-teal-500/20 transition-all active:scale-95 text-base focus-visible:outline-2 focus-visible:outline-teal-500"
                 >
                   {copy.ctaPrimary}
@@ -605,7 +605,7 @@ export default function LandingPage({ searchParams }: PageProps) {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
             <Link
-              href="/dashboard"
+              href={`/dashboard?lang=${lang}`}
               className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3.5 rounded-2xl bg-white text-teal-700 font-extrabold shadow-md hover:bg-slate-50 transition-colors text-base focus-visible:outline-2 focus-visible:outline-white"
             >
               {copy.ctaPrimary}

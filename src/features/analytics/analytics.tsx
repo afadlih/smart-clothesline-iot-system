@@ -32,7 +32,9 @@ function getTooltipStyle(isDark: boolean) {
   };
 }
 
-export default function AnalyticsPage() {
+export default function AnalyticsPage({ lang = "en" }: { lang?: "en" | "id" }) {
+  const t = (en: string, id: string) => (lang === "id" ? id : en);
+
   const { range, setRange, result, loading, error, refresh } = useAnalyticsData("24h");
   const [activeTab, setActiveTab] = useState<"environment" | "operations">("environment");
 
@@ -89,11 +91,15 @@ export default function AnalyticsPage() {
                   <BarChart3 className="h-5 w-5" />
                 </div>
                 <span className="text-[11px] font-black uppercase tracking-[0.25em] text-teal-600 dark:text-teal-400">
-                  Strategic Insights
+                  {t("Drying Insights", "Ringkasan Jemuran")}
                 </span>
               </div>
-              <h1 className="text-4xl font-black text-slate-800 dark:text-white tracking-tight">System Analytics</h1>
-              <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Advanced telemetry processing and trend analysis.</p>
+              <h1 className="text-4xl font-black text-slate-800 dark:text-white tracking-tight">
+                {t("Drying Insights", "Ringkasan Jemuran")}
+              </h1>
+              <p className="text-sm font-bold text-slate-500 dark:text-slate-400">
+                {t("See recent temperature, humidity, light, rain events, and clothesline activity.", "Lihat suhu, kelembapan, cahaya, kejadian hujan, dan aktivitas jemuran terbaru.")}
+              </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -112,11 +118,11 @@ export default function AnalyticsPage() {
                   </button>
                 ))}
               </div>
-              <button onClick={refresh} disabled={loading} className="p-3 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/5 shadow-sm hover:bg-slate-50 dark:hover:bg-white/10 transition-colors">
+              <button onClick={refresh} disabled={loading} className="p-3 rounded-xl bg-white dark:bg-white/5 border border-slate-200/50 dark:border-white/5 shadow-sm hover:bg-slate-50 dark:hover:bg-white/10 transition-colors">
                 <RefreshCw className={`h-4 w-4 text-slate-500 ${loading ? "animate-spin" : ""}`} />
               </button>
               <button onClick={exportData} disabled={!result?.data?.length} className="flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-900 dark:bg-teal-600 text-white font-black text-[10px] tracking-widest uppercase hover:opacity-90 transition-all disabled:opacity-50">
-                <Download className="h-4 w-4" /> Export
+                <Download className="h-4 w-4" /> {t("Export", "Ekspor")}
               </button>
             </div>
           </div>
@@ -125,17 +131,17 @@ export default function AnalyticsPage() {
         {error && (
           <div className="rounded-[2rem] border border-rose-200 bg-rose-50 p-6 dark:border-rose-900/40 dark:bg-rose-900/20 flex items-center justify-between">
             <p className="text-sm font-bold text-rose-700 dark:text-rose-300">{error}</p>
-            <button onClick={refresh} className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-black uppercase tracking-widest">Retry</button>
+            <button onClick={refresh} className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-black uppercase tracking-widest">{t("Retry", "Coba Lagi")}</button>
           </div>
         )}
 
         <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <MetricCard label="Avg Temp" value={formatMetric(result?.stats.avgTemp, "°C", 1)} icon={<Thermometer className="h-4 w-4" />} color="rose" />
-          <MetricCard label="Avg Humidity" value={formatMetric(result?.stats.avgHumidity, "%", 1)} icon={<Droplets className="h-4 w-4" />} color="blue" />
-          <MetricCard label="Avg Light" value={formatMetric(result?.stats.avgLight, "", 0)} icon={<SunIcon className="h-4 w-4" />} color="amber" />
-          <MetricCard label="Rain Events" value={String(result?.stats.rainCount ?? 0)} icon={<Zap className="h-4 w-4" />} color="indigo" />
-          <MetricCard label="Data Density" value={String(result?.stats.dataPoints ?? 0)} icon={<Database className="h-4 w-4" />} color="slate" />
-          <MetricCard label="System Efficiency" value={formatMetric(result?.stats.openPercentage, "%", 0)} icon={<ShieldCheck className="h-4 w-4" />} color="emerald" />
+          <MetricCard label={t("Avg Temp", "Rata-rata Suhu")} value={formatMetric(result?.stats.avgTemp, "°C", 1)} icon={<Thermometer className="h-4 w-4" />} color="rose" />
+          <MetricCard label={t("Avg Humidity", "Rata-rata Kelembapan")} value={formatMetric(result?.stats.avgHumidity, "%", 1)} icon={<Droplets className="h-4 w-4" />} color="blue" />
+          <MetricCard label={t("Avg Light", "Rata-rata Cahaya")} value={formatMetric(result?.stats.avgLight, "", 0)} icon={<SunIcon className="h-4 w-4" />} color="amber" />
+          <MetricCard label={t("Rain Events", "Kejadian Hujan")} value={String(result?.stats.rainCount ?? 0)} icon={<Zap className="h-4 w-4" />} color="indigo" />
+          <MetricCard label={t("Data Count", "Jumlah Data")} value={String(result?.stats.dataPoints ?? 0)} icon={<Database className="h-4 w-4" />} color="slate" />
+          <MetricCard label={t("System Efficiency", "Efisiensi Sistem")} value={formatMetric(result?.stats.openPercentage, "%", 0)} icon={<ShieldCheck className="h-4 w-4" />} color="emerald" />
         </section>
 
         <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-8 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
@@ -145,8 +151,8 @@ export default function AnalyticsPage() {
                     <TrendingUp className="h-6 w-6" />
                  </div>
                  <div>
-                    <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Temporal Analysis</h2>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Environmental vs Operational Trends</p>
+                    <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">{t("Temporal Analysis", "Analisis Waktu")}</h2>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{t("Environmental vs Operational Trends", "Tren Lingkungan vs Operasional")}</p>
                  </div>
               </div>
               <div className="flex bg-slate-100 dark:bg-white/5 p-1.5 rounded-2xl border border-slate-200 dark:border-white/5 w-full md:w-auto">
@@ -154,13 +160,13 @@ export default function AnalyticsPage() {
                    onClick={() => setActiveTab("environment")} 
                    className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'environment' ? 'bg-white dark:bg-slate-800 text-teal-600 dark:text-teal-400 shadow-lg shadow-teal-500/5' : 'text-slate-400 hover:text-slate-600'}`}
                  >
-                   Environment
+                   {t("Environment", "Lingkungan")}
                  </button>
                  <button 
                    onClick={() => setActiveTab("operations")} 
                    className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'operations' ? 'bg-white dark:bg-slate-800 text-teal-600 dark:text-teal-400 shadow-lg shadow-teal-500/5' : 'text-slate-400 hover:text-slate-600'}`}
                  >
-                   Operations
+                   {t("Operations", "Operasi")}
                  </button>
               </div>
            </div>
@@ -177,8 +183,8 @@ export default function AnalyticsPage() {
                        <XAxis dataKey="time" tick={{ fontSize: 10, fontWeight: 700 }} minTickGap={30} stroke={isDark ? "#ffffff20" : "#00000020"} />
                        <YAxis tick={{ fontSize: 10, fontWeight: 700 }} stroke={isDark ? "#ffffff20" : "#00000020"} />
                        <Tooltip contentStyle={getTooltipStyle(isDark)} />
-                       <Area type="monotone" dataKey="temp" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorTemp)" name="Temperature" />
-                       <Area type="monotone" dataKey="humidity" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorHumid)" name="Humidity" />
+                       <Area type="monotone" dataKey="temp" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorTemp)" name={t("Temperature", "Suhu")} />
+                       <Area type="monotone" dataKey="humidity" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorHumid)" name={t("Humidity", "Kelembapan")} />
                     </AreaChart>
                  ) : (
                     <BarChart data={chartData}>
@@ -186,7 +192,7 @@ export default function AnalyticsPage() {
                        <XAxis dataKey="time" tick={{ fontSize: 10, fontWeight: 700 }} minTickGap={30} stroke={isDark ? "#ffffff20" : "#00000020"} />
                        <YAxis tick={{ fontSize: 10, fontWeight: 700 }} stroke={isDark ? "#ffffff20" : "#00000020"} />
                        <Tooltip contentStyle={getTooltipStyle(isDark)} />
-                       <Bar dataKey="isOpen" radius={[4, 4, 0, 0]} name="System State">
+                       <Bar dataKey="isOpen" radius={[4, 4, 0, 0]} name={t("System State", "Status Sistem")}>
                           {chartData.map((row, idx) => (
                              <Cell key={idx} fill={row.isOpen ? "#10b981" : "#f43f5e"} />
                           ))}

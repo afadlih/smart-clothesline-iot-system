@@ -56,11 +56,11 @@ export default function LandingHeader({ currentLang = "en" }: LandingHeaderProps
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex space-x-6 text-sm font-semibold text-slate-600 dark:text-slate-300" aria-label="Desktop Navigation">
-            <a href="#how-it-works" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">
-              {t("How it works", "Cara kerja")}
-            </a>
             <a href="#features" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">
-              {t("Features", "Fitur")}
+              {t("Benefits", "Manfaat")}
+            </a>
+            <a href="#how-it-works" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">
+              {t("How It Works", "Cara Kerja")}
             </a>
             <a href="#safety" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">
               {t("Safety", "Keamanan")}
@@ -68,7 +68,7 @@ export default function LandingHeader({ currentLang = "en" }: LandingHeaderProps
             <a href="#faq" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">
               {t("FAQ", "FAQ")}
             </a>
-            <Link href="/dashboard" className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">
+            <Link href={`/dashboard?lang=${currentLang}`} className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors focus-visible:outline-2 focus-visible:outline-teal-500">
               {t("Dashboard", "Dasbor")}
             </Link>
           </nav>
@@ -96,7 +96,7 @@ export default function LandingHeader({ currentLang = "en" }: LandingHeaderProps
               </button>
             )}
             <Link
-              href="/dashboard"
+              href={`/dashboard?lang=${currentLang}`}
               className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-500 text-white font-bold text-sm shadow-sm hover:from-teal-500 hover:to-emerald-400 transition-all active:scale-95 focus-visible:outline-2 focus-visible:outline-teal-500"
             >
               {t("Open Dashboard", "Buka Dasbor")}
@@ -137,18 +137,18 @@ export default function LandingHeader({ currentLang = "en" }: LandingHeaderProps
       {isMobileMenuOpen && (
         <div className="md:hidden border-t border-slate-200 dark:border-white/10 bg-white dark:bg-slate-950 px-4 py-4 space-y-3 transition-all duration-300">
           <a
-            href="#how-it-works"
-            onClick={() => setIsMobileMenuOpen(false)}
-            className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm focus-visible:outline-2 focus-visible:outline-teal-500"
-          >
-            {t("How it works", "Cara kerja")}
-          </a>
-          <a
             href="#features"
             onClick={() => setIsMobileMenuOpen(false)}
             className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm focus-visible:outline-2 focus-visible:outline-teal-500"
           >
-            {t("Features", "Fitur")}
+            {t("Benefits", "Manfaat")}
+          </a>
+          <a
+            href="#how-it-works"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm focus-visible:outline-2 focus-visible:outline-teal-500"
+          >
+            {t("How It Works", "Cara Kerja")}
           </a>
           <a
             href="#safety"
@@ -165,7 +165,7 @@ export default function LandingHeader({ currentLang = "en" }: LandingHeaderProps
             {t("FAQ", "FAQ")}
           </a>
           <Link
-            href="/dashboard"
+            href={`/dashboard?lang=${currentLang}`}
             onClick={() => setIsMobileMenuOpen(false)}
             className="block px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 font-semibold text-sm focus-visible:outline-2 focus-visible:outline-teal-500"
           >
@@ -173,7 +173,7 @@ export default function LandingHeader({ currentLang = "en" }: LandingHeaderProps
           </Link>
           <div className="pt-2 border-t border-slate-200 dark:border-white/5 flex flex-col gap-2">
             <Link
-              href="/dashboard"
+              href={`/dashboard?lang=${currentLang}`}
               onClick={() => setIsMobileMenuOpen(false)}
               className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-500 text-white font-bold text-sm shadow-md"
             >

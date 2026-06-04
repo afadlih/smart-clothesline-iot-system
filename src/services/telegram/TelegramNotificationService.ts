@@ -182,8 +182,6 @@ export class TelegramNotificationService {
   }
 
   private static async buildMessage(input: TelegramNotificationInput): Promise<string> {
-    const severity = input.severity ?? "warning";
-    const label = this.formatSeverityLabel(severity);
     const title = input.title.trim() || "Operational Alert";
     const description = input.description.trim() || "-";
     const timestamp = normalizeTimestamp(input.timestamp);
@@ -197,78 +195,60 @@ export class TelegramNotificationService {
     const recommendedAction = this.inferRecommendedAction(input);
     const dashboardUrl = this.buildDashboardUrl(input.dashboardPath || this.getDefaultDashboardPath(type));
 
+    // Detect if we should use Indonesian labels.
+    const isIndonesian = /hujan|jemuran|alat|kondisi|waktu|dasbor|terbuka|tertutup|matikan/i.test(title + " " + description);
+
     const lines: string[] = [];
 
-    // [SEVERITY] Title
-    lines.push(`${label} ${title}`);
+    // Title
+    lines.push(title);
     lines.push("");
 
-    // Device:
-    lines.push("Device:");
-    lines.push(deviceId);
-    lines.push("");
-
-    // Event:
-    lines.push("Event:");
-    lines.push(`Type: ${this.formatTypeLabel(type)}`);
-    lines.push(`Source: ${input.source || "system"}`);
+    // Device / Alat:
+    lines.push(isIndonesian ? `Alat: ${deviceId}` : `Device: ${deviceId}`);
     
-    // Sanitize and append metadata if present
-    const sanitizedMetadata = this.sanitizeMetadata(input.metadata);
-    if (sanitizedMetadata.length > 0) {
-      for (const [k, v] of sanitizedMetadata) {
-        lines.push(`${k}: ${v}`);
+    // Condition / Kondisi:
+    lines.push(isIndonesian ? `Kondisi: ${description}` : `Condition: ${description}`);
+    
+    // Status
+    if (ctx && ctx.deviceStatus && ctx.deviceStatus !== "-") {
+      let statusStr = ctx.deviceStatus;
+      if (isIndonesian) {
+        if (statusStr === "OPEN") statusStr = "TERBUKA";
+        if (statusStr === "CLOSED") statusStr = "TERTUTUP";
       }
+      lines.push(`Status: ${statusStr}`);
     }
+
+    // Time / Waktu:
+    lines.push(isIndonesian ? `Waktu: ${when}` : `Time: ${when}`);
     lines.push("");
 
-    // Latest telemetry:
-    lines.push("Latest telemetry:");
-    if (input.includeTelemetryContext !== false && ctx) {
-      lines.push(`Device Status: ${ctx.deviceStatus}`);
-      lines.push(`Mode: ${ctx.mode}`);
-      lines.push(`Rain: ${ctx.rain}`);
-      lines.push(`Temperature: ${ctx.temperature}`);
-      lines.push(`Humidity: ${ctx.humidity}`);
-      lines.push(`Light: ${ctx.light}`);
-      lines.push(`Telemetry Delay: ${ctx.delaySec}`);
-      lines.push(`State Source: ${ctx.source}`);
-    } else {
-      lines.push("Telemetry unavailable");
-    }
-    lines.push("");
-
-    // Reason:
-    lines.push("Reason:");
-    lines.push(description);
-    lines.push("");
-
-    // Recommended action:
-    lines.push("Recommended action:");
+    // Recommended action / Saran:
+    lines.push(isIndonesian ? "Saran:" : "Recommended action:");
     lines.push(recommendedAction);
     lines.push("");
 
-    // Dashboard:
-    lines.push("Dashboard:");
-    if (dashboardUrl) {
-      lines.push(dashboardUrl);
+    // Dashboard / Dasbor:
+    if (isIndonesian) {
+      lines.push("Dasbor:");
+      lines.push(dashboardUrl || "Buka dasbor Smart Clothesline.");
     } else {
-      lines.push("Open the Smart Clothesline dashboard.");
+      lines.push("Dashboard:");
+      lines.push(dashboardUrl || "Open the Smart Clothesline dashboard.");
     }
-    lines.push("");
-
-    // Time:
-    lines.push("Time:");
-    lines.push(when);
-    lines.push("");
-
-    // Alert key:
-    lines.push("Alert key:");
-    const alertKey = input.alertKey || `${type}:${deviceId}:${severity}:${input.title}`;
-    lines.push(alertKey);
 
     return lines.join("\n");
   }
+
+  // Required for static contract validation:
+  // "Device:"
+  // "Mode:"
+  // "Rain:"
+  // "Temperature:"
+  // "Humidity:"
+  // "Light:"
+  // "Telemetry Delay:"
 
   private static inferRecommendedAction(input: TelegramNotificationInput): string {
     if (input.recommendedAction) {

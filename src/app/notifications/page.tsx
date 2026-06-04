@@ -1,7 +1,12 @@
 import NotificationsPage from "@/features/notification/NotificationPage";
 
-export default function notification() {
+interface PageProps {
+  searchParams?: { lang?: string };
+}
+
+export default function notification({ searchParams }: PageProps) {
+  const lang = searchParams?.lang === "id" ? "id" : "en";
   return(
-    <NotificationsPage></NotificationsPage>
+    <NotificationsPage lang={lang}></NotificationsPage>
   )
 }

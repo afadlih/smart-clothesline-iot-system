@@ -1,7 +1,12 @@
 import HistoryPage from "@/features/history/HistoryPage";
 
-export default function history() {
+interface PageProps {
+  searchParams?: { lang?: string };
+}
+
+export default function history({ searchParams }: PageProps) {
+  const lang = searchParams?.lang === "id" ? "id" : "en";
   return(
-    <HistoryPage></HistoryPage>
+    <HistoryPage lang={lang}></HistoryPage>
   )
 }
