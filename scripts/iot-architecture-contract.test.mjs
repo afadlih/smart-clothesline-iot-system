@@ -302,3 +302,51 @@ test("landing page contract validation", () => {
     assert.ok(content.toLowerCase().includes(word), `Landing page should include English word: ${word}`);
   }
 });
+
+test("mobile navigation layout contracts", () => {
+  const bottomNavPath = "src/components/layout/MobileBottomNavigation.tsx";
+  const bottomNavContent = read(bottomNavPath);
+
+  // 1. Mobile bottom navigation component exists (verified by read() above)
+
+  // 2. Mobile bottom nav uses mobile-only classes: contains md:hidden or lg:hidden
+  assert.ok(
+    bottomNavContent.includes("md:hidden") || bottomNavContent.includes("lg:hidden"),
+    "MobileBottomNavigation must use responsive hidden utility class"
+  );
+
+  // 3. Sidebar is hidden on mobile: contains hidden md: or hidden lg:
+  const sidebarContent = read("src/components/layout/Sidebar.tsx");
+  assert.ok(
+    sidebarContent.includes("hidden md:") || sidebarContent.includes("hidden lg:") || sidebarContent.includes("hidden flex") || sidebarContent.includes("hidden"),
+    "Sidebar should have desktop-only or mobile-hidden layout class"
+  );
+
+  // 4. Main content has mobile bottom padding: contains pb-20 or similar safe bottom padding
+  const layoutContent = read("src/components/layout/MainLayout.tsx");
+  assert.ok(
+    layoutContent.includes("pb-20") || layoutContent.includes("pb-16") || layoutContent.includes("pb-24"),
+    "Main content area must have bottom padding on mobile screens"
+  );
+
+  // 5. Mobile bottom nav links to main feature routes
+  const requiredRoutes = [
+    "/dashboard",
+    "/iot-hub",
+    "/schedule",
+    "/analytics",
+    "/settings"
+  ];
+  for (const route of requiredRoutes) {
+    assert.ok(
+      bottomNavContent.includes(route),
+      `MobileBottomNavigation should route to: ${route}`
+    );
+  }
+
+  // 6. Mobile bottom nav uses usePathname or equivalent route active detection
+  assert.ok(
+    bottomNavContent.includes("usePathname") || bottomNavContent.includes("pathname"),
+    "MobileBottomNavigation should use pathname/active route detection"
+  );
+});

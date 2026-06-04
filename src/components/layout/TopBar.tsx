@@ -253,7 +253,7 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
         <div className="flex flex-shrink-0 items-center gap-1 sm:gap-2">
           <button
             onClick={onHamburgerClick}
-            className="rounded-xl p-2.5 transition-all hover:bg-slate-100 dark:hover:bg-white/5 md:hidden"
+            className="rounded-xl p-2.5 transition-all hover:bg-slate-100 dark:hover:bg-white/5 hidden"
             aria-label="Toggle menu"
           >
             <Menu className="h-5 w-5 text-slate-600 dark:text-slate-300" />
