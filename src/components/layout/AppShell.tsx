@@ -15,8 +15,9 @@ export default function AppShell({
   const pathname = usePathname();
   const isAuthRoute = pathname.startsWith("/auth");
   const isLandingPage = pathname === "/";
+  const isForgotPasswordPage = pathname.startsWith("/forgot-password");
 
-  if (isAuthRoute || isLandingPage) {
+  if (isAuthRoute || isLandingPage || isForgotPasswordPage) {
     return <>{children}</>;
   }
 

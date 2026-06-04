@@ -350,3 +350,54 @@ test("mobile navigation layout contracts", () => {
     "MobileBottomNavigation should use pathname/active route detection"
   );
 });
+
+test("forgot password page contract validation", () => {
+  const content = read("src/app/forgot-password/page.tsx");
+  const loginContent = read("src/features/auth/login/login.tsx");
+  const appShellContent = read("src/components/layout/AppShell.tsx");
+
+  // 1. Forgot password page exists (verified by read above)
+
+  // 2. Forgot password page uses Firebase reset
+  assert.ok(content.includes("sendPasswordResetEmail"), "Forgot password page must use sendPasswordResetEmail");
+
+  // 3. Forgot password page has neutral success message
+  assert.ok(
+    content.includes("If an account exists for this email, a reset link has been sent. Please check your inbox.") ||
+    content.includes("If an account exists"),
+    "Forgot password page must contain neutral success message in English"
+  );
+  assert.ok(
+    content.includes("Jika akun dengan email ini tersedia, tautan reset kata sandi telah dikirim. Silakan cek kotak masuk email Anda.") ||
+    content.includes("Jika akun"),
+    "Forgot password page must contain neutral success message in Indonesian"
+  );
+
+  // 4. Forgot password page does not expose user existence
+  assert.ok(!content.includes("Email not registered"), "Should not show Email not registered");
+  assert.ok(!content.includes("User does not exist"), "Should not show User does not exist");
+  assert.ok(!content.includes("Akun tidak ditemukan"), "Should not show Akun tidak ditemukan");
+
+  // 5. Login page links to forgot password
+  assert.ok(loginContent.includes("/forgot-password"), "Login page must link to /forgot-password");
+
+  // 6. Forgot password page does not import runtime systems
+  const forbiddenImports = [
+    "MQTTService",
+    "FirestoreService",
+    "useSensor",
+    "TelegramOpsService",
+    "TelegramNotificationService",
+    "hadoop"
+  ];
+  for (const item of forbiddenImports) {
+    assert.ok(!content.includes(item), `Forgot password page should not import runtime system: ${item}`);
+  }
+
+  // 7. Route protection: AppShell.tsx contains forgot-password bypass
+  assert.ok(
+    appShellContent.includes("/forgot-password") || appShellContent.includes("isForgotPasswordPage"),
+    "AppShell must bypass forgot-password route"
+  );
+});
+
