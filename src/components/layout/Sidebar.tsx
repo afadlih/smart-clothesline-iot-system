@@ -211,7 +211,8 @@ export default function Sidebar({
       {/* Mobile Sidebar - Drawer overlay */}
       <aside
         className={`
-          md:hidden fixed top-0 bottom-0 left-0
+          hidden
+          fixed top-0 bottom-0 left-0
           flex flex-col
           border-r border-white/10 bg-slate-950/95 text-white
           w-[280px]
