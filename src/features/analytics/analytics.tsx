@@ -131,7 +131,7 @@ export default function AnalyticsPage({ lang = "en" }: { lang?: "en" | "id" }) {
         {error && (
           <div className="rounded-[2rem] border border-rose-200 bg-rose-50 p-6 dark:border-rose-900/40 dark:bg-rose-900/20 flex items-center justify-between">
             <p className="text-sm font-bold text-rose-700 dark:text-rose-300">{error}</p>
-            <button onClick={refresh} className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-black uppercase tracking-widest">Retry</button>
+            <button onClick={refresh} className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-black uppercase tracking-widest">{t("Retry", "Coba Lagi")}</button>
           </div>
         )}
 
