@@ -7,6 +7,10 @@ import { Wind, ArrowLeft } from "lucide-react";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
 function ForgotPasswordContent() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -22,25 +26,44 @@ function ForgotPasswordContent() {
     setErrorMsg(null);
     setSuccess(false);
 
-    if (!email.trim()) {
-      setErrorMsg(t("Email address is required.", "Alamat email wajib diisi."));
+    if (!isValidEmail(email)) {
+      setErrorMsg(t(
+        "We could not send the reset link. Please check the email format and try again.",
+        "Tautan reset belum dapat dikirim. Periksa format email dan coba lagi."
+      ));
       return;
     }
 
     setLoading(true);
     try {
-      await sendPasswordResetEmail(auth, email.trim());
+      const baseUrl =
+        process.env.NEXT_PUBLIC_APP_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
+
+      await sendPasswordResetEmail(
+        auth,
+        email.trim(),
+        baseUrl
+          ? {
+              url: `${baseUrl.replace(/\/$/, "")}/auth/login`,
+              handleCodeInApp: false,
+            }
+          : undefined
+      );
       setSuccess(true);
       setEmail("");
-    } catch (err: any) {
-      console.error("Forgot password error:", err);
-      let message = t("Failed to send reset link. Please try again.", "Gagal mengirim tautan atur ulang. Silakan coba lagi.");
-      if (err.code === "auth/user-not-found") {
-        message = t("Account not found with this email.", "Akun tidak ditemukan dengan email ini.");
-      } else if (err.code === "auth/invalid-email") {
-        message = t("Invalid email address.", "Alamat email tidak valid.");
+    } catch (error: any) {
+      console.error("[ForgotPassword] Password reset failed", error);
+      if (error?.code === "auth/user-not-found") {
+        // Obfuscate user existence to protect privacy
+        setSuccess(true);
+        setEmail("");
+      } else {
+        setErrorMsg(t(
+          "We could not send the reset link. Please check the email format and try again.",
+          "Tautan reset belum dapat dikirim. Periksa format email dan coba lagi."
+        ));
       }
-      setErrorMsg(message);
     } finally {
       setLoading(false);
     }
@@ -59,7 +82,7 @@ function ForgotPasswordContent() {
               className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-teal-600 transition-colors"
             >
               <ArrowLeft className="h-3 w-3" />
-              {t("Back to Login", "Kembali ke Masuk")}
+              {t("Back to login", "Kembali ke login")}
             </Link>
           </div>
 
@@ -74,10 +97,13 @@ function ForgotPasswordContent() {
           {/* Heading */}
           <div className="mb-8 text-center">
             <h1 className="text-3xl font-bold tracking-tight text-slate-800">
-              {t("Reset Password", "Atur Ulang Sandi")}
+              {t("Reset your password", "Reset kata sandi")}
             </h1>
             <p className="mt-2 text-sm text-slate-500">
-              {t("Enter your email to receive a password reset link", "Masukkan email Anda untuk menerima tautan atur ulang kata sandi")}
+              {t(
+                "Enter the email address connected to your Smart Clothesline account. We will send a password reset link if the account exists.",
+                "Masukkan email yang terhubung dengan akun Smart Clothesline. Kami akan mengirim tautan reset kata sandi jika akun tersedia."
+              )}
             </p>
           </div>
 
@@ -86,7 +112,7 @@ function ForgotPasswordContent() {
             {/* Email */}
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-slate-700 ml-1">
-                {t("Email Address", "Alamat Email")}<span className="ml-0.5 text-rose-500">*</span>
+                {t("Email address", "Alamat email")}<span className="ml-0.5 text-rose-500">*</span>
               </label>
               <input
                 type="email"
@@ -104,7 +130,10 @@ function ForgotPasswordContent() {
             {success && (
               <div className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4 text-sm text-emerald-600 animate-in fade-in slide-in-from-top-1">
                 <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                {t("Reset link has been sent to your email. Check your inbox.", "Tautan atur ulang telah dikirim ke email Anda. Periksa kotak masuk.")}
+                {t(
+                  "If an account exists for this email, a reset link has been sent. Please check your inbox.",
+                  "Jika akun dengan email ini tersedia, tautan reset kata sandi telah dikirim. Silakan cek kotak masuk email Anda."
+                )}
               </div>
             )}
 
@@ -128,10 +157,10 @@ function ForgotPasswordContent() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  {t("Processing...", "Memproses...")}
+                  {t("Sending...", "Mengirim...")}
                 </span>
               ) : (
-                t("Send Reset Link", "Kirim Tautan Atur Ulang")
+                t("Send reset link", "Kirim tautan reset")
               )}
             </button>
           </form>

@@ -8,6 +8,7 @@ Smart Clothesline IoT System is a Next.js 14 dashboard for realtime monitoring, 
 The system has been stabilized and validated for production release. 
 - [Staging Validation Runbook](./docs/STAGING_VALIDATION_RUNBOOK.md)
 - [Telegram Notification Only Docs](./docs/TELEGRAM_NOTIFICATION_ONLY.md)
+- [User Manual / Buku Panduan](./docs/USER_MANUAL.md)
 
 ---
 
@@ -18,7 +19,9 @@ The system has been stabilized and validated for production release.
 - **Telegram Integration:** Outbound operational event notifications.
 - **Analytics:** Historical trends and data export (CSV/JSON).
 - **IoT Hub:** Device pairing, diagnostics, and sync management.
- 
+- **Mobile Navigation:** Responsive touch-friendly bottom navigation bar for mobile layouts.
+- **Password Reset:** Secure password recovery using Firebase Authentication with dual-language support (EN/ID) and user-existence obfuscation.
+
 ---
 
 ## User-Friendly Interface
@@ -67,6 +70,12 @@ The system is optimized for Vercel. See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for
 ## Landing Page Performance
 
 The public landing page at `/` is intentionally isolated from runtime systems. It does not initialize MQTT, Firebase, Telegram, dashboard hooks, or analytics data fetching. For Lighthouse testing, run a production build and audit in Incognito because stored IndexedDB data from dashboard testing can affect local results.
+
+---
+
+## Password Reset
+
+Users can request a password reset from the login page using the "Forgot password?" link. The reset flow uses Firebase Authentication email reset links and does not reveal whether an email is registered.
 
 ---
 

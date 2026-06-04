@@ -69,6 +69,3 @@ The canonical source for ingestion is the `sensor_data` collection in Firestore.
 
 ## 9. Related Docs
 - [`docs/DESIGN.md`](./DESIGN.md)
-- [`docs/HADOOP_CLUSTER_CHECKLIST.md`](./HADOOP_CLUSTER_CHECKLIST.md) if the checklist is referenced in older notes.
-- [`docs/HADOOP_DEMO_SCRIPT.md`](./HADOOP_DEMO_SCRIPT.md) if the demo flow is referenced in older notes.
-- [`docs/BIG_DATA_HADOOP_INTEGRATION.md`](./BIG_DATA_HADOOP_INTEGRATION.md) if the migration notes are referenced in older notes.
