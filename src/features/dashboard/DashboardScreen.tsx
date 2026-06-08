@@ -427,9 +427,9 @@ export default function DashboardScreen({ lang = "en" }: { lang?: "en" | "id" })
                   </p>
                 </div>
                 <div className="flex flex-col justify-center rounded-2xl bg-slate-50 dark:bg-white/5 p-6 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/50 transition-colors">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{t("Light Intensity", "Intensitas Cahaya")}</p>
-                  <p className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">
-                    {sensor ? sensor.light.toFixed(0) : "--"}
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{t("Light Condition", "Kondisi Cahaya")}</p>
+                  <p className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">
+                    {sensor ? sensor.getLightCondition(sensor.light, t) : "--"}
                   </p>
                 </div>
                 <div className="flex flex-col justify-center rounded-2xl bg-slate-50 dark:bg-white/5 p-6 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/50 transition-colors">

@@ -1,1 +1,1 @@
-export { useSensorHistory } from "@/features/sensor/hooks/useSensorHistory";
+export { useSensorHistory } from "@/features/history/hooks/useSensorHistory";

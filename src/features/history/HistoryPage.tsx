@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import { useSensorHistory } from "@/features/sensor/hooks/useSensorHistory";
+import { useSensorHistory } from "@/features/history/hooks/useSensorHistory";
 import {
   ChevronLeft,
   ChevronRight,

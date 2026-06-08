@@ -1,3 +1,5 @@
+import { lightThresholdToLevel } from "@/utils/thresholdMapper";
+
 interface SensorDataInput {
     temp?: number;
     humidity?: number;
@@ -56,5 +58,19 @@ export class SensorData {
         if (this.isRaining()) return "RAINY";
         if (this.isDark()) return "CLOUDY";
         return "CLEAR";
+    }
+
+    getLightCondition(sensorValue: number, t: Function): string {
+        const level = lightThresholdToLevel(sensorValue);
+
+        const labels: Record<number, string> = {
+            1: t("Total Dark", "Sangat Gelap"),
+            2: t("Very Dim", "Sangat Redup"),
+            3: t("Overcast / Dusk", "Mendung / Senja"),
+            4: t("Afternoon Shade", "Cerah"),
+            5: t("Any Dimming", "Sangat Cerah")
+        };
+
+        return labels[level] || "--";
     }
 }
