@@ -1,9 +1,11 @@
-import { Timestamp, collection, getDocs, limit, orderBy, query } from "firebase/firestore";
+import { Timestamp, collection, getDocs, limit, orderBy, query, doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { TelegramBotApiService } from "@/services/TelegramBotApiService";
 import { TelegramOpsService } from "@/services/TelegramOpsService";
 import { TelegramEnvConfigService } from "@/services/telegram/TelegramEnvConfigService";
 import { formatDateTime } from "@/utils/timeFormat";
+import { z } from "zod";
+import { TelegramTemplateService } from "@/services/telegram/TelegramTemplateService";
 
 export type TelegramNotificationSeverity = "critical" | "warning" | "info";
 
@@ -95,7 +97,177 @@ function normalizeTimestamp(input?: number): number {
   return Math.floor(v);
 }
 
+export const TelegramMessageSchema = z.object({
+  message: z.string().min(1, "Message cannot be empty"),
+  chatId: z.string().min(1, "Chat ID cannot be empty"),
+  notificationType: z.enum(["RAIN_ALERT", "DEVICE_OFFLINE", "DEVICE_ONLINE", "SYSTEM_HEALTH", "TEST", "CLOTHES_DRY"]),
+});
+
+function mapNotificationType(type?: string): "RAIN_ALERT" | "DEVICE_OFFLINE" | "DEVICE_ONLINE" | "SYSTEM_HEALTH" | "TEST" | "CLOTHES_DRY" {
+  if (!type) return "TEST";
+  const upper = type.toUpperCase();
+  if (upper === "RAIN_ALERT" || upper === "DEVICE_OFFLINE" || upper === "DEVICE_ONLINE" || upper === "SYSTEM_HEALTH" || upper === "TEST" || upper === "CLOTHES_DRY") {
+    return upper as any;
+  }
+  switch (type.toLowerCase()) {
+    case "rain_detected":
+      return "RAIN_ALERT";
+    case "device_offline":
+    case "telemetry_stale":
+      return "DEVICE_OFFLINE";
+    case "dry_candidate":
+      return "CLOTHES_DRY";
+    case "system_health":
+    case "config_sync_failed":
+    case "hadoop_batch_report":
+      return "SYSTEM_HEALTH";
+    case "custom":
+    default:
+      return "TEST";
+  }
+}
+
+export class TelegramDeliveryLogService {
+  static async createPendingLog(
+    deliveryId: string,
+    message: string,
+    type: string,
+    chatId: string,
+    additionalData?: {
+      deviceId?: string;
+      severity?: string;
+      alertKey?: string;
+      source?: string;
+      metadata?: any;
+      telemetryContext?: any;
+    }
+  ): Promise<void> {
+    const deliveryRef = doc(db, "telegram_deliveries", deliveryId);
+    const sanitizedData: Record<string, any> = {};
+    if (additionalData) {
+      for (const [key, value] of Object.entries(additionalData)) {
+        if (value !== undefined) {
+          sanitizedData[key] = value;
+        }
+      }
+    }
+    await setDoc(deliveryRef, {
+      id: deliveryId,
+      message,
+      type,
+      status: "PENDING",
+      chatId,
+      createdAt: serverTimestamp(),
+      ...sanitizedData,
+    });
+  }
+
+  static async updateSuccessLog(deliveryId: string, telegramMessageId: number | null): Promise<void> {
+    const deliveryRef = doc(db, "telegram_deliveries", deliveryId);
+    await updateDoc(deliveryRef, {
+      status: "SUCCESS",
+      telegramMessageId,
+      deliveredAt: serverTimestamp(),
+    });
+  }
+
+  static async updateFailedLog(deliveryId: string, error: string): Promise<void> {
+    const deliveryRef = doc(db, "telegram_deliveries", deliveryId);
+    await updateDoc(deliveryRef, {
+      status: "FAILED",
+      error,
+    });
+  }
+}
+
 export class TelegramNotificationService {
+  static async sendRawNotification(input: {
+    message: string;
+    chatId: string;
+    notificationType: "RAIN_ALERT" | "DEVICE_OFFLINE" | "DEVICE_ONLINE" | "SYSTEM_HEALTH" | "TEST" | "CLOTHES_DRY";
+  }): Promise<TelegramNotificationResult> {
+    const validated = TelegramMessageSchema.parse(input);
+    const token = TelegramEnvConfigService.getBotToken();
+
+    if (!token) {
+      return {
+        ok: false,
+        skipped: true,
+        reason: "Telegram bot token is not configured",
+        sentCount: 0,
+        targetsCount: 1,
+      };
+    }
+
+    const deliveryRef = doc(collection(db, "telegram_deliveries"));
+    const deliveryId = deliveryRef.id;
+
+    const ctx = await this.getTelemetryContext();
+
+    // 1. Create a pending delivery log in Firestore
+    await TelegramDeliveryLogService.createPendingLog(
+      deliveryId,
+      validated.message,
+      validated.notificationType,
+      validated.chatId,
+      {
+        deviceId: ctx?.deviceId || "unknown",
+        telemetryContext: ctx || undefined,
+      }
+    );
+
+    // 2. Send with retries and exponential backoff
+    const telegramMessage = TelegramTemplateService.formatMessage(validated.notificationType, validated.message);
+
+    let attempt = 0;
+    let success = false;
+    let response: { ok: boolean; description?: string; result?: any; errorCode?: number } = { ok: false };
+
+    while (attempt <= 3) {
+      if (attempt > 0) {
+        const backoffMs = Math.min(500 * Math.pow(2, attempt - 1), 4000);
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      }
+
+      response = await TelegramBotApiService.sendMessageWithResult(token, validated.chatId, telegramMessage, {
+        disableWebPagePreview: true,
+      });
+
+      if (response.ok) {
+        success = true;
+        break;
+      }
+
+      const errCode = response.errorCode;
+      const isRetriable = !errCode || errCode === 429 || (errCode >= 500 && errCode < 600);
+      if (!isRetriable) {
+        break;
+      }
+
+      attempt++;
+    }
+
+    // 3. Update status in Firestore based on result
+    if (success) {
+      await TelegramDeliveryLogService.updateSuccessLog(deliveryId, response.result?.message_id || null);
+
+      return {
+        ok: true,
+        sentCount: 1,
+        targetsCount: 1,
+      };
+    } else {
+      const errorMsg = response.description || "Unknown Telegram API error";
+      await TelegramDeliveryLogService.updateFailedLog(deliveryId, errorMsg);
+
+      return {
+        ok: false,
+        sentCount: 0,
+        targetsCount: 1,
+      };
+    }
+  }
+
   static async sendNotification(input: TelegramNotificationInput): Promise<TelegramNotificationResult> {
     const ctx = await this.getTelemetryContext();
     const cooldownKey = input.alertKey
@@ -136,13 +308,62 @@ export class TelegramNotificationService {
 
     const targets = await this.resolveTargets();
     const message = await this.buildMessage(input);
+    const notificationType = mapNotificationType(input.type);
 
     let sentCount = 0;
     for (const target of targets) {
-      const sent = await TelegramBotApiService.sendMessage(token, target, message, {
-        disableWebPagePreview: true,
+      const deliveryRef = doc(collection(db, "telegram_deliveries"));
+      const deliveryId = deliveryRef.id;
+
+      // 1. Create a pending delivery log in Firestore
+      await TelegramDeliveryLogService.createPendingLog(deliveryId, message, notificationType, target, {
+        deviceId: input.deviceId || ctx?.deviceId || "unknown",
+        severity: input.severity || "warning",
+        alertKey: input.alertKey,
+        source: input.source || "system",
+        metadata: input.metadata || undefined,
+        telemetryContext: ctx || undefined,
       });
-      if (sent) sentCount++;
+
+      // 2. Send with retries and exponential backoff
+      const telegramMessage = TelegramTemplateService.formatMessage(notificationType, input.description, input.timestamp);
+
+      let attempt = 0;
+      let success = false;
+      let response: { ok: boolean; description?: string; result?: any; errorCode?: number } = { ok: false };
+
+      while (attempt <= 3) {
+        if (attempt > 0) {
+          const backoffMs = Math.min(500 * Math.pow(2, attempt - 1), 4000);
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+        }
+
+        response = await TelegramBotApiService.sendMessageWithResult(token, target, telegramMessage, {
+          disableWebPagePreview: true,
+        });
+
+        if (response.ok) {
+          success = true;
+          break;
+        }
+
+        const errCode = response.errorCode;
+        const isRetriable = !errCode || errCode === 429 || (errCode >= 500 && errCode < 600);
+        if (!isRetriable) {
+          break;
+        }
+
+        attempt++;
+      }
+
+      // 3. Update status in Firestore based on result
+      if (success) {
+        await TelegramDeliveryLogService.updateSuccessLog(deliveryId, response.result?.message_id || null);
+        sentCount++;
+      } else {
+        const errorMsg = response.description || "Unknown Telegram API error";
+        await TelegramDeliveryLogService.updateFailedLog(deliveryId, errorMsg);
+      }
     }
 
     if (sentCount > 0) {

@@ -604,6 +604,11 @@ async function sendTelegramAlert(title: string, description: string, alertKey: s
         return;
     }
 
+    let notificationType = "custom";
+    if (alertKey === "alert-rain-open") notificationType = "rain_detected";
+    if (alertKey === "alert-dry-clothes") notificationType = "dry_candidate";
+    if (alertKey === "alert-device-offline") notificationType = "device_offline";
+
     lastTelegramAlertAtByKey[alertKey] = now;
     try {
         await fetch("/api/telegram/notify", {
@@ -617,6 +622,7 @@ async function sendTelegramAlert(title: string, description: string, alertKey: s
                 severity: "warning",
                 alertKey,
                 timestamp,
+                type: notificationType,
             }),
         });
     } catch (error) {

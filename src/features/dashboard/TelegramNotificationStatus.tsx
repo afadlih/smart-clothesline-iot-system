@@ -11,6 +11,7 @@ type Diagnostics = {
   outboundNotificationsCanWork: boolean;
   webhookEnabled: boolean;
   webhookUrlMatch: boolean;
+  webhookHealthy: boolean;
   groupNotificationsEnabled: boolean;
   allowedGroupsCount: number;
   warnings: string[];
@@ -44,7 +45,7 @@ export default function TelegramNotificationStatus({ lang = "en" }: { lang?: "en
     };
   }, []);
 
-  const isReady = diagnostics?.outboundNotificationsCanWork && diagnostics?.webhookEnabled;
+  const isReady = diagnostics?.outboundNotificationsCanWork && diagnostics?.webhookHealthy;
 
   const translateWarning = (warning: string) => {
     if (warning.includes("TELEGRAM_BOT_TOKEN is not configured.")) {
@@ -56,16 +57,22 @@ export default function TelegramNotificationStatus({ lang = "en" }: { lang?: "en
     if (warning.includes("No telemetry data found in Firestore.")) {
       return t("No telemetry data found in Firestore.", "Data telemetri tidak ditemukan di Firestore.");
     }
-    if (warning.includes("Telegram has no webhook registered. Inbound tracking will not work. Click 'Repair' to register.")) {
+    if (warning.includes("Telegram has no webhook registered") || warning.includes("Webhook is not registered")) {
       return t(
         "Telegram has no webhook registered. Inbound tracking will not work. Click 'Repair' to register.",
-        "Telegram tidak memiliki webhook terdaftar. Pelacakan masuk tidak akan berfungsi. Klik 'Sinkronisasi' untuk mendaftar."
+        "Telegram tidak memiliki webhook terdaftar. Klik 'Sinkronisasi' untuk mendaftar."
       );
     }
-    if (warning.includes("Telegram webhook URL differs from this deployment. Click 'Repair' to sync.")) {
+    if (warning.includes("Telegram webhook URL differs") || warning.includes("Webhook URL mismatch")) {
       return t(
         "Telegram webhook URL differs from this deployment. Click 'Repair' to sync.",
         "URL webhook Telegram berbeda dengan penyebaran ini. Klik 'Sinkronisasi' untuk menyelaraskan."
+      );
+    }
+    if (warning.includes("Local test mode: Webhook synchronization requires a public HTTPS URL.")) {
+      return t(
+        "Local test mode: Webhook synchronization requires a public HTTPS URL.",
+        "Mode uji lokal: Sinkronisasi webhook memerlukan URL HTTPS publik."
       );
     }
     return warning;

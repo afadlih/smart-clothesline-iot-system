@@ -60,7 +60,7 @@ export class SensorData {
         return "CLEAR";
     }
 
-    getLightCondition(sensorValue: number, t: Function): string {
+    getLightCondition(sensorValue: number, t: (en: string, id: string) => string): string {
         const level = lightThresholdToLevel(sensorValue);
 
         const labels: Record<number, string> = {
