@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import {
   Home,
   Activity,
@@ -30,20 +30,6 @@ interface MenuItem {
   href: string;
 }
 
-/**
- * Sidebar Component
- * 
- * Responsive sidebar navigation with collapsible menu.
- * - Desktop: Pushes main content, toggle collapse/expand
- * - Mobile: Drawer overlay with backdrop blur
- * - Persistent state via localStorage
- * 
- * Features:
- * - Icon-based menu items with tooltips when collapsed
- * - Active route highlighting with green accent
- * - Smooth animations (300ms transitions)
- * - Mobile drawer with close button
- */
 export default function Sidebar({
   isCollapsed,
   onToggleCollapse,
@@ -51,47 +37,50 @@ export default function Sidebar({
   onMobileMenuChange,
 }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const lang = searchParams?.get('lang') === 'id' ? 'id' : 'en';
+  const t = (en: string, id: string) => (lang === 'id' ? id : en);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
   // Menu items with icons and routes
   const menuItems: MenuItem[] = [
     {
-      label: 'Dashboard',
+      label: t('Dashboard', 'Dasbor'),
       icon: <Home className="w-5 h-5" />,
       href: '/dashboard',
     },
     {
-      label: 'Sensor Monitor',
+      label: t('Sensor Monitor', 'Pemantau Sensor'),
       icon: <Activity className="w-5 h-5" />,
       href: '/sensor',
     },
     {
-      label: 'Automation',
+      label: t('Automation', 'Otomatisasi'),
       icon: <Bot className="w-5 h-5" />,
       href: '/automation',
     },
     {
-      label: 'History',
+      label: t('History', 'Riwayat'),
       icon: <Clock className="w-5 h-5" />,
       href: '/history',
     },
     {
-      label: 'Analytics',
+      label: t('Analytics', 'Analisis'),
       icon: <BarChart3 className="w-5 h-5" />,
       href: '/analytics',
     },
     {
-      label: 'Notifications',
+      label: t('Notifications', 'Notifikasi'),
       icon: <Bell className="w-5 h-5" />,
       href: '/notifications',
     },
     {
-      label: 'IoT Hub',
+      label: t('IoT Hub', 'IoT Hub'),
       icon: <Cpu className="w-5 h-5" />,
       href: '/iot-hub',
     },
     {
-      label: 'Settings',
+      label: t('Settings', 'Pengaturan'),
       icon: <Settings className="w-5 h-5" />,
       href: '/settings',
     },
@@ -148,7 +137,7 @@ export default function Sidebar({
             return (
               <div key={item.href} className="group relative">
                 <Link
-                  href={item.href}
+                  href={lang ? `${item.href}?lang=${lang}` : item.href}
                   onClick={() => onMobileMenuChange(false)}
                   className={`
                     flex items-center rounded-2xl
@@ -222,7 +211,8 @@ export default function Sidebar({
       {/* Mobile Sidebar - Drawer overlay */}
       <aside
         className={`
-          md:hidden fixed top-0 bottom-0 left-0
+          hidden
+          fixed top-0 bottom-0 left-0
           flex flex-col
           border-r border-white/10 bg-slate-950/95 text-white
           w-[280px]
@@ -260,7 +250,7 @@ export default function Sidebar({
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={lang ? `${item.href}?lang=${lang}` : item.href}
                   onClick={() => onMobileMenuChange(false)}
                   className={`
                     flex items-center gap-4 rounded-2xl px-4 py-3.5

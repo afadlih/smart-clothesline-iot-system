@@ -19,19 +19,21 @@ export default function AuthGate({
     return search ? `${pathname}?${search}` : pathname;
   }, [pathname, searchParams]);
 
+  const lang = searchParams?.get("lang") === "id" ? "id" : "en";
+
   useEffect(() => {
     if (!loading && !user) {
       const encoded = encodeURIComponent(returnUrl);
-      router.replace(`/auth/login?returnUrl=${encoded}`);
+      router.replace(`/auth/login?returnUrl=${encoded}${lang === 'id' ? '&lang=id' : ''}`);
     }
-  }, [loading, user, router, returnUrl]);
+  }, [loading, user, router, returnUrl, lang]);
 
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-[var(--bg-primary)]">
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-transparent" />
-          Checking session...
+          {lang === "id" ? "Memeriksa sesi..." : "Checking session..."}
         </div>
       </div>
     );

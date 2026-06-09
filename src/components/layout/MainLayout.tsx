@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import TopBar from './TopBar';
 import Sidebar from './Sidebar';
+import MobileBottomNavigation from './MobileBottomNavigation';
 
 /**
  * MainLayout Component
@@ -77,10 +78,13 @@ export default function MainLayout({
         />
 
         {/* Main scrollable content area */}
-        <main className="flex-1 overflow-auto bg-transparent transition-colors duration-300">
+        <main className="flex-1 overflow-auto bg-transparent transition-colors duration-300 pb-20 md:pb-0">
           {children}
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation */}
+      <MobileBottomNavigation />
     </div>
   );
 }

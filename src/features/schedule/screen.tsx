@@ -22,7 +22,9 @@ function formatWindow(startHour: number, endHour: number): string {
   return `${pad(hStart)}:${pad(mStart)} - ${pad(hEnd)}:${pad(mEnd)}`;
 }
 
-export default function SchedulePage() {
+export default function SchedulePage({ lang = "en" }: { lang?: "en" | "id" }) {
+  const t = (en: string, id: string) => (lang === "id" ? id : en);
+
   const { user } = useAuth();
   const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -87,7 +89,7 @@ export default function SchedulePage() {
   const onSubmitSchedule = async () => {
     setErrorMessage("");
     if (!form.name.trim()) {
-      setErrorMessage("Schedule name is required.");
+      setErrorMessage(t("Schedule name is required.", "Nama jadwal wajib diisi."));
       return;
     }
 
@@ -95,7 +97,7 @@ export default function SchedulePage() {
     const endHour = ScheduleService.parseTimeToFloat(form.timeClose);
 
     if (!Number.isFinite(startHour) || !Number.isFinite(endHour)) {
-      setErrorMessage("Invalid time format.");
+      setErrorMessage(t("Invalid time format.", "Format waktu tidak valid."));
       return;
     }
 
@@ -142,7 +144,10 @@ export default function SchedulePage() {
       setIsFormOpen(false); 
       void loadScheduleData();
     } catch (error) {
-      setErrorMessage("Schedule could not be saved. Check login, active device, and Firestore rules.");
+      setErrorMessage(t(
+        "Schedule could not be saved. Check login, active device, and Firestore rules.",
+        "Jadwal tidak dapat disimpan. Periksa login, alat aktif, dan aturan Firestore."
+      ));
       console.error("[Schedule] Save failed", error);
     }
   };
@@ -187,11 +192,14 @@ export default function SchedulePage() {
                 <AlertCircle className="h-6 w-6" />
               </div>
               <div>
-                 <p className="text-[10px] font-black text-teal-700 dark:text-teal-400 uppercase tracking-widest mb-1">Schedule details</p>
+                 <p className="text-[10px] font-black text-teal-700 dark:text-teal-400 uppercase tracking-widest mb-1">
+                   {t("Schedule details", "Detail Jadwal")}
+                 </p>
                  <p className="text-sm font-bold text-slate-600 dark:text-slate-400 leading-relaxed">
-                   Use <Link href="/automation" className="text-teal-600 dark:text-teal-400 font-black underline decoration-teal-500/30 hover:decoration-teal-500 transition-all">Automation Control Center</Link> for policy and mode controls.
-                   Schedules defined here will automatically target the active device.
-                   Note: Current schedule execution is dashboard-runtime scheduling. The browser/app must be running for schedule commands to publish.
+                   {t(
+                     "Schedules run while the dashboard app is open. Firmware-side scheduling can be added later.",
+                     "Jadwal berjalan saat aplikasi dashboard sedang terbuka. Jadwal langsung di firmware dapat ditambahkan pada pengembangan berikutnya."
+                   )}
                  </p>
               </div>
            </div>
@@ -209,10 +217,12 @@ export default function SchedulePage() {
                   <Calendar className="h-5 w-5" />
                 </div>
                 <span className="text-[11px] font-black uppercase tracking-[0.25em] text-teal-600 dark:text-teal-400">
-                  Schedule Manager
+                  {t("Schedule Manager", "Pengatur Jadwal")}
                 </span>
               </div>
-              <h1 className="text-5xl md:text-6xl font-black text-slate-800 dark:text-white tracking-tighter">Schedule Manager</h1>
+              <h1 className="text-5xl md:text-6xl font-black text-slate-800 dark:text-white tracking-tighter">
+                {t("Schedule Manager", "Pengatur Jadwal")}
+              </h1>
             </div>
 
             {activeDeviceId && (
@@ -226,7 +236,7 @@ export default function SchedulePage() {
                     setIsFormOpen(true);
                   }
                 }} className="flex items-center gap-4 px-8 py-4 rounded-2xl bg-teal-600 text-white font-black text-xs tracking-widest shadow-xl shadow-teal-600/20 hover:opacity-90 active:scale-95 transition-all">
-                  <Plus size={20} /> {isFormOpen && !editingScheduleId ? "CLOSE PANEL" : "NEW SCHEDULE"}
+                  <Plus size={20} /> {isFormOpen && !editingScheduleId ? t("CLOSE PANEL", "TUTUP PANEL") : t("NEW SCHEDULE", "JADWAL BARU")}
                 </button>
               </div>
             )}
@@ -236,12 +246,14 @@ export default function SchedulePage() {
         {!activeDeviceId ? (
           <div className="rounded-[2.5rem] bg-amber-500/10 dark:bg-amber-500/5 p-10 border border-amber-200/50 dark:border-amber-500/20 backdrop-blur-sm text-center max-w-2xl mx-auto shadow-xl">
              <AlertCircle className="h-16 w-16 text-amber-600 dark:text-amber-500 mx-auto mb-6" />
-             <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-2">No Active Device</h2>
+             <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-2">
+               {t("No Active Device", "Tidak Ada Alat Aktif")}
+             </h2>
              <p className="text-sm font-bold text-slate-600 dark:text-slate-400 leading-relaxed mb-8">
-               Select a device in IoT Hub before creating schedules.
+               {t("Select a device in IoT Hub before creating schedules.", "Pilih alat di IoT Hub sebelum membuat jadwal.")}
              </p>
              <Link href="/iot-hub" className="inline-block px-10 py-5 rounded-2xl bg-slate-900 dark:bg-teal-600 text-white font-black text-xs tracking-widest shadow-xl hover:opacity-90 active:scale-95 transition-all uppercase">
-               Go to IoT Hub
+               {t("Go to IoT Hub", "Buka IoT Hub")}
              </Link>
           </div>
         ) : (
@@ -254,20 +266,20 @@ export default function SchedulePage() {
                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
                         <Plus className="h-5 w-5" />
                      </div>
-                     <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">{editingScheduleId ? "Edit schedule" : "New schedule"}</h2>
+                     <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">{editingScheduleId ? t("Edit schedule", "Ubah jadwal") : t("New schedule", "Jadwal baru")}</h2>
                   </div>
                   
                   <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
                      <div className="space-y-3">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Schedule name</label>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">{t("Schedule name", "Nama jadwal")}</label>
                         <input type="text" value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} placeholder="Morning Shift" className="w-full rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 p-5 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-1 ring-teal-500/50 transition-all" />
                      </div>
                      <div className="space-y-3">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Open time</label>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">{t("Open time", "Waktu buka")}</label>
                         <input type="time" value={form.timeOpen} onChange={(e) => setForm({...form, timeOpen: e.target.value})} className="w-full rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 p-5 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-1 ring-teal-500/50 transition-all" />
                      </div>
                      <div className="space-y-3">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Close time</label>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">{t("Close time", "Waktu tutup")}</label>
                         <input type="time" value={form.timeClose} onChange={(e) => setForm({...form, timeClose: e.target.value})} className="w-full rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 p-5 text-sm font-bold text-slate-700 dark:text-white outline-none focus:ring-1 ring-teal-500/50 transition-all" />
                      </div>
                   </div>
@@ -280,10 +292,10 @@ export default function SchedulePage() {
                        setEditingScheduleId(null);
                        setForm(initialForm);
                      }} className="px-10 py-5 rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 font-black text-xs tracking-widest hover:bg-slate-200 dark:hover:bg-white/10 active:scale-95 transition-all uppercase">
-                        Cancel
+                        {t("Cancel", "Batal")}
                      </button>
                      <button onClick={onSubmitSchedule} className="px-10 py-5 rounded-2xl bg-slate-900 dark:bg-teal-600 text-white font-black text-xs tracking-widest shadow-xl shadow-teal-600/20 hover:opacity-90 active:scale-95 transition-all uppercase">
-                        Save schedule
+                        {t("Save schedule", "Simpan jadwal")}
                      </button>
                   </div>
                 </div>
@@ -293,12 +305,12 @@ export default function SchedulePage() {
                 {loading ? (
                   <div className="flex flex-col items-center justify-center py-20 opacity-30">
                      <Loader2 className="h-12 w-12 animate-spin mb-4 text-teal-500" />
-                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Loading schedules...</p>
+                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t("Loading schedules...", "Memuat jadwal...")}</p>
                   </div>
                 ) : schedules.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-24 bg-white dark:bg-slate-900/40 rounded-[2.5rem] border border-dashed border-slate-200 dark:border-white/10">
                      <Calendar className="h-16 w-16 text-slate-200 dark:text-slate-800 mb-6" />
-                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No Active Schedules</p>
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t("No Active Schedules", "Tidak Ada Jadwal Aktif")}</p>
                   </div>
                 ) : (
                   schedules.map((schedule) => {
@@ -323,13 +335,13 @@ export default function SchedulePage() {
                                    <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter uppercase whitespace-nowrap">{formatWindow(schedule.startHour, schedule.endHour)}</h3>
                                    {isCurrentlyRunning && (
                                      <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 text-[9px] font-black uppercase tracking-[0.2em] animate-pulse border border-emerald-500/20 whitespace-nowrap">
-                                        <Zap className="h-3 w-3" /> Running now
+                                        <Zap className="h-3 w-3" /> {t("Running now", "Sedang berjalan")}
                                      </span>
                                    )}
                                 </div>
                                 <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">{schedule.name}</p>
                                 {!isCurrentlyRunning && schedule.enabled && (
-                                  <p className="text-[10px] font-black text-teal-500/60 uppercase tracking-widest mt-2">Waiting for next window</p>
+                                  <p className="text-[10px] font-black text-teal-500/60 uppercase tracking-widest mt-2">{t("Waiting for next window", "Menunggu jadwal berikutnya")}</p>
                                 )}
                              </div>
                           </div>
@@ -339,7 +351,7 @@ export default function SchedulePage() {
                                onClick={(e) => { e.preventDefault(); void onToggleSchedule(schedule.id, schedule.enabled); }}
                                className={`flex items-center gap-4 px-8 py-4 rounded-2xl font-black text-[10px] tracking-[0.2em] uppercase transition-all active:scale-95 ${schedule.enabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-slate-100 dark:bg-white/5 text-slate-400 border border-slate-200 dark:border-white/5'}`}
                              >
-                                <Power size={16} /> {schedule.enabled ? "Enabled" : "Disabled"}
+                                <Power size={16} /> {schedule.enabled ? t("Enabled", "Aktif") : t("Disabled", "Nonaktif")}
                              </button>
                              <button 
                                onClick={() => {

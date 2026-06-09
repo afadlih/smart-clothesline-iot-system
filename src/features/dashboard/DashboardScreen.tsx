@@ -46,7 +46,9 @@ function badgeClassByState(state: "good" | "warn" | "danger" | "info"): string {
 }
 
 
-export default function DashboardScreen() {
+export default function DashboardScreen({ lang = "en" }: { lang?: "en" | "id" }) {
+  const t = (en: string, id: string) => (lang === "id" ? id : en);
+
   const {
     runtime,
     sendCommand,
@@ -99,15 +101,35 @@ export default function DashboardScreen() {
 
   const realtimeLabel =
     runtime.streamState === "STREAMING"
-      ? "LIVE TELEMETRY"
+      ? t("LIVE TELEMETRY", "TELEMETRI LANGSUNG")
       : runtime.streamState === "STALE"
-        ? "TELEMETRY STALE"
-        : "OFFLINE";
+        ? t("Sensor data is delayed", "Data sensor terlambat")
+        : t("OFFLINE", "TERPUTUS");
 
-  const deviceModeLabel = runtime.actualDeviceMode.toUpperCase();
+  const getModeLabel = (mode: string) => {
+    if (mode === "AUTO") return t("AUTO", "OTOMATIS");
+    if (mode === "MANUAL") return t("MANUAL", "MANUAL");
+    return mode;
+  };
+
+  const getSafetyLabel = (label: string) => {
+    if (label === "MONITORING") return t("MONITORING", "MEMANTAU");
+    if (label === "RAIN ALERT") return t("RAIN ALERT", "PERINGATAN HUJAN");
+    if (label === "LOW LIGHT") return t("LOW LIGHT", "KURANG CAHAYA");
+    if (label === "OVERRIDE") return t("OVERRIDE", "KONTROL MANUAL");
+    return label;
+  };
+
+  const deviceModeLabel = getModeLabel(runtime.actualDeviceMode).toUpperCase();
   const safetyLabel = runtime.safetyLabel;
 
-  const displayedStatus = runtime.actualDeviceStatus ?? "--";
+  const displayedStatus = runtime.actualDeviceStatus
+    ? (runtime.actualDeviceStatus === "OPEN"
+        ? t("OPEN", "TERBUKA")
+        : runtime.actualDeviceStatus === "CLOSED"
+          ? t("CLOSED", "TERTUTUP")
+          : runtime.actualDeviceStatus)
+    : "--";
   const lastUpdated = formatClock(lastUpdate);
   const isCommandPending = uiState.deviceSync === "WAITING_ACK";
   const canSendCommand =
@@ -118,12 +140,12 @@ export default function DashboardScreen() {
 
   const commandStatusLabel =
     uiState.deviceSync === "WAITING_ACK"
-      ? "SYNCING..."
+      ? t("Sending command", "Perintah sedang dikirim")
       : uiState.deviceSync === "SYNCED"
-        ? "SYNCED"
+        ? t("SYNCED", "TERSINKRONISASI")
         : runtime.commandStatus === "timeout"
-          ? "TIMEOUT"
-          : "READY";
+          ? t("TIMEOUT", "WAKTU HABIS")
+          : t("READY", "SIAP");
   const commandStatusClass =
     uiState.deviceSync === "WAITING_ACK"
       ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
@@ -132,6 +154,43 @@ export default function DashboardScreen() {
         : runtime.commandStatus === "timeout"
           ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
           : "bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20";
+
+  const getGuardReasonLabel = (reason: string) => {
+    if (reason === "No matching runtime state rule.") {
+      return t("No matching runtime state rule.", "Tidak ada aturan status runtime yang cocok.");
+    }
+    if (reason === "Fault flag is active.") {
+      return t("Fault flag is active.", "Sistem dalam kondisi kesalahan (fault).");
+    }
+    if (reason === "MQTT disconnected or telemetry exceeded offline threshold.") {
+      return t(
+        "MQTT disconnected or telemetry exceeded offline threshold.",
+        "Koneksi MQTT terputus atau batas waktu offline terlampaui."
+      );
+    }
+    if (reason === "Telemetry exceeded stale threshold.") {
+      return t("Telemetry exceeded stale threshold.", "Data telemetri sudah usang.");
+    }
+    if (reason === "Rain detected while clothesline is not retracted.") {
+      return t(
+        "Rain detected while clothesline is not retracted.",
+        "Terdeteksi hujan saat jemuran tidak ditarik (terbuka)."
+      );
+    }
+    if (reason === "Device movement is in progress.") {
+      return t("Device movement is in progress.", "Pergerakan motor jemuran sedang berlangsung.");
+    }
+    if (reason === "Clothesline is retracted.") {
+      return t("Clothesline is retracted.", "Jemuran dalam kondisi ditarik (tertutup).");
+    }
+    if (reason === "Clothesline is extended and rain is not detected.") {
+      return t(
+        "Clothesline is extended and rain is not detected.",
+        "Jemuran dalam kondisi dibuka dan tidak ada deteksi hujan."
+      );
+    }
+    return reason;
+  };
 
 
 
@@ -150,7 +209,7 @@ export default function DashboardScreen() {
                 <div className="flex items-center gap-2 mb-1">
                   <div className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />
                   <p className="text-[10px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-400">
-                    System Alert
+                    {t("System Alert", "Peringatan Sistem")}
                   </p>
                 </div>
                 <p className="text-sm font-bold text-slate-800 dark:text-white">
@@ -161,6 +220,17 @@ export default function DashboardScreen() {
                 </p>
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Warning banner when no device is paired */}
+        {!device && (
+          <div className="mb-6 flex items-center gap-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 p-4 text-sm font-bold text-amber-700 dark:text-amber-300">
+            <AlertCircle className="h-5 w-5" />
+            {t(
+              "No device selected yet. Choose a device from IoT Hub or try the demo simulator.",
+              "Belum ada alat yang dipilih. Pilih alat dari IoT Hub atau coba simulator demo."
+            )}
           </div>
         )}
 
@@ -177,7 +247,7 @@ export default function DashboardScreen() {
                     <Activity className="h-5 w-5" />
                   </div>
                   <span className="text-[11px] font-black uppercase tracking-[0.25em] text-teal-600 dark:text-teal-400">
-                    Clothesline Overview
+                    {t("Clothesline Overview", "Ikhtisar Jemuran")}
                   </span>
                 </div>
                 <h2 className="text-6xl md:text-7xl font-black text-slate-800 dark:text-white tracking-tighter">
@@ -199,43 +269,43 @@ export default function DashboardScreen() {
             <div className="relative z-10 mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <StatusBadge
                 icon={<Zap className="h-5 w-5" />}
-                label="Active Mode"
+                label={t("Operating Mode", "Mode Operasi")}
                 value={deviceModeLabel}
                 valueClass="text-slate-800 dark:text-white"
                 dotClass={deviceStatusClass.includes("rose") ? "bg-rose-500" : deviceStatusClass.includes("amber") ? "bg-amber-500" : "bg-emerald-500"}
                 iconBgClass="bg-teal-500/10"
                 iconTextClass="text-teal-600 dark:text-teal-400"
-                title="Current operating mode"
+                title={t("Current operating mode", "Mode operasi saat ini")}
               />
               <StatusBadge
                 icon={<Shield className="h-5 w-5" />}
-                label="Environmental Guard"
-                value={safetyLabel}
+                label={t("Safety Status", "Status Keamanan")}
+                value={getSafetyLabel(safetyLabel)}
                 valueClass={runtime.decisionSource === "SAFETY" ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}
                 dotClass={runtime.decisionSource === "SAFETY" ? "bg-rose-500" : "bg-emerald-500"}
                 iconBgClass={runtime.decisionSource === "SAFETY" ? "bg-rose-500/10" : "bg-emerald-500/10"}
                 iconTextClass={runtime.decisionSource === "SAFETY" ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}
-                title="Automated safety protocols"
+                title={t("Automated safety protocols", "Protokol keamanan otomatis")}
               />
               <StatusBadge
                 icon={<Clock className="h-5 w-5" />}
-                label="Heartbeat"
+                label={t("Last active", "Terakhir aktif")}
                 value={lastUpdated}
                 valueClass="text-slate-800 dark:text-white"
                 dotClass="bg-teal-500"
                 iconBgClass="bg-teal-500/10"
                 iconTextClass="text-teal-600 dark:text-teal-400"
-                title={runtime.freshnessSeconds === null ? "Never" : `${runtime.freshnessSeconds}s ago`}
+                title={runtime.freshnessSeconds === null ? t("Never", "Tidak pernah") : `${runtime.freshnessSeconds}s ${t("ago", "yang lalu")}`}
               />
               <StatusBadge
                 icon={<Calendar className="h-5 w-5" />}
-                label="Active Schedule"
-                value={decision.activeSchedule ? `${formatHourFloat(decision.activeSchedule.startHour)} - ${formatHourFloat(decision.activeSchedule.endHour)}` : "Not Configured"}
+                label={t("Active Schedule", "Jadwal Aktif")}
+                value={decision.activeSchedule ? `${formatHourFloat(decision.activeSchedule.startHour)} - ${formatHourFloat(decision.activeSchedule.endHour)}` : t("Not Configured", "Belum Diatur")}
                 valueClass="text-slate-800 dark:text-white"
                 dotClass={decision.scheduleActive ? "bg-emerald-500" : "bg-slate-400"}
                 iconBgClass="bg-emerald-500/10"
                 iconTextClass="text-emerald-600 dark:text-emerald-400"
-                title={decision.scheduleActive ? "Schedule is active" : "Schedule is inactive"}
+                title={decision.scheduleActive ? t("Schedule is active", "Jadwal sedang aktif") : t("Schedule is inactive", "Jadwal tidak aktif")}
               />
             </div>
           </section>
@@ -252,7 +322,7 @@ export default function DashboardScreen() {
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
                     <Zap className="h-5 w-5" />
                   </div>
-                  <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">System Control</h2>
+                  <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">{t("Clothesline Control", "Kontrol Jemuran")}</h2>
                 </div>
                 <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] ${commandStatusClass}`}>
                   {commandStatusLabel}
@@ -261,25 +331,36 @@ export default function DashboardScreen() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                 <div className="rounded-2xl bg-slate-50 dark:bg-white/5 p-5 border border-slate-200/50 dark:border-white/5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">State</p>
-                  <p className="text-xl font-black text-slate-800 dark:text-white uppercase">{runtime.actualDeviceStatus ?? "--"}</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{t("State", "Status")}</p>
+                  <p className="text-xl font-black text-slate-800 dark:text-white uppercase">
+                    {runtime.actualDeviceStatus
+                      ? (runtime.actualDeviceStatus === "OPEN"
+                          ? t("OPEN", "TERBUKA")
+                          : runtime.actualDeviceStatus === "CLOSED"
+                            ? t("CLOSED", "TERTUTUP")
+                            : runtime.actualDeviceStatus)
+                      : "--"}
+                  </p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 dark:bg-white/5 p-5 border border-slate-200/50 dark:border-white/5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Mode</p>
-                  <p className="text-xl font-black text-slate-800 dark:text-white uppercase">{runtime.actualDeviceMode ?? "--"}</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{t("Mode", "Mode")}</p>
+                  <p className="text-xl font-black text-slate-800 dark:text-white uppercase">{runtime.actualDeviceMode ? getModeLabel(runtime.actualDeviceMode) : "--"}</p>
                 </div>
               </div>
 
               {runtime.deviceConnectivity === "OFFLINE" && (
                 <div className="mb-6 flex items-center gap-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 p-4 text-sm font-bold text-rose-600 dark:text-rose-400">
                   <AlertCircle className="h-5 w-5" />
-                  Commands blocked: Device is currently offline.
+                  {t(
+                    "The device has not sent new sensor data recently. Check power, Wi-Fi, or MQTT connection.",
+                    "Alat belum mengirim data sensor terbaru. Periksa daya, Wi-Fi, atau koneksi MQTT."
+                  )}
                 </div>
               )}
-              {!canSendCommand && (
+              {!canSendCommand && runtime.deviceConnectivity !== "OFFLINE" && (
                 <div className="mb-6 flex items-center gap-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 p-4 text-sm font-bold text-amber-700 dark:text-amber-300">
                   <AlertCircle className="h-5 w-5" />
-                  {commandGuard.reason}
+                  {getGuardReasonLabel(commandGuard.reason)}
                 </div>
               )}
 
@@ -289,22 +370,37 @@ export default function DashboardScreen() {
                   disabled={openDisabled}
                   className="flex-1 min-w-[120px] rounded-2xl bg-teal-600 py-4 text-sm font-black text-white shadow-lg shadow-teal-600/20 transition-all hover:bg-teal-700 hover:-translate-y-0.5 active:scale-95 disabled:opacity-40 disabled:hover:translate-y-0 uppercase tracking-widest"
                 >
-                  Open
+                  {t("Open", "Buka")}
                 </button>
                 <button
                   onClick={() => sendCommand("CLOSE")}
                   disabled={closeDisabled}
                   className="flex-1 min-w-[120px] rounded-2xl bg-slate-800 py-4 text-sm font-black text-white shadow-lg shadow-slate-800/20 transition-all hover:bg-slate-900 hover:-translate-y-0.5 active:scale-95 disabled:opacity-40 disabled:hover:translate-y-0 uppercase tracking-widest"
                 >
-                  Close
+                  {t("Close", "Tutup")}
                 </button>
                 <button
                   onClick={() => sendCommand("AUTO")}
                   disabled={autoDisabled}
                   className="flex-1 min-w-[120px] rounded-2xl bg-emerald-600 py-4 text-sm font-black text-white shadow-lg shadow-emerald-600/20 transition-all hover:bg-emerald-700 hover:-translate-y-0.5 active:scale-95 disabled:opacity-40 disabled:hover:translate-y-0 uppercase tracking-widest"
                 >
-                  Auto
+                  {t("Auto", "Otomatis")}
                 </button>
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                <div>
+                  <span className="font-extrabold text-teal-600 dark:text-teal-400">{t("OPEN:", "BUKA:")}</span>{" "}
+                  {t("Open clothesline", "Buka jemuran")}
+                </div>
+                <div>
+                  <span className="font-extrabold text-slate-700 dark:text-slate-300">{t("CLOSE:", "TUTUP:")}</span>{" "}
+                  {t("Close clothesline", "Tutup jemuran")}
+                </div>
+                <div>
+                  <span className="font-extrabold text-emerald-600 dark:text-emerald-400">{t("AUTO:", "OTOMATIS:")}</span>{" "}
+                  {t("Let the system respond to conditions", "Sistem merespons kondisi otomatis")}
+                </div>
               </div>
             </section>
 
@@ -314,32 +410,32 @@ export default function DashboardScreen() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
                   <Activity className="h-5 w-5" />
                 </div>
-                <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">Environmental Telemetry</h2>
+                <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">{t("Sensor Data", "Data Sensor")}</h2>
               </div>
 
               <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="flex flex-col justify-center rounded-2xl bg-slate-50 dark:bg-white/5 p-6 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/50 transition-colors">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Temperature</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{t("Temperature", "Suhu")}</p>
                   <p className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">
                     {sensor ? `${sensor.temperature.toFixed(1)}°C` : "--"}
                   </p>
                 </div>
                 <div className="flex flex-col justify-center rounded-2xl bg-slate-50 dark:bg-white/5 p-6 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/50 transition-colors">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Humidity</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{t("Humidity", "Kelembapan")}</p>
                   <p className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">
                     {sensor ? `${sensor.humidity.toFixed(1)}%` : "--"}
                   </p>
                 </div>
                 <div className="flex flex-col justify-center rounded-2xl bg-slate-50 dark:bg-white/5 p-6 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/50 transition-colors">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Light Intensity</p>
-                  <p className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">
-                    {sensor ? sensor.light.toFixed(0) : "--"}
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{t("Light Condition", "Kondisi Cahaya")}</p>
+                  <p className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">
+                    {sensor ? sensor.getLightCondition(sensor.light, t) : "--"}
                   </p>
                 </div>
                 <div className="flex flex-col justify-center rounded-2xl bg-slate-50 dark:bg-white/5 p-6 border border-slate-200/50 dark:border-white/5 group hover:border-teal-500/50 transition-colors">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Rain Detection</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{t("Rain Detection", "Deteksi Hujan")}</p>
                   <p className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">
-                    {sensor ? (sensor.isRaining() ? "YES" : "NO") : "--"}
+                    {sensor ? (sensor.isRaining() ? t("YES", "YA") : t("NO", "TIDAK")) : "--"}
                   </p>
                 </div>
               </div>
@@ -349,16 +445,16 @@ export default function DashboardScreen() {
 
           {/* Right Sidebar - System Health & Activity Log */}
           <aside className="flex flex-col gap-8 xl:col-span-4">
-            <OperationalHealthPanel health={operationalHealth} />
+            <OperationalHealthPanel health={operationalHealth} lang={lang} />
 
             <section className="flex-1 flex flex-col rounded-[2rem] bg-white dark:bg-slate-900/40 p-8 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <History className="h-5 w-5 text-teal-600 dark:text-teal-400" />
-                  <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">Activity Log</h2>
+                  <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">{t("Activity Log", "Catatan Aktivitas")}</h2>
                 </div>
                 <button onClick={() => _setIsTimelineExpanded(!isTimelineExpanded)} className="text-[10px] font-black uppercase tracking-widest text-teal-600 hover:text-teal-700">
-                  {isTimelineExpanded ? 'Show Less' : 'View All'}
+                  {isTimelineExpanded ? t("Show Less", "Tampilkan Lebih Sedikit") : t("View All", "Lihat Semua")}
                 </button>
               </div>
 

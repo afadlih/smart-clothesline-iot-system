@@ -4,6 +4,7 @@ type TelegramApiResponse<T> = {
   ok: boolean;
   result?: T;
   description?: string;
+  error_code?: number;
 };
 
 type BotCommand = { command: string; description: string };
@@ -35,7 +36,15 @@ export class TelegramBotApiService {
   private static async safeRequest<T>(url: string, init: RequestInit): Promise<TelegramApiResponse<T>> {
     try {
       const response = await fetch(url, init);
-      const data = (await response.json()) as TelegramApiResponse<T>;
+      let data: TelegramApiResponse<T>;
+      try {
+        data = (await response.json()) as TelegramApiResponse<T>;
+      } catch {
+        data = { ok: false, description: `HTTP status ${response.status}` };
+      }
+      if (!data.error_code && response.status !== 200) {
+        data.error_code = response.status;
+      }
       return data;
     } catch (error) {
       return {
@@ -50,8 +59,8 @@ export class TelegramBotApiService {
     chatId: string | number,
     text: string,
     options?: SendMessageOptions,
-  ): Promise<{ ok: boolean; description?: string }> {
-    const data = await this.safeRequest<unknown>(endpoint(token, "sendMessage"), {
+  ): Promise<{ ok: boolean; description?: string; result?: any; errorCode?: number }> {
+    const data = await this.safeRequest<any>(endpoint(token, "sendMessage"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -60,7 +69,7 @@ export class TelegramBotApiService {
         disable_web_page_preview: options?.disableWebPagePreview ?? undefined,
       }),
     });
-    return { ok: data.ok, description: data.description };
+    return { ok: data.ok, description: data.description, result: data.result, errorCode: data.error_code };
   }
 
   static async sendMessage(

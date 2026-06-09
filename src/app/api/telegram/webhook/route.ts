@@ -4,6 +4,8 @@ import { TelegramOpsService } from "@/services/TelegramOpsService";
 import { TelegramBotApiService } from "@/services/TelegramBotApiService";
 import { logger } from "@/lib/logger";
 
+export const dynamic = "force-dynamic";
+
 type TelegramUpdate = {
   update_id: number;
   message?: {

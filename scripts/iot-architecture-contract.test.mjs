@@ -85,13 +85,13 @@ test("Wokwi per-device MQTT hotfix contract validation", () => {
   assert.ok(mqttTopicsContent.includes("getCommandPublishTopics"), "Expected getCommandPublishTopics to exist in mqttTopics.ts");
 
   // Test 2: useSensor.ts contract
-  const useSensorContent = read("src/hooks/useSensor.ts");
+  const useSensorContent = read("src/features/sensor/hooks/useSensor.ts");
   assert.ok(useSensorContent.includes("getCommandPublishTopics"), "Expected useSensor.ts to import/use getCommandPublishTopics");
   assert.ok(!useSensorContent.includes("/api/telegram/polling"), "Expected useSensor.ts to NOT contain /api/telegram/polling");
 
   // Test 3: iot-hub page contract (checks IoTHubPage.tsx if modularized, else page.tsx)
-  const iotHubContent = existsSync(join(ROOT, "src/features/iothub/IoTHubPage.tsx"))
-    ? read("src/features/iothub/IoTHubPage.tsx")
+  const iotHubContent = existsSync(join(ROOT, "src/features/sensor/view/iothub/IoTHubPage.tsx"))
+    ? read("src/features/sensor/view/iothub/IoTHubPage.tsx")
     : read("src/app/iot-hub/page.tsx");
   assert.ok(iotHubContent.includes("getPairingDiscoveryTopics"), "Expected IoT Hub page to use getPairingDiscoveryTopics");
 
@@ -120,7 +120,7 @@ test("schedule synchronization contract validation", () => {
   assert.ok(runtimeContent.includes("export function evaluateScheduleTransition"), "ScheduleRuntimeService.ts must export evaluateScheduleTransition");
 
   // 5. useSensor.ts uses getCommandPublishTopics for schedule commands
-  const useSensorContent = read("src/hooks/useSensor.ts");
+  const useSensorContent = read("src/features/sensor/hooks/useSensor.ts");
   assert.ok(
     useSensorContent.includes("getCommandPublishTopics(activeDeviceId)"),
     "Expected active device getCommandPublishTopics in schedule commands routing in useSensor.ts"
@@ -154,3 +154,250 @@ test("schedule synchronization contract validation", () => {
   assert.ok(tgCommandIndex !== -1, "telegram_commands path not found in firestore.rules");
   assert.ok(commandLines[tgCommandIndex + 1].includes("allow read, write: if false;"), "telegram_commands must block all reads and writes");
 });
+test("landing page contract validation", () => {
+  const content = read("src/app/page.tsx");
+  const layoutContent = read("src/app/layout.tsx");
+  const simulatorContent = read("src/components/landing/InteractiveSimulator.tsx");
+  
+  // 1. src/app/page.tsx exists (verified by read() above)
+  
+  // 2. Landing page does not contain "use client"
+  assert.ok(!content.includes('"use client"'), 'Landing page should not contain "use client"');
+  assert.ok(!content.includes("'use client'"), "Landing page should not contain 'use client'");
+
+  // 3. Landing page does not import forbidden systems
+  const forbidden = [
+    "mqttService",
+    "MQTTService",
+    "useSensor",
+    "useSystemState",
+    "FirestoreService",
+    "useAnalyticsData",
+    "firebase",
+    "recharts",
+    "fs",
+    "path",
+    "child_process"
+  ];
+  for (const item of forbidden) {
+    assert.ok(!content.includes(item), `Landing page should not import or refer to: ${item}`);
+  }
+
+  // 4. Landing page does not contain useEffect, useState, localStorage, window, document, fetch
+  const forbiddenJs = [
+    "useEffect",
+    "useState",
+    "localStorage",
+    "window.",
+    "document.",
+    "fetch("
+  ];
+  for (const item of forbiddenJs) {
+    assert.ok(!content.includes(item), `Landing page should not contain JS runtime feature: ${item}`);
+  }
+
+  // 5. src/app/layout.tsx does not import forbidden systems
+  const forbiddenLayout = [
+    "mqttService",
+    "MQTTService",
+    "useSensor",
+    "FirestoreService"
+  ];
+  for (const item of forbiddenLayout) {
+    assert.ok(!layoutContent.includes(item), `Root layout should not import or refer to: ${item}`);
+  }
+
+  // 6. Landing page contains links to required routes
+  const requiredRoutes = [
+    "/dashboard",
+    "/analytics",
+    "/big-data",
+    "/iot-hub"
+  ];
+  for (const route of requiredRoutes) {
+    assert.ok(content.includes(route), `Landing page should link to: ${route}`);
+  }
+
+  // 7. Landing page mentions key product concepts
+  const mentions = [
+    "Smart Clothesline",
+    "rain",
+    "dashboard",
+    "notification",
+    "analytics",
+    "IoT Hub"
+  ];
+  for (const item of mentions) {
+    assert.ok(content.toLowerCase().includes(item.toLowerCase()), `Landing page should mention: ${item}`);
+  }
+  assert.ok(
+    content.toLowerCase().includes("hadoop") || content.toLowerCase().includes("big data"),
+    "Landing page should mention Hadoop or Big Data"
+  );
+
+  // 8. Landing page contains FAQ section and "How to use" or equivalent
+  assert.ok(content.toLowerCase().includes("faq") || content.includes("Frequently Asked Questions"), "Landing page should contain FAQ section");
+  assert.ok(content.toLowerCase().includes("how to use") || content.toLowerCase().includes("cara menggunakan"), "Landing page should contain How to use section");
+
+  // 9. Landing page says Telegram is notification-only or does not allow control
+  assert.ok(
+    content.toLowerCase().includes("telegram only sends notifications") ||
+    content.toLowerCase().includes("telegram only sends alerts") ||
+    content.toLowerCase().includes("notification-only"),
+    "Landing page should state Telegram is notification-only"
+  );
+
+  // 10. Landing page does not contain forbidden kit/AI-slop terms
+  const slop = [
+    "Starter Kit",
+    "Education Kit",
+    "Buy Kit",
+    "AI-powered",
+    "revolutionary",
+    "temporal engine",
+    "synergy",
+    "autonomous intelligence",
+    "operational matrix"
+  ];
+  for (const word of slop) {
+    assert.ok(!content.toLowerCase().includes(word.toLowerCase()), `Landing page contains forbidden/AI-slop term: ${word}`);
+  }
+
+  // 11. Landing page has accessible text for primary CTA
+  assert.ok(content.includes("Open Dashboard") || content.includes("Buka Dasbor"), "Landing page should have accessible primary CTA 'Open Dashboard'");
+
+  // 12. Interactive simulator includes common-user rain/clear explanation
+  assert.ok(
+    simulatorContent.includes("Weather is clear. Clothesline is open for drying."),
+    "Simulator should explain clear weather condition"
+  );
+  assert.ok(
+    simulatorContent.includes("Rain detected. Clothesline is closed for protection."),
+    "Simulator should explain rainy weather condition"
+  );
+
+  // 13. Hero section does not make /iot-hub or /analytics the primary CTA
+  const heroSection = content.split('id="problems"')[0];
+  assert.ok(!heroSection.includes('href="/iot-hub"'), "Hero section should not make /iot-hub a CTA");
+  assert.ok(!heroSection.includes('href="/analytics"'), "Hero section should not make /analytics a CTA");
+
+  // 14. Header includes language switcher
+  const headerContent = read("src/components/landing/LandingHeader.tsx");
+  assert.ok(headerContent.includes("?lang="), "Header should include language switcher link pattern");
+
+  // 15. Simulator includes visual demo notice
+  assert.ok(
+    simulatorContent.includes("This is a visual demo, not live hardware.") ||
+    simulatorContent.includes("Ini simulasi tampilan, bukan perangkat asli."),
+    "Simulator should notice that it is a visual demo"
+  );
+
+  // 16. Indonesian and English common keywords
+  const indonesianKeywords = ["jemuran", "hujan", "notifikasi", "dasbor"];
+  for (const word of indonesianKeywords) {
+    assert.ok(content.toLowerCase().includes(word), `Landing page should include Indonesian word: ${word}`);
+  }
+  const englishKeywords = ["rain", "notification", "dashboard"];
+  for (const word of englishKeywords) {
+    assert.ok(content.toLowerCase().includes(word), `Landing page should include English word: ${word}`);
+  }
+});
+
+test("mobile navigation layout contracts", () => {
+  const bottomNavPath = "src/components/layout/MobileBottomNavigation.tsx";
+  const bottomNavContent = read(bottomNavPath);
+
+  // 1. Mobile bottom navigation component exists (verified by read() above)
+
+  // 2. Mobile bottom nav uses mobile-only classes: contains md:hidden or lg:hidden
+  assert.ok(
+    bottomNavContent.includes("md:hidden") || bottomNavContent.includes("lg:hidden"),
+    "MobileBottomNavigation must use responsive hidden utility class"
+  );
+
+  // 3. Sidebar is hidden on mobile: contains hidden md: or hidden lg:
+  const sidebarContent = read("src/components/layout/Sidebar.tsx");
+  assert.ok(
+    sidebarContent.includes("hidden md:") || sidebarContent.includes("hidden lg:") || sidebarContent.includes("hidden flex") || sidebarContent.includes("hidden"),
+    "Sidebar should have desktop-only or mobile-hidden layout class"
+  );
+
+  // 4. Main content has mobile bottom padding: contains pb-20 or similar safe bottom padding
+  const layoutContent = read("src/components/layout/MainLayout.tsx");
+  assert.ok(
+    layoutContent.includes("pb-20") || layoutContent.includes("pb-16") || layoutContent.includes("pb-24"),
+    "Main content area must have bottom padding on mobile screens"
+  );
+
+  // 5. Mobile bottom nav links to main feature routes
+  const requiredRoutes = [
+    "/dashboard",
+    "/iot-hub",
+    "/schedule",
+    "/analytics",
+    "/settings"
+  ];
+  for (const route of requiredRoutes) {
+    assert.ok(
+      bottomNavContent.includes(route),
+      `MobileBottomNavigation should route to: ${route}`
+    );
+  }
+
+  // 6. Mobile bottom nav uses usePathname or equivalent route active detection
+  assert.ok(
+    bottomNavContent.includes("usePathname") || bottomNavContent.includes("pathname"),
+    "MobileBottomNavigation should use pathname/active route detection"
+  );
+});
+
+test("forgot password page contract validation", () => {
+  const content = read("src/app/forgot-password/page.tsx");
+  const loginContent = read("src/features/auth/login/login.tsx");
+  const appShellContent = read("src/components/layout/AppShell.tsx");
+
+  // 1. Forgot password page exists (verified by read above)
+
+  // 2. Forgot password page uses Firebase reset
+  assert.ok(content.includes("sendPasswordResetEmail"), "Forgot password page must use sendPasswordResetEmail");
+
+  // 3. Forgot password page has neutral success message
+  assert.ok(
+    content.includes("If an account exists for this email, a reset link has been sent. Please check your inbox.") ||
+    content.includes("If an account exists"),
+    "Forgot password page must contain neutral success message in English"
+  );
+  assert.ok(
+    content.includes("Jika akun dengan email ini tersedia, tautan reset kata sandi telah dikirim. Silakan cek kotak masuk email Anda.") ||
+    content.includes("Jika akun"),
+    "Forgot password page must contain neutral success message in Indonesian"
+  );
+
+  // 4. Forgot password page does not expose user existence
+  assert.ok(!content.includes("Email not registered"), "Should not show Email not registered");
+  assert.ok(!content.includes("User does not exist"), "Should not show User does not exist");
+  assert.ok(!content.includes("Akun tidak ditemukan"), "Should not show Akun tidak ditemukan");
+
+  // 5. Login page links to forgot password
+  assert.ok(loginContent.includes("/forgot-password"), "Login page must link to /forgot-password");
+
+  // 6. Forgot password page does not import runtime systems
+  const forbiddenImports = [
+    "MQTTService",
+    "FirestoreService",
+    "useSensor",
+    "TelegramOpsService",
+    "TelegramNotificationService",
+    "hadoop"
+  ];
+  for (const item of forbiddenImports) {
+    assert.ok(!content.includes(item), `Forgot password page should not import runtime system: ${item}`);
+  }
+
+  // 7. Route protection: AppShell.tsx contains forgot-password bypass
+  assert.ok(
+    appShellContent.includes("/forgot-password") || appShellContent.includes("isForgotPasswordPage"),
+    "AppShell must bypass forgot-password route"
+  );
+});
+

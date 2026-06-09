@@ -2,8 +2,10 @@
 
 import { Suspense } from "react";
 import { usePathname } from "next/navigation";
-import AuthGate from "@/components/auth/AuthGate";
-import MainLayout from "@/components/layout/MainLayout";
+import dynamic from "next/dynamic";
+
+const AuthGate = dynamic(() => import("@/components/auth/AuthGate"), { ssr: false });
+const MainLayout = dynamic(() => import("@/components/layout/MainLayout"), { ssr: false });
 
 export default function AppShell({
   children,
@@ -12,8 +14,10 @@ export default function AppShell({
 }) {
   const pathname = usePathname();
   const isAuthRoute = pathname.startsWith("/auth");
+  const isLandingPage = pathname === "/";
+  const isForgotPasswordPage = pathname.startsWith("/forgot-password");
 
-  if (isAuthRoute) {
+  if (isAuthRoute || isLandingPage || isForgotPasswordPage) {
     return <>{children}</>;
   }
 
@@ -22,7 +26,9 @@ export default function AppShell({
       <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="flex flex-col items-center gap-3">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-teal-500 border-t-transparent" />
-          <p className="text-sm font-medium text-slate-500 animate-pulse">Initializing app...</p>
+          <p className="text-sm font-medium text-slate-500 animate-pulse">
+            {typeof window !== "undefined" && window.location.search.includes("lang=id") ? "Menyiapkan aplikasi..." : "Initializing app..."}
+          </p>
         </div>
       </div>
     }>

@@ -16,7 +16,7 @@ import { pushSystemEvent } from "@/hooks/useNotificationEngine";
 import { commandRateLimiter } from "@/utils/rateLimiter";
 import { DeviceHealthService } from "@/services/DeviceHealthService";
 import { SmartAlertsService } from "@/services/SmartAlertsService";
-import { ScheduleService} from "@/services/ScheduleService";
+import { ScheduleService } from "@/services/ScheduleService";
 import { TelemetryNormalizerService } from "@/services/TelemetryNormalizerService";
 import { OperationalStateResolver } from "@/services/OperationalStateResolver";
 import { MqttDiagnosticsService } from "@/services/MqttDiagnosticsService";
@@ -604,6 +604,11 @@ async function sendTelegramAlert(title: string, description: string, alertKey: s
         return;
     }
 
+    let notificationType = "custom";
+    if (alertKey === "alert-rain-open") notificationType = "rain_detected";
+    if (alertKey === "alert-dry-clothes") notificationType = "dry_candidate";
+    if (alertKey === "alert-device-offline") notificationType = "device_offline";
+
     lastTelegramAlertAtByKey[alertKey] = now;
     try {
         await fetch("/api/telegram/notify", {
@@ -617,6 +622,7 @@ async function sendTelegramAlert(title: string, description: string, alertKey: s
                 severity: "warning",
                 alertKey,
                 timestamp,
+                type: notificationType,
             }),
         });
     } catch (error) {
@@ -770,8 +776,21 @@ function handleTopicMessage(rawPayload: string, topic: string): void {
             MqttDiagnosticsService.setDeviceStateSource("SENSOR_FALLBACK");
         }
 
+        const prevData = useMainStore.getState().sensorData;
+
+        const TEMP_TREHS = 1;
+        const LIGHT_TRESH = 150;
+        const HUMIDITY_THRESHOLD = 1.3;
+
+
         const shouldStore =
-            !payload.duplicate ||
+            !prevData ||
+            Math.abs(prevData.temperature - payload.temperature) >= TEMP_TREHS ||
+            Math.abs(prevData.light - payload.light) >= LIGHT_TRESH ||
+            Math.abs(prevData.humidity - payload.humidity) >= HUMIDITY_THRESHOLD ||
+            Math.abs(prevData.light - payload.light) >= LIGHT_TRESH ||
+            prevData.rain !== (payload.rain ? 1 : 0) ||
+            prevData.status !== data.status ||
             Date.now() - lastSensorStoredAt >= SENSOR_SAMPLE_INTERVAL_MS;
         if (shouldStore) {
             lastSensorStoredAt = Date.now();
@@ -907,7 +926,7 @@ function handleTopicMessage(rawPayload: string, topic: string): void {
         );
     }
 
-    const {lastStatusUpdate} = useMainStore.getState();
+    const { lastStatusUpdate } = useMainStore.getState();
 
     const isDuplicateStatus =
         useMainStore.getState().deviceState.status === payload.status &&

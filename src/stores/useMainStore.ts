@@ -44,6 +44,8 @@ interface MainStoreState {
         disabledCommands: string[];
         reason: string;
     };
+    firestoreHistoryCache: SensorData[] | null;
+    historyLastFetchedAt: number | null;
     updateState: (fn: (draft: MainStoreState) => void) => void;
 }
 
@@ -125,7 +127,8 @@ export const useMainStore = create<MainStoreState>()(
             disabledCommands: [],
             reason: "Awaiting telemetry.",
         },
-
+        firestoreHistoryCache: null,
+        historyLastFetchedAt: null,
         updateState: (fn) => set(fn),
     }))
 );

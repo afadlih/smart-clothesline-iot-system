@@ -13,7 +13,6 @@ import {
   RAIN_MODES,
   rainThresholdToMode,
   modeToRainThreshold,
-  LIGHT_LEVELS,
   lightThresholdToLevel,
   levelToLightThreshold,
   type RainMode
@@ -77,7 +76,41 @@ function calculateAutoThreshold(sensor: {
   };
 }
 
-export default function AutomationPage() {
+export default function AutomationPage({ lang = "en" }: { lang?: "en" | "id" }) {
+  const t = (en: string, id: string) => (lang === "id" ? id : en);
+
+  const getRainModeLabel = (mode: RainMode) => {
+    return mode === "INSTANT" ? t("Instant", "Instan") : t("Tolerant", "Toleran");
+  };
+
+  const getRainModeDesc = (mode: RainMode) => {
+    return mode === "INSTANT"
+      ? t("Closes immediately on the first contact with water. Best for protecting clothes.", "Menutup segera pada sentuhan pertama dengan air. Terbaik untuk melindungi pakaian.")
+      : t("Ignores light condensation or humid air. Activates only when the sensor is noticeably wet.", "Mengabaikan embun tipis atau udara lembap. Aktif hanya saat sensor benar-benar basah.");
+  };
+
+  const getLightLevelName = (level: number) => {
+    switch (level) {
+      case 1: return t("Very Low (Total Dark)", "Sangat Rendah (Gelap Gulita)");
+      case 2: return t("Low (Very Dim)", "Rendah (Sangat Redup)");
+      case 3: return t("Medium (Overcast / Dusk)", "Sedang (Mendung / Senja)");
+      case 4: return t("High (Afternoon Shade)", "Tinggi (Teduh Sore)");
+      case 5: return t("Very High (Any Dimming)", "Sangat Tinggi (Redup Sedikit)");
+      default: return "";
+    }
+  };
+
+  const getLightLevelDesc = (level: number) => {
+    switch (level) {
+      case 1: return t("Closes only in complete darkness — suitable for outdoor setups with significant ambient light at night.", "Menutup hanya dalam kegelapan total — cocok untuk luar ruangan dengan cahaya sekitar yang signifikan di malam hari.");
+      case 2: return t("Closes when light drops to a very low level, such as late evening.", "Menutup ketika cahaya turun ke tingkat yang sangat rendah, seperti sore menjelang malam.");
+      case 3: return t("Closes at dusk or under heavy overcast conditions. Recommended for most setups.", "Menutup pada senja hari or dalam kondisi mendung tebal. Direkomendasikan untuk sebagian besar pengaturan.");
+      case 4: return t("Closes earlier when the room or environment becomes moderately shaded.", "Menutup lebih awal ketika ruangan atau lingkungan mulai agak teduh.");
+      case 5: return t("Very sensitive — closes as soon as ambient light begins to drop from a bright state.", "Sangat sensitif — menutup segera setelah cahaya sekitar mulai turun dari keadaan terang.");
+      default: return "";
+    }
+  };
+
   const { decision, sendCommand, publishConfig, events, sensorData } = useSystemState();
   const [settings, setSettings] = useState<AutomationSettings>(defaults);
   const [isSaving, setIsSaving] = useState(false);
@@ -203,20 +236,20 @@ export default function AutomationPage() {
                   <Bot className="h-5 w-5" />
                 </div>
                 <span className="text-[11px] font-black uppercase tracking-[0.25em] text-emerald-600 dark:text-emerald-400">
-                  Intelligence Hub
+                  {t("Intelligence Hub", "Pusat Kecerdasan")}
                 </span>
               </div>
-              <h1 className="text-5xl md:text-6xl font-black text-slate-800 dark:text-white tracking-tighter">Automation Control</h1>
-              <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Manage rules, safety behaviors, and automatic responses.</p>
+              <h1 className="text-5xl md:text-6xl font-black text-slate-800 dark:text-white tracking-tighter">{t("Automation Control", "Kontrol Otomatisasi")}</h1>
+              <p className="text-sm font-bold text-slate-500 dark:text-slate-400">{t("Manage rules, safety behaviors, and automatic responses.", "Kelola aturan, perilaku keselamatan, dan respons otomatis.")}</p>
             </div>
 
             <div className="flex items-center gap-4">
                 <div className="px-5 py-2.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 shadow-sm">
-                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Current State</p>
-                   <p className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">{decision.decisionSource === "MANUAL" ? "Manual Override" : "Auto Mode"}</p>
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t("Current State", "Status Saat Ini")}</p>
+                   <p className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">{decision.decisionSource === "MANUAL" ? t("Manual Override", "Kontrol Manual") : t("Auto Mode", "Mode Otomatis")}</p>
                 </div>
                 <button onClick={saveAndApply} disabled={isSaving} className="px-8 py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs tracking-widest transition-all shadow-lg shadow-emerald-600/20 active:scale-95">
-                  {isSaving ? "SAVING...." : "SAVE & APPLY"}
+                  {isSaving ? t("SAVING....", "MENYIMPAN....") : t("SAVE & APPLY", "SIMPAN & TERAPKAN")}
                 </button>
             </div>
           </div>
@@ -233,8 +266,8 @@ export default function AutomationPage() {
                     <Sliders className="h-6 w-6" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">Sensor Sensitivity</h2>
-                    <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Configure how the system reacts to rain and light conditions.</p>
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">{t("Sensor Sensitivity", "Sensitivitas Sensor")}</h2>
+                    <p className="text-xs font-bold text-slate-400 dark:text-slate-500">{t("Configure how the system reacts to rain and light conditions.", "Konfigurasi bagaimana sistem bereaksi terhadap kondisi hujan dan cahaya.")}</p>
                   </div>
                 </div>
 
@@ -243,11 +276,11 @@ export default function AutomationPage() {
                     onClick={applyAutoThreshold} 
                     className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-[11px] tracking-widest uppercase flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-500/10 active:scale-95"
                   >
-                    <Zap className="h-4 w-4" /> Auto-Calibrate
+                    <Zap className="h-4 w-4" /> {t("Auto-Calibrate", "Kalibrasi Otomatis")}
                   </button>
                   <div className="absolute right-0 top-full mt-2 hidden group-hover:block w-72 p-4 bg-slate-900 text-white text-[11px] leading-relaxed rounded-2xl border border-white/10 shadow-2xl z-20">
-                    <p className="font-bold mb-1 text-emerald-400">Auto-Calibrate</p>
-                    Reads the current sensor values and applies an optimal threshold offset for both rain and light detection based on current conditions.
+                    <p className="font-bold mb-1 text-emerald-400">{t("Auto-Calibrate", "Kalibrasi Otomatis")}</p>
+                    {t("Reads the current sensor values and applies an optimal threshold offset for both rain and light detection based on current conditions.", "Membaca nilai sensor saat ini dan menerapkan offset batas optimal untuk deteksi hujan dan cahaya berdasarkan kondisi saat ini.")}
                   </div>
                 </div>
               </div>
@@ -260,10 +293,10 @@ export default function AutomationPage() {
                   <div>
                     <div className="flex items-center justify-between mb-4">
                       <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-widest opacity-60 flex items-center gap-1.5">
-                        <CloudRain className="h-4 w-4 text-sky-500" /> Rain Sensitivity
+                        <CloudRain className="h-4 w-4 text-sky-500" /> {t("Rain Sensitivity", "Sensitivitas Hujan")}
                       </span>
                       <span className="px-3 py-1 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 text-[10px] font-black uppercase tracking-wider">
-                        {RAIN_MODES[currentRainMode].label}
+                        {getRainModeLabel(currentRainMode)}
                       </span>
                     </div>
                     
@@ -280,21 +313,21 @@ export default function AutomationPage() {
                               : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
                           }`}
                         >
-                          {RAIN_MODES[mode].label}
+                          {getRainModeLabel(mode)}
                         </button>
                       ))}
                     </div>
 
                     <p className="mt-4 text-xs font-medium text-slate-500 dark:text-slate-400 leading-relaxed">
-                      {RAIN_MODES[currentRainMode].description}
+                      {getRainModeDesc(currentRainMode)}
                     </p>
                   </div>
 
                   {/* Real-time Rain Visualizer Bar */}
                   <div className="pt-4 border-t border-slate-200/50 dark:border-white/5 space-y-2">
                     <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
-                      <span>Rain Sensor (Live)</span>
-                      <span>{sensorData?.rainVal ?? sensorData?.rainRaw ?? "Dry"}</span>
+                      <span>{t("Rain Sensor (Live)", "Sensor Hujan (Langsung)")}</span>
+                      <span>{sensorData?.rainVal ?? sensorData?.rainRaw ?? t("Dry", "Kering")}</span>
                     </div>
                     {/* Graphical Bar */}
                     <div className="relative w-full h-4 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
@@ -307,7 +340,7 @@ export default function AutomationPage() {
                             style={{ left: `${threshPercent}%` }}
                             title={`Trigger threshold (${settings.rainThreshold})`}
                           >
-                            <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[7px] font-black text-rose-500 uppercase tracking-widest leading-none bg-white dark:bg-slate-900 px-1 rounded">Limit</span>
+                            <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[7px] font-black text-rose-500 uppercase tracking-widest leading-none bg-white dark:bg-slate-900 px-1 rounded">{t("Limit", "Batas")}</span>
                           </div>
                         );
                       })()}
@@ -330,8 +363,8 @@ export default function AutomationPage() {
                       })()}
                     </div>
                     <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-slate-400">
-                      <span>Dry</span>
-                      <span>Wet</span>
+                      <span>{t("Dry", "Kering")}</span>
+                      <span>{t("Wet", "Basah")}</span>
                     </div>
                   </div>
                 </div>
@@ -341,10 +374,10 @@ export default function AutomationPage() {
                   <div>
                     <div className="flex items-center justify-between mb-4">
                       <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-widest opacity-60 flex items-center gap-1.5">
-                        <Sun className="h-4 w-4 text-amber-500" /> Light Sensitivity
+                        <Sun className="h-4 w-4 text-amber-500" /> {t("Light Sensitivity", "Sensitivitas Cahaya")}
                       </span>
                       <span className="px-3 py-1 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-black uppercase tracking-wider">
-                        Level {currentLightLevel} / 5
+                        {t("Level", "Level")} {currentLightLevel} / 5 ({getLightLevelName(currentLightLevel)})
                       </span>
                     </div>
 
@@ -361,22 +394,22 @@ export default function AutomationPage() {
                       />
                       
                       <div className="flex justify-between text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">
-                        <span>Total Dark</span>
-                        <span>Overcast</span>
-                        <span>Dim Light</span>
+                        <span>{t("Total Dark", "Gelap Gulita")}</span>
+                        <span>{t("Overcast", "Mendung")}</span>
+                        <span>{t("Dim Light", "Redup")}</span>
                       </div>
                     </div>
 
                     <p className="mt-4 text-xs font-medium text-slate-500 dark:text-slate-400 leading-relaxed h-12">
-                      {LIGHT_LEVELS[currentLightLevel].description}
+                      {getLightLevelDesc(currentLightLevel)}
                     </p>
                   </div>
 
                   {/* Real-time Light Visualizer Bar */}
                   <div className="pt-4 border-t border-slate-200/50 dark:border-white/5 space-y-2">
                     <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
-                      <span>Ambient Light (Live)</span>
-                      <span>{sensorData?.light !== undefined ? `${Math.round(sensorData.light)}` : "Dark"}</span>
+                      <span>{t("Ambient Light (Live)", "Cahaya Sekitar (Langsung)")}</span>
+                      <span>{sensorData?.light !== undefined ? `${Math.round(sensorData.light)}` : t("Dark", "Gelap")}</span>
                     </div>
                     {/* Graphical Bar */}
                     <div className="relative w-full h-4 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
@@ -389,7 +422,7 @@ export default function AutomationPage() {
                             style={{ left: `${threshPercent}%` }}
                             title={`Darkness threshold (${settings.lightThreshold})`}
                           >
-                            <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[7px] font-black text-amber-500 uppercase tracking-widest leading-none bg-white dark:bg-slate-900 px-1 rounded">Limit</span>
+                            <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[7px] font-black text-amber-500 uppercase tracking-widest leading-none bg-white dark:bg-slate-900 px-1 rounded">{t("Limit", "Batas")}</span>
                           </div>
                         );
                       })()}
@@ -412,8 +445,8 @@ export default function AutomationPage() {
                       })()}
                     </div>
                     <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-slate-400">
-                      <span>Bright</span>
-                      <span>Dark</span>
+                      <span>{t("Bright", "Terang")}</span>
+                      <span>{t("Dark", "Gelap")}</span>
                     </div>
                   </div>
                 </div>
@@ -422,9 +455,9 @@ export default function AutomationPage() {
 
               {/* Toggle Protection Behaviors */}
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3 pt-6 border-t border-slate-100 dark:border-white/5">
-                <ToggleButton label="Auto Close on Rain" active={settings.autoCloseOnRain} icon={<CloudRain className="h-4 w-4" />} onClick={(v) => setSettings(p => ({ ...p, autoCloseOnRain: v }))} />
-                <ToggleButton label="Auto Close on Dark" active={settings.autoCloseOnDark} icon={<Timer className="h-4 w-4" />} onClick={(v) => setSettings(p => ({ ...p, autoCloseOnDark: v }))} />
-                <ToggleButton label="Auto Open When Safe" active={settings.autoOpenWhenSafe} icon={<Zap className="h-4 w-4" />} onClick={(v) => setSettings(p => ({ ...p, autoOpenWhenSafe: v }))} />
+                <ToggleButton label={t("Auto Close on Rain", "Tutup Otomatis saat Hujan")} active={settings.autoCloseOnRain} icon={<CloudRain className="h-4 w-4" />} onClick={(v) => setSettings(p => ({ ...p, autoCloseOnRain: v }))} />
+                <ToggleButton label={t("Auto Close on Dark", "Tutup Otomatis saat Gelap")} active={settings.autoCloseOnDark} icon={<Timer className="h-4 w-4" />} onClick={(v) => setSettings(p => ({ ...p, autoCloseOnDark: v }))} />
+                <ToggleButton label={t("Auto Open When Safe", "Buka Otomatis saat Aman")} active={settings.autoOpenWhenSafe} icon={<Zap className="h-4 w-4" />} onClick={(v) => setSettings(p => ({ ...p, autoOpenWhenSafe: v }))} />
               </div>
 
               {/* Progressive Disclosure: Developer / Power User Technical Settings Accordion */}
@@ -432,29 +465,29 @@ export default function AutomationPage() {
                 <summary className="flex items-center justify-between p-6 font-black text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase cursor-pointer select-none hover:bg-slate-100 dark:hover:bg-white/5 list-none">
                   <div className="flex items-center gap-2">
                     <Info className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    <span>Raw Sensor Values &amp; Threshold Debug</span>
+                    <span>{t("Raw Sensor Values & Threshold Debug", "Nilai Sensor Mentah & Batas Debug")}</span>
                   </div>
                   <span className="text-xs transition-transform duration-300 group-open:rotate-180">▼</span>
                 </summary>
                 <div className="p-6 border-t border-slate-200 dark:border-white/5 bg-white dark:bg-slate-900/20 text-xs font-medium text-slate-600 dark:text-slate-300 space-y-4">
                   <div className="grid grid-cols-2 gap-6 font-mono text-[11px]">
                     <div className="space-y-2 p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5">
-                      <p className="font-bold text-slate-800 dark:text-slate-100 border-b border-slate-200 dark:border-white/5 pb-1 mb-2">RAIN SENSOR</p>
-                      <p>Threshold: <span className="text-emerald-600 dark:text-emerald-400 font-bold">{settings.rainThreshold}</span> (ADC 0–4095)</p>
-                      <p>Live Value: <span className="text-sky-600 dark:text-sky-400 font-bold">{sensorData?.rainVal ?? sensorData?.rainRaw ?? "4095 (Dry)"}</span></p>
-                      <p>State: <span className="font-bold uppercase">{(sensorData?.rainVal ?? sensorData?.rainRaw ?? 4095) < settings.rainThreshold ? "WET" : "DRY"}</span></p>
+                      <p className="font-bold text-slate-800 dark:text-slate-100 border-b border-slate-200 dark:border-white/5 pb-1 mb-2">{t("RAIN SENSOR", "SENSOR HUJAN")}</p>
+                      <p>{t("Threshold:", "Batas:")} <span className="text-emerald-600 dark:text-emerald-400 font-bold">{settings.rainThreshold}</span> (ADC 0–4095)</p>
+                      <p>{t("Live Value:", "Nilai Langsung:")} <span className="text-sky-600 dark:text-sky-400 font-bold">{sensorData?.rainVal ?? sensorData?.rainRaw ?? ("4095 (" + t("Dry", "Kering") + ")")}</span></p>
+                      <p>{t("State:", "Status:")} <span className="font-bold uppercase">{(sensorData?.rainVal ?? sensorData?.rainRaw ?? 4095) < settings.rainThreshold ? t("WET", "BASAH") : t("DRY", "KERING")}</span></p>
                     </div>
                     <div className="space-y-2 p-4 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5">
-                      <p className="font-bold text-slate-800 dark:text-slate-100 border-b border-slate-200 dark:border-white/5 pb-1 mb-2">LIGHT SENSOR (LDR)</p>
-                      <p>Threshold: <span className="text-emerald-600 dark:text-emerald-400 font-bold">{settings.lightThreshold}</span> (ADC 0–4095)</p>
-                      <p>Live Value: <span className="text-amber-600 dark:text-amber-400 font-bold">{sensorData?.light !== undefined ? `${Math.round(sensorData.light)}` : "0 (Dark)"}</span></p>
-                      <p>State: <span className="font-bold uppercase">{(sensorData?.light ?? 0) > settings.lightThreshold ? "DARK" : "BRIGHT"}</span></p>
+                      <p className="font-bold text-slate-800 dark:text-slate-100 border-b border-slate-200 dark:border-white/5 pb-1 mb-2">{t("LIGHT SENSOR (LDR)", "SENSOR CAHAYA (LDR)")}</p>
+                      <p>{t("Threshold:", "Batas:")} <span className="text-emerald-600 dark:text-emerald-400 font-bold">{settings.lightThreshold}</span> (ADC 0–4095)</p>
+                      <p>{t("Live Value:", "Nilai Langsung:")} <span className="text-amber-600 dark:text-amber-400 font-bold">{sensorData?.light !== undefined ? `${Math.round(sensorData.light)}` : ("0 (" + t("Dark", "Gelap") + ")")}</span></p>
+                      <p>{t("State:", "Status:")} <span className="font-bold uppercase">{(sensorData?.light ?? 0) > settings.lightThreshold ? t("DARK", "GELAP") : t("BRIGHT", "TERANG")}</span></p>
                     </div>
                   </div>
                   <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/30 flex items-start gap-3">
                     <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                     <p className="text-[10px] leading-normal text-amber-700 dark:text-amber-300 uppercase tracking-wider font-bold">
-                      Rain sensor uses resistance-based detection — dry reads ~4000, wet drops below 500 instantly. Instant mode is recommended to trigger the motor before water reaches the clothesline.
+                      {t("Rain sensor uses resistance-based detection — dry reads ~4000, wet drops below 500 instantly. Instant mode is recommended to trigger the motor before water reaches the clothesline.", "Sensor hujan menggunakan deteksi berbasis hambatan — kering terbaca ~4000, basah langsung turun di bawah 500. Mode instan disarankan untuk mengaktifkan motor sebelum air mengenai jemuran.")}
                     </p>
                   </div>
                 </div>
@@ -468,23 +501,23 @@ export default function AutomationPage() {
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                       <Timer className="h-5 w-5" />
                     </div>
-                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">Active Schedules</h2>
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">{t("Active Schedules", "Jadwal Aktif")}</h2>
                   </div>
-                  <Link href="/schedule" className="px-6 py-2.5 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 font-black text-[10px] tracking-widest flex items-center gap-2 hover:bg-slate-200 dark:hover:bg-white/10 transition-all uppercase">
-                    Configure <ChevronRight className="h-3 w-3" />
+                  <Link href={lang ? `/schedule?lang=${lang}` : "/schedule"} className="px-6 py-2.5 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 font-black text-[10px] tracking-widest flex items-center gap-2 hover:bg-slate-200 dark:hover:bg-white/10 transition-all uppercase">
+                    {t("Configure", "Atur")} <ChevronRight className="h-3 w-3" />
                   </Link>
                </div>
                {loadingSchedules ? (
                   <div className="flex flex-col items-center justify-center py-20 opacity-30">
                      <Timer className="h-8 w-8 animate-pulse mb-4 text-emerald-500" />
-                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Loading schedules...</p>
+                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t("Loading schedules...", "Memuat jadwal...")}</p>
                   </div>
                ) : schedules.length === 0 ? (
                  <div className="flex flex-col items-center justify-center py-20 bg-slate-50/50 dark:bg-white/5 rounded-[2rem] border border-dashed border-slate-200 dark:border-white/10">
                     <div className="h-16 w-16 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center shadow-sm mb-6">
                       <Timer className="h-8 w-8 text-slate-300 dark:text-slate-600" />
                     </div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center leading-relaxed">No active override schedules found.<br/><span className="opacity-60">System currently follows default business rules.</span></p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center leading-relaxed">{t("No active override schedules found.", "Tidak ada jadwal override aktif yang ditemukan.")}<br/><span className="opacity-60">{t("System currently follows default business rules.", "Sistem saat ini mengikuti aturan operasional bawaan.")}</span></p>
                  </div>
                ) : (
                  <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
@@ -514,10 +547,10 @@ export default function AutomationPage() {
                           </div>
                           {isTimeMatch ? (
                             <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500 text-white text-[9px] font-black uppercase tracking-[0.2em] shadow-lg shadow-emerald-500/20 whitespace-nowrap">
-                               <Zap className="h-3 w-3" /> Running
+                               <Zap className="h-3 w-3" /> {t("Running", "Berjalan")}
                             </span>
                           ) : (
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Waiting</span>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t("Waiting", "Menunggu")}</span>
                           )}
                        </div>
                      );
@@ -532,13 +565,13 @@ export default function AutomationPage() {
              <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-10 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
                 <div className="flex items-center gap-3 mb-8">
                   <Zap className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                  <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Quick Actions</h2>
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">{t("Quick Actions", "Tindakan Cepat")}</h2>
                 </div>
                 <div className="grid grid-cols-1 gap-4">
-                   <QuickActionButton label="Automatic" onClick={() => sendCommand("AUTO")} active={decision.decisionSource === "AUTO"} />
+                   <QuickActionButton label={t("Automatic", "Otomatis")} onClick={() => sendCommand("AUTO")} active={decision.decisionSource === "AUTO"} />
                    <div className="grid grid-cols-2 gap-4">
-                      <QuickActionButton label="Open" onClick={() => sendCommand("OPEN")} />
-                      <QuickActionButton label="Close" onClick={() => sendCommand("CLOSE")} />
+                      <QuickActionButton label={t("Open", "Buka")} onClick={() => sendCommand("OPEN")} />
+                      <QuickActionButton label={t("Close", "Tutup")} onClick={() => sendCommand("CLOSE")} />
                    </div>
                 </div>
              </section>
@@ -546,11 +579,11 @@ export default function AutomationPage() {
              <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-10 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
                 <div className="flex items-center gap-3 mb-8">
                   <History className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                  <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Activity Log</h2>
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">{t("Activity Log", "Log Aktivitas")}</h2>
                 </div>
                 <div className="space-y-6 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                    {automationEvents.length === 0 ? (
-                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center py-16 opacity-30">No recent activity</p>
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center py-16 opacity-30">{t("No recent activity", "Tidak ada aktivitas terbaru")}</p>
                    ) : (
                      automationEvents.map((item, index) => (
                        <div key={index} className="flex gap-6 group">
@@ -571,12 +604,12 @@ export default function AutomationPage() {
              <section className="rounded-[2.5rem] bg-white dark:bg-slate-900/40 p-10 shadow-xl border border-slate-200/60 dark:border-white/5 backdrop-blur-sm">
                 <div className="flex items-center gap-3 mb-8">
                   <Shield className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                  <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">Safety Guard</h2>
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">{t("Safety Guard", "Pelindung Keamanan")}</h2>
                 </div>
                 <div className="space-y-4">
-                   <SafetyIndicator label="Rain Protection" active={true} icon={<CloudRain className="h-4 w-4" />} />
-                   <SafetyIndicator label="Hardware Fail-safe" active={decision.decisionSource === "SAFETY"} icon={<Shield className="h-4 w-4" />} />
-                   <SafetyIndicator label="Update Cycle" active={true} value={`${settings.updateIntervalSec}s`} icon={<Timer className="h-4 w-4" />} />
+                   <SafetyIndicator label={t("Rain Protection", "Perlindungan Hujan")} active={true} icon={<CloudRain className="h-4 w-4" />} lang={lang} />
+                   <SafetyIndicator label={t("Hardware Fail-safe", "Keamanan Gagal Perangkat Keras")} active={decision.decisionSource === "SAFETY"} icon={<Shield className="h-4 w-4" />} lang={lang} />
+                   <SafetyIndicator label={t("Update Cycle", "Siklus Pembaruan")} active={true} value={`${settings.updateIntervalSec}s`} icon={<Timer className="h-4 w-4" />} lang={lang} />
                 </div>
              </section>
           </aside>
@@ -606,16 +639,15 @@ function QuickActionButton({ label, onClick, active }: { label: string; onClick:
   );
 }
 
-function SafetyIndicator({ label, active, value, icon }: { label: string; active: boolean; value?: string; icon: React.ReactNode }) {
+function SafetyIndicator({ label, active, value, icon, lang = "en" }: { label: string; active: boolean; value?: string; icon: React.ReactNode; lang?: string }) {
+  const t = (en: string, id: string) => (lang === "id" ? id : en);
   return (
     <div className="flex items-center justify-between p-6 rounded-[1.5rem] bg-slate-50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 group hover:border-emerald-500/30 transition-all">
        <div className="flex items-center gap-4">
           <div className="text-slate-400 group-hover:text-emerald-500 transition-colors">{icon}</div>
           <span className="text-[10px] font-black text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 uppercase tracking-widest transition-colors">{label}</span>
        </div>
-       <span className={`text-[10px] font-black uppercase tracking-widest ${active ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>{value ?? (active ? "ACTIVE" : "STANDBY")}</span>
+       <span className={`text-[10px] font-black uppercase tracking-widest ${active ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>{value ?? (active ? t("ACTIVE", "AKTIF") : t("STANDBY", "SIAGA"))}</span>
     </div>
   );
 }
-
-

@@ -1,10 +1,11 @@
 type Props = {
     status: string;
     reason: string;
+    lang?: string;
 };
 
-export default function StatusPanel({ status, reason }: Props) {
-    const isOpen = status === "OPEN";
+export default function StatusPanel({ status, reason, lang = "en" }: Props) {
+    const isOpen = status === "OPEN" || status === "TERBUKA";
     const bgColor = isOpen
         ? "bg-emerald-500/10 border-emerald-500/20 shadow-emerald-500/5 dark:bg-emerald-500/5 dark:border-emerald-500/30"
         : "bg-rose-500/10 border-rose-500/20 shadow-rose-500/5 dark:bg-rose-500/5 dark:border-rose-500/30";
@@ -29,7 +30,7 @@ export default function StatusPanel({ status, reason }: Props) {
             <div className="flex items-center gap-3 mb-6">
                 <div className={`h-2.5 w-2.5 rounded-full ${dotColor} animate-pulse`} aria-hidden="true" />
                 <h2 className={`text-[10px] font-black uppercase tracking-[0.2em] ${statusColor}`}>
-                    System Status
+                    {lang === "id" ? "Status Sistem" : "System Status"}
                 </h2>
             </div>
 

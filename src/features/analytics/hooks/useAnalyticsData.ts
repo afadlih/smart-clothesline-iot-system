@@ -1,6 +1,46 @@
 import { useState, useEffect, useCallback } from "react";
 import { AnalyticsDataService, type TimeRange, type AnalyticsResult } from "@/services/AnalyticsDataService";
+import { SensorData } from "@/models/SensorData";
+import axios from "axios";
 import { logger } from "@/lib/logger";
+
+let hadoopCache: AnalyticsResult | null = null;
+
+function calculateStats(rows: any[]) {
+  if (rows.length === 0) {
+    return {
+      avgTemp: 0,
+      avgHumidity: 0,
+      avgLight: 0,
+      rainCount: 0,
+      dataPoints: 0,
+      openPercentage: 0,
+    };
+  }
+
+  let totalTemp = 0;
+  let totalHumidity = 0;
+  let totalLight = 0;
+  let rainCount = 0;
+  let openCount = 0;
+
+  rows.forEach((row) => {
+    totalTemp += row.temperature || 0;
+    totalHumidity += row.humidity || 0;
+    totalLight += row.light || 0;
+    if (row.rain === true) rainCount++;
+    if (row.status === "OPEN" || row.status === "TERBUKA") openCount++
+  });
+
+  return {
+    avgTemp: totalTemp / rows.length,
+    avgHumidity: totalHumidity / rows.length,
+    avgLight: totalLight / rows.length,
+    rainCount,
+    dataPoints: rows.length,
+    openPercentage: (openCount / rows.length) * 100,
+  }
+}
 
 export function useAnalyticsData(initialRange: TimeRange = "24h") {
   const [range, setRange] = useState<TimeRange>(initialRange);
@@ -8,14 +48,67 @@ export function useAnalyticsData(initialRange: TimeRange = "24h") {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async (selectedRange: TimeRange) => {
+  const fetchData = useCallback(async (selectedRange: TimeRange, forceRefresh = false) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await AnalyticsDataService.getHistoricalData(selectedRange);
-      setResult(data);
-    } catch (err) {
-      const msg = "Failed to load historical data";
+      // Untuk kurun waktu 1h, 6h, dan 24h akan ambil data langsung dari firestore, dan untuk jangka waktu panjang 7d dan 30d maka akan ambil hadoop
+      if (selectedRange === "7d" || selectedRange === "30d") {
+        if (hadoopCache && !forceRefresh) {
+          console.log(`[Analytics] Menggunakan data Hadoop dari cache memori client.`);
+          setResult(hadoopCache);
+          setLoading(false);
+          return;
+        }
+        console.log(`[Analytics] Mengambil data historis dari Hadoop via WebHDFS...`);
+        const response = await axios.get("/api/analytics/report");
+
+        if (!response.data.success) {
+          throw new Error(response.data.error || "Gagal memproses data Hadoop.");
+        }
+
+        const rawRows = response.data.data || [];
+
+        const sensorDataList = rawRows.map((row: any) => {
+          return new SensorData({
+            temp: row.temperature,
+            humidity: row.humidity,
+            light: row.light,
+            rain: row.rain ? 1 : 0,
+            status: row.status,
+            timestamp: new Date(row.receivedAt).toISOString()
+          });
+        });
+
+        const stats = calculateStats(rawRows);
+        let dataSufficiency: "empty" | "minimal" | "usable" | "strong" = "empty";
+        if (rawRows.length > 100) {
+          dataSufficiency = "strong";
+        } else if (rawRows.length >= 10) {
+          dataSufficiency = "usable";
+        } else if (rawRows.length > 0) {
+          dataSufficiency = "minimal";
+        }
+
+        const finalResult: AnalyticsResult = {
+          rangeStart: rawRows.length > 0 ? rawRows[0].receivedAt : Date.now(),
+          rangeEnd: rawRows.length > 0 ? rawRows[rawRows.length - 1].receivedAt : Date.now(),
+          source: "firestore",
+          data: sensorDataList,
+          stats,
+          recordCount: rawRows.length,
+          dataSufficiency
+        };
+
+        hadoopCache = finalResult;
+        setResult(finalResult);
+      } else {
+        console.log(`[Analytics] Mengambil data real-time dari Firestore...`);
+        const data = await AnalyticsDataService.getHistoricalData(selectedRange);
+        setResult(data);
+      }
+    } catch (err: any) {
+      const msg = "Gagal memuat data analitik sistem.";
       setError(msg);
       logger.error("analytics", msg, err);
     } finally {
@@ -33,6 +126,6 @@ export function useAnalyticsData(initialRange: TimeRange = "24h") {
     result,
     loading,
     error,
-    refresh: () => fetchData(range),
+    refresh: () => fetchData(range, true),
   };
 }
