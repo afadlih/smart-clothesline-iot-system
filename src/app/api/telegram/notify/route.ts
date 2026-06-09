@@ -19,6 +19,7 @@ const StandardNotificationSchema = z.object({
   type: z.enum([
     "rain_detected",
     "device_offline",
+    "device_online",
     "telemetry_stale",
     "dry_candidate",
     "config_sync_failed",

@@ -12,6 +12,7 @@ export type TelegramNotificationSeverity = "critical" | "warning" | "info";
 export type TelegramNotificationType =
   | "rain_detected"
   | "device_offline"
+  | "device_online"
   | "telemetry_stale"
   | "dry_candidate"
   | "config_sync_failed"
@@ -60,6 +61,8 @@ const DEFAULT_RECOMMENDED_ACTION: Record<TelegramNotificationType, string> = {
     "Open the dashboard to review the device and close the clothesline if needed.",
   device_offline:
     "Check device power, Wi-Fi/MQTT connection, and latest telemetry from the dashboard.",
+  device_online:
+    "No action required. Device has reconnected and telemetry sync is active.",
   telemetry_stale:
     "Open the dashboard to verify whether the device is still online and sending sensor data.",
   dry_candidate:
@@ -115,6 +118,8 @@ function mapNotificationType(type?: string): "RAIN_ALERT" | "DEVICE_OFFLINE" | "
     case "device_offline":
     case "telemetry_stale":
       return "DEVICE_OFFLINE";
+    case "device_online":
+      return "DEVICE_ONLINE";
     case "dry_candidate":
       return "CLOTHES_DRY";
     case "system_health":
@@ -542,6 +547,7 @@ export class TelegramNotificationService {
     const TYPE_LABELS: Record<TelegramNotificationType, string> = {
       rain_detected: "Rain Detected",
       device_offline: "Device Offline",
+      device_online: "Device Connected",
       telemetry_stale: "Telemetry Stale",
       dry_candidate: "Dry Candidate",
       config_sync_failed: "Config Sync Failed",

@@ -13,6 +13,7 @@ import {
 import OperationalHealthPanel from "@/components/status/OperationalHealth";
 import PageContainer from "@/components/layout/PageContainer";
 import StatusBadge from "@/components/layout/StatusBadge";
+import { translateEventTitle, translateEventDescription } from "@/utils/translateEvent";
 import { useNotificationEngine } from "@/hooks/useNotificationEngine";
 import { useSystemState } from "@/hooks/useSystemState";
 import { PairableDevice } from "../settings/PairingDeviceSettings";
@@ -466,8 +467,15 @@ export default function DashboardScreen({ lang = "en" }: { lang?: "en" | "id" })
                       {idx < (isTimelineExpanded ? 9 : 2) && <div className="h-full w-px bg-slate-200 dark:bg-white/10 mt-1" />}
                     </div>
                     <div className="pb-4">
-                      <p className="text-xs font-bold text-slate-800 dark:text-white leading-none mb-1">{event.title}</p>
-                      <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">{new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                      <p className="text-xs font-bold text-slate-800 dark:text-white leading-none mb-1">
+                        {translateEventTitle(event.title, lang)}
+                      </p>
+                      <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 leading-normal mb-1">
+                        {translateEventDescription(event.description, lang)}
+                      </p>
+                      <p className="text-[9px] font-medium text-slate-400 dark:text-slate-500">
+                        {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
                     </div>
                   </div>
                 ))}

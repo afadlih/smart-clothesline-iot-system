@@ -18,12 +18,15 @@ test("TelegramWebhookHealth - unconfigured bot token", async (t) => {
 });
 
 test("TelegramWebhookHealth - missing webhook", async (t) => {
+  const originalEnabled = process.env.TELEGRAM_WEBHOOK_ENABLED;
+  process.env.TELEGRAM_WEBHOOK_ENABLED = "true";
   const getBotTokenMock = mock.method(TelegramEnvConfigService, "getBotToken", () => "valid-token");
   const getWebhookInfoMock = mock.method(TelegramBotApiService, "getWebhookInfo", async () => {
     return { ok: true, result: { url: "" } };
   });
 
   t.after(() => {
+    process.env.TELEGRAM_WEBHOOK_ENABLED = originalEnabled;
     getBotTokenMock.mock.restore();
     getWebhookInfoMock.mock.restore();
   });
@@ -34,12 +37,15 @@ test("TelegramWebhookHealth - missing webhook", async (t) => {
 });
 
 test("TelegramWebhookHealth - webhook URL mismatch", async (t) => {
+  const originalEnabled = process.env.TELEGRAM_WEBHOOK_ENABLED;
+  process.env.TELEGRAM_WEBHOOK_ENABLED = "true";
   const getBotTokenMock = mock.method(TelegramEnvConfigService, "getBotToken", () => "valid-token");
   const getWebhookInfoMock = mock.method(TelegramBotApiService, "getWebhookInfo", async () => {
     return { ok: true, result: { url: "https://some-other-domain/api/telegram/webhook" } };
   });
 
   t.after(() => {
+    process.env.TELEGRAM_WEBHOOK_ENABLED = originalEnabled;
     getBotTokenMock.mock.restore();
     getWebhookInfoMock.mock.restore();
   });

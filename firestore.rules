@@ -50,7 +50,7 @@ service cloud.firestore {
         );
     }
 
-    function isValidSensorPayload(data) {
+function isValidSensorPayload(data) {
       return isNumber(data.temperature)
         && data.temperature >= -50
         && data.temperature <= 100
@@ -61,18 +61,18 @@ service cloud.firestore {
         && data.light >= 0
         && data.light <= 100000
         && isBoolean(data.rain)
-        && (data.rainVal == null || (isNumber(data.rainVal) && data.rainVal >= 0))
-        && (data.rainRaw == null || (isNumber(data.rainRaw) && data.rainRaw >= 0))
-        && (data.lightRaw == null || (isNumber(data.lightRaw) && data.lightRaw >= 0))
-        && (data.lightThreshold == null || (isNumber(data.lightThreshold) && data.lightThreshold >= 0))
-        && (data.status == null || data.status in ['OPEN', 'CLOSED', 'MOVING', 'OPENING', 'CLOSING', 'RESTARTING', 'FAULT', 'UNKNOWN'])
-        && (data.deviceId == null || (data.deviceId is string && data.deviceId.size() > 0))
-        && (data.mode == null || data.mode in ['AUTO', 'MANUAL', 'SCHEDULE', 'UNKNOWN'])
-        && (data.source == null || data.source in ['STATUS_TOPIC', 'SENSOR_FALLBACK', 'UNKNOWN', 'MQTT', 'WOKWI', 'DEVICE', 'DASHBOARD', 'SCHEDULE'])
-        && (data.receivedAt == null || isValidTimestampMs(data.receivedAt))
-        && (data.deviceTimestamp == null || isValidTimestampMs(data.deviceTimestamp))
-        && (data.deviceUptimeMs == null || (isNumber(data.deviceUptimeMs) && data.deviceUptimeMs >= 0))
-        && (data.createdAt == null || data.createdAt is timestamp || isValidTimestampMs(data.createdAt));
+        && (data.get('rainVal', null) == null || (isNumber(data.rainVal) && data.rainVal >= 0))
+        && (data.get('rainRaw', null) == null || (isNumber(data.rainRaw) && data.rainRaw >= 0))
+        && (data.get('lightRaw', null) == null || (isNumber(data.lightRaw) && data.lightRaw >= 0))
+        && (data.get('lightThreshold', null) == null || (isNumber(data.lightThreshold) && data.lightThreshold >= 0))
+        && (data.get('status', null) == null || data.status in ['OPEN', 'CLOSED', 'MOVING', 'OPENING', 'CLOSING', 'RESTARTING', 'FAULT', 'UNKNOWN'])
+        && (data.get('deviceId', null) == null || (data.deviceId is string && data.deviceId.size() > 0))
+        && (data.get('mode', null) == null || data.mode in ['AUTO', 'MANUAL', 'SCHEDULE', 'UNKNOWN'])
+        && (data.get('source', null) == null || data.source in ['STATUS_TOPIC', 'SENSOR_FALLBACK', 'UNKNOWN', 'MQTT', 'WOKWI', 'DEVICE', 'DASHBOARD', 'SCHEDULE'])
+        && (data.get('receivedAt', null) == null || isValidTimestampMs(data.receivedAt))
+        && (data.get('deviceTimestamp', null) == null || isValidTimestampMs(data.deviceTimestamp))
+        && (data.get('deviceUptimeMs', null) == null || (isNumber(data.deviceUptimeMs) && data.deviceUptimeMs >= 0))
+        && (data.get('createdAt', null) == null || data.createdAt is timestamp || isValidTimestampMs(data.createdAt));
     }
 
     match /sensor_data/{docId} {

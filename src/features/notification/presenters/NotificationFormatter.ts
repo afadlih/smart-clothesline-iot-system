@@ -22,7 +22,7 @@ export class NotificationFormatter {
 
   static formatForTelegram(type: string, customDetails?: string, timestamp?: number): string {
     const template = this.resolveTemplate(type);
-    const timeStr = this.formatIndonesianDateTime(timestamp || Date.now());
+    const timeStr = this.formatDateTimeByLocale(timestamp || Date.now(), "id");
     
     const emojiMap: Record<string, string> = {
       RAIN_ALERT: "🌧",
@@ -36,36 +36,49 @@ export class NotificationFormatter {
     const emoji = emojiMap[template.key] || "🔔";
     
     // For TEST or CUSTOM type, if a custom message is provided, use it
-    let detailsText = template.details;
+    let detailsText = template.details_id;
     if ((template.key === "TEST" || type.toUpperCase() === "CUSTOM") && customDetails) {
       detailsText = customDetails;
-    } else if (customDetails && customDetails !== "-") {
-      // If we have custom details but it's a known template, we can keep the template details
-      // or optionally append/override. But prompt says: "use the same templates".
-      // Let's use template.details as priority for user friendliness.
-      detailsText = template.details;
     }
+
+    const statusMap: Record<string, string> = {
+      RAIN_ALERT: "Hujan",
+      DEVICE_ONLINE: "Terhubung",
+      DEVICE_OFFLINE: "Terputus",
+      CLOTHES_DRY: "Kering",
+      SYSTEM_HEALTH: "Normal",
+      TEST: "Uji Coba",
+    };
+    const statusText = statusMap[template.key] || template.title_id.split(" ")[0];
     
     return `Smart Clothesline Assistant\n
-${emoji} ${template.title}
+${emoji} ${template.title_id}
 
 ${detailsText}
 
-Status: ${template.title.split(" ")[0]}
+Status: ${statusText}
 Waktu: ${timeStr}`;
   }
 
   static formatIndonesianDateTime(timestamp: number): string {
-    const date = new Date(timestamp);
-    const day = String(date.getDate()).padStart(2, '0');
-    const standardMonths = [
-      "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-      "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-    ];
-    const resolvedMonth = standardMonths[date.getMonth()] || "Juni";
-    const year = date.getFullYear();
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${day} ${resolvedMonth} ${year} • ${hours}:${minutes}`;
+    return this.formatDateTimeByLocale(timestamp, "id");
+  }
+
+  static formatDateTimeByLocale(timestamp: number, lang: "en" | "id"): string {
+    const offsetMs = 7 * 60 * 60 * 1000;
+    const date = new Date(timestamp + offsetMs);
+    
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const year = String(date.getUTCFullYear());
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    
+    const monthsEn = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const monthsId = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+    
+    const monthIndex = date.getUTCMonth();
+    const month = lang === "id" ? monthsId[monthIndex] : monthsEn[monthIndex];
+    
+    return `${day} ${month} ${year} • ${hours}:${minutes}`;
   }
 }

@@ -79,6 +79,25 @@ function calculateAutoThreshold(sensor: {
 export default function AutomationPage({ lang = "en" }: { lang?: "en" | "id" }) {
   const t = (en: string, id: string) => (lang === "id" ? id : en);
 
+  const getActionLabel = (action: string) => {
+    switch (action?.toUpperCase()) {
+      case "OPEN": return t("Manual Open", "Buka Manual");
+      case "CLOSE": return t("Manual Close", "Tutup Manual");
+      case "AUTO": return t("System Auto Mode", "Mode Otomatis Sistem");
+      case "MANUAL": return t("MANUAL", "MANUAL");
+      case "RESTART": return t("RESTART", "MULAI ULANG");
+      case "RAIN_DETECTED": return t("Rain Detected - Closing", "Hujan Terdeteksi - Menutup");
+      case "LIGHT_DARK": return t("Darkness Triggered - Closing", "Gelap Terdeteksi - Menutup");
+      case "SAFE_LIGHT": return t("Safe Light - Opening", "Cahaya Aman - Membuka");
+      case "SCHEDULE_START": return t("Schedule Started", "Jadwal Dimulai");
+      case "SCHEDULE_END": return t("Schedule Ended", "Jadwal Berakhir");
+      case "CONFIG_ACK": return t("CONFIG SYNCED", "KONFIGURASI TERSINKRONISASI");
+      case "CONFIG_FAILED": return t("SYNC FAILED", "SINKRONISASI GAGAL");
+      case "STATUS_ACK": return t("STATUS CONFIRMED", "STATUS DIKONFIRMASI");
+      default: return action;
+    }
+  };
+
   const getRainModeLabel = (mode: RainMode) => {
     return mode === "INSTANT" ? t("Instant", "Instan") : t("Tolerant", "Toleran");
   };
@@ -585,18 +604,20 @@ export default function AutomationPage({ lang = "en" }: { lang?: "en" | "id" }) 
                    {automationEvents.length === 0 ? (
                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center py-16 opacity-30">{t("No recent activity", "Tidak ada aktivitas terbaru")}</p>
                    ) : (
-                     automationEvents.map((item, index) => (
-                       <div key={index} className="flex gap-6 group">
-                          <div className="flex flex-col items-center">
-                             <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)] transition-all group-hover:scale-125" />
-                             {index < automationEvents.length - 1 && <div className="h-full w-px bg-slate-200 dark:bg-white/10 mt-2" />}
+                     automationEvents.map((item, index) => {
+                        return (
+                          <div key={index} className="flex gap-6 group">
+                            <div className="flex flex-col items-center">
+                               <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)] transition-all group-hover:scale-125" />
+                               {index < automationEvents.length - 1 && <div className="h-full w-px bg-slate-200 dark:bg-white/10 mt-2" />}
+                            </div>
+                            <div className="pb-6">
+                               <p className="text-xs font-black text-slate-800 dark:text-white leading-none mb-2 uppercase tracking-tight">{getActionLabel(item.action)}</p>
+                               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{formatClock(item.timestamp)}</p>
+                            </div>
                           </div>
-                          <div className="pb-6">
-                             <p className="text-xs font-black text-slate-800 dark:text-white leading-none mb-2 uppercase tracking-tight">{item.action}</p>
-                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{formatClock(item.timestamp)}</p>
-                          </div>
-                       </div>
-                     ))
+                        );
+                     })
                    )}
                 </div>
              </section>
