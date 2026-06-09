@@ -25,7 +25,7 @@ import { NotificationPresenter } from "./presenters/NotificationPresenter";
 type TelegramDeliveryLog = {
   id: string;
   message: string;
-  type: "RAIN_ALERT" | "DEVICE_OFFLINE" | "DEVICE_ONLINE" | "SYSTEM_HEALTH" | "TEST";
+  type: "RAIN_ALERT" | "DEVICE_OFFLINE" | "DEVICE_ONLINE" | "SYSTEM_HEALTH" | "TEST" | "CLOTHES_DRY";
   status: "PENDING" | "SUCCESS" | "FAILED";
   telegramMessageId?: number;
   chatId: string;
@@ -488,10 +488,10 @@ export default function NotificationsPage({ lang = "en" }: { lang?: "en" | "id" 
                             </div>
                             <div>
                               <h4 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">
-                                {userNotification.title}
+                                {lang === "id" ? userNotification.title_id : userNotification.title_en}
                               </h4>
                               <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-                                {userNotification.summary}
+                                {lang === "id" ? userNotification.summary_id : userNotification.summary_en}
                               </p>
                             </div>
                           </div>
@@ -504,7 +504,7 @@ export default function NotificationsPage({ lang = "en" }: { lang?: "en" | "id" 
                                 ? 'text-rose-600 bg-rose-500/10 border-rose-500/25 dark:text-rose-400'
                                 : 'text-amber-600 bg-amber-500/10 border-amber-500/25 dark:text-amber-400'
                             }`}>
-                              [ {presented.status} ]
+                              [ {presented.status === "SUCCESS" ? t("SUCCESS", "BERHASIL") : presented.status === "FAILED" ? t("FAILED", "GAGAL") : t("PENDING", "TERTUNDA")} ]
                             </span>
                             {presented.status === "FAILED" && (
                               <button
@@ -512,7 +512,7 @@ export default function NotificationsPage({ lang = "en" }: { lang?: "en" | "id" 
                                 onClick={() => handleRetryLog(log)}
                                 className="px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white bg-teal-600 hover:bg-teal-700 rounded-full transition-all active:scale-95 disabled:opacity-50"
                               >
-                                {retryingId === log.id ? "MENGULANG..." : "ULANGI"}
+                                {retryingId === log.id ? t("RETRYING...", "MENGULANG...") : t("RETRY", "ULANGI")}
                               </button>
                             )}
                           </div>
@@ -520,12 +520,12 @@ export default function NotificationsPage({ lang = "en" }: { lang?: "en" | "id" 
 
                         <div className="space-y-4">
                           <p className="text-base text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
-                            {userNotification.details}
+                            {lang === "id" ? userNotification.details_id : userNotification.details_en}
                           </p>
                           
                           <div className="flex flex-wrap items-center justify-between pt-2 text-[11px] font-bold text-slate-400">
                             <span className="text-slate-400 dark:text-slate-500">
-                              {userNotification.formattedTime}
+                              {lang === "id" ? userNotification.formattedTimeId : userNotification.formattedTimeEn}
                             </span>
                             
                             <button
@@ -533,7 +533,7 @@ export default function NotificationsPage({ lang = "en" }: { lang?: "en" | "id" 
                               className="flex items-center gap-1.5 text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300 transition-colors uppercase tracking-widest text-[10px]"
                             >
                               <Terminal className="h-3.5 w-3.5" />
-                              {isExpanded ? "Sembunyikan Detail" : "Detail Teknis"}
+                              {isExpanded ? t("Hide Details", "Sembunyikan Detail") : t("Technical Details", "Detail Teknis")}
                               {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                             </button>
                           </div>
@@ -543,7 +543,9 @@ export default function NotificationsPage({ lang = "en" }: { lang?: "en" | "id" 
                             <div className="mt-6 p-5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-300 font-mono text-[11px] space-y-4 animate-fadeIn">
                               <div className="flex items-center gap-2 border-b border-slate-800/80 pb-2">
                                 <Terminal className="h-4 w-4 text-teal-500" />
-                                <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Detail Teknis (Layer A)</span>
+                                <span className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                  {t("Technical Details (Layer A)", "Detail Teknis (Layer A)")}
+                                </span>
                               </div>
                               
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -566,26 +568,26 @@ export default function NotificationsPage({ lang = "en" }: { lang?: "en" | "id" 
                                 
                                 <div className="space-y-1.5">
                                   <div className="flex justify-between border-b border-slate-900 pb-1">
-                                    <span className="text-slate-500">Suhu (Temperature):</span>
+                                    <span className="text-slate-500">{t("Temperature", "Suhu")}:</span>
                                     <span className="text-emerald-400 font-bold">{technicalPayload.sensorValues.temperature}</span>
                                   </div>
                                   <div className="flex justify-between border-b border-slate-900 pb-1">
-                                    <span className="text-slate-500">Kelembapan (Humidity):</span>
+                                    <span className="text-slate-500">{t("Humidity", "Kelembapan")}:</span>
                                     <span className="text-emerald-400 font-bold">{technicalPayload.sensorValues.humidity}</span>
                                   </div>
                                   <div className="flex justify-between border-b border-slate-900 pb-1">
-                                    <span className="text-slate-500">Intensitas Cahaya (Light):</span>
+                                    <span className="text-slate-500">{t("Light Intensity", "Intensitas Cahaya")}:</span>
                                     <span className="text-emerald-400 font-bold">{technicalPayload.sensorValues.light}</span>
                                   </div>
                                   <div className="flex justify-between border-b border-slate-900 pb-1">
-                                    <span className="text-slate-500">Status Hujan (Rain):</span>
+                                    <span className="text-slate-500">{t("Rain Status", "Status Hujan")}:</span>
                                     <span className="text-emerald-400 font-bold">{technicalPayload.sensorValues.rain}</span>
                                   </div>
                                 </div>
                               </div>
 
                               <div className="space-y-1.5 pt-2 border-t border-slate-900">
-                                <span className="text-slate-500 block">Raw Payload JSON:</span>
+                                <span className="text-slate-500 block">{t("Raw Payload JSON:", "Payload JSON Mentah:")}</span>
                                 <pre className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 overflow-x-auto text-[10px] max-h-[150px] custom-scrollbar">
                                   {technicalPayload.debugInfo.rawPayloadJson}
                                 </pre>
@@ -647,7 +649,7 @@ export default function NotificationsPage({ lang = "en" }: { lang?: "en" | "id" 
                 <div className="flex items-center justify-between p-4 rounded-2xl bg-[#f8fafc] dark:bg-slate-950 border border-slate-200/50 dark:border-white/5">
                   <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t("Last Status", "Status Terakhir")}</span>
                   <span className={`text-[10px] font-black uppercase tracking-widest ${lastDeliveryStatus === 'SUCCESS' ? 'text-emerald-500' : lastDeliveryStatus === 'FAILED' ? 'text-rose-500' : 'text-slate-400'}`}>
-                    {lastDeliveryStatus ? t(lastDeliveryStatus, lastDeliveryStatus) : t("NONE", "TIDAK ADA")}
+                    {lastDeliveryStatus ? t(lastDeliveryStatus, lastDeliveryStatus === "SUCCESS" ? "BERHASIL" : lastDeliveryStatus === "FAILED" ? "GAGAL" : lastDeliveryStatus) : t("NONE", "TIDAK ADA")}
                   </span>
                 </div>
                 {lastDeliveryAt && (

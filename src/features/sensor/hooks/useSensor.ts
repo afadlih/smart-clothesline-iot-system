@@ -168,6 +168,7 @@ const ACTIVE_DEVICE_STORAGE_KEY = "smart-clothesline-active-device-id-v1";
 let lastOfflineAlertAt = 0;
 let previousDeviceStatus: DeviceStatus | null = null;
 let offlineAlertRaised = false;
+let hookMountedAt = 0;
 let lastConfigPublishAt = 0;
 let lastConfigPublishKey: string | null = null;
 const lastTelegramAlertAtByKey: Record<string, number> = {};
@@ -608,6 +609,7 @@ async function sendTelegramAlert(title: string, description: string, alertKey: s
     if (alertKey === "alert-rain-open") notificationType = "rain_detected";
     if (alertKey === "alert-dry-clothes") notificationType = "dry_candidate";
     if (alertKey === "alert-device-offline") notificationType = "device_offline";
+    if (alertKey === "alert-device-online") notificationType = "device_online";
 
     lastTelegramAlertAtByKey[alertKey] = now;
     try {
@@ -660,9 +662,21 @@ function detectRealtimeAlerts(sensor: SensorData | null, status: DeviceStatus | 
 }
 
 function detectOfflineAlert(now: number): void {
+    if (hookMountedAt > 0 && now - hookMountedAt < 15_000) {
+        return;
+    }
     const lastFreshAt = Math.max(useMainStore.getState().lastSensorUpdate ?? 0, useMainStore.getState().lastStatusUpdate ?? 0);
     const isFresh = lastFreshAt > 0 && now - lastFreshAt < FRESHNESS_MS;
     if (isFresh) {
+        if (offlineAlertRaised) {
+            offlineAlertRaised = false;
+            pushAlertIfNeeded(
+                "Device is online",
+                "Device has reconnected and telemetry sync is restored.",
+                "alert-device-online",
+                now,
+            );
+        }
         offlineAlertRaised = false;
         return;
     }
@@ -1243,6 +1257,7 @@ export function useSensor() {
 
 
     useEffect(() => {
+        hookMountedAt = Date.now();
         let active = true;
         const refreshSchedules = async () => {
             const activeDeviceId = getActiveDeviceId();

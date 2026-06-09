@@ -11,7 +11,8 @@ export interface PresentedNotification {
   
   // Layer B: User Notification
   userNotification: FriendlyNotification & {
-    formattedTime: string;
+    formattedTimeEn: string;
+    formattedTimeId: string;
   };
   
   // Layer A: Technical Payload
@@ -48,14 +49,16 @@ export class NotificationPresenter {
     
     // Format timestamp
     let rawTimestamp = "-";
-    let formattedTime = "-";
+    let formattedTimeEn = "-";
+    let formattedTimeId = "-";
     if (log.createdAt) {
       const ms = typeof log.createdAt.toMillis === "function" 
         ? log.createdAt.toMillis() 
         : Number(log.createdAt);
       if (!isNaN(ms)) {
         rawTimestamp = new Date(ms).toISOString();
-        formattedTime = NotificationFormatter.formatIndonesianDateTime(ms);
+        formattedTimeEn = NotificationFormatter.formatDateTimeByLocale(ms, "en");
+        formattedTimeId = NotificationFormatter.formatDateTimeByLocale(ms, "id");
       }
     }
 
@@ -129,13 +132,17 @@ export class NotificationPresenter {
       deliveredAt: log.deliveredAt,
       error: log.error,
       userNotification: {
-        title: template.title,
-        summary: template.summary,
-        details: template.details,
+        title_en: template.title_en,
+        title_id: template.title_id,
+        summary_en: template.summary_en,
+        summary_id: template.summary_id,
+        details_en: template.details_en,
+        details_id: template.details_id,
         severity: template.severity,
         icon: template.icon,
         displayColor: template.displayColor,
-        formattedTime,
+        formattedTimeEn,
+        formattedTimeId,
       },
       technicalPayload: {
         deviceId,

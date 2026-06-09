@@ -19,6 +19,7 @@ import {
 import StatusBadge from "@/components/layout/StatusBadge";
 import { useSystemState } from "@/hooks/useSystemState";
 import { useNotificationEngine } from "@/hooks/useNotificationEngine";
+import { translateEventTitle, translateEventDescription } from "@/utils/translateEvent";
 import { useThemeStore } from "@/stores/themeStore";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -357,10 +358,10 @@ export default function TopBar({ onHamburgerClick, isMobileMenuOpen = false }: T
                         className="rounded-xl px-4 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-white/5"
                       >
                         <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                          {item.title}
+                          {translateEventTitle(item.title, lang)}
                         </p>
                         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                          {item.description}
+                          {translateEventDescription(item.description, lang)}
                         </p>
                         <p className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                           {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
