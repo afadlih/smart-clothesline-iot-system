@@ -9,10 +9,9 @@ import {
   RefreshCcw, 
   CheckCircle, 
   XCircle, 
-  Clock, 
   CloudRain, 
   Sun, 
-  Heart, 
+  Heart,  
   ChevronDown, 
   ChevronUp, 
   Terminal 
@@ -319,47 +318,7 @@ export default function NotificationsPage({ lang = "en" }: { lang?: "en" | "id" 
         ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
         : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20";
 
-  const getStatusBadge = (status: string) => {
-    const s = status.toUpperCase();
-    if (s === "SUCCESS") {
-      return (
-        <span className="flex items-center gap-1 text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2.5 py-1 rounded-full uppercase tracking-widest border border-emerald-500/20">
-          <CheckCircle size={10} />
-          {t("SUCCESS", "BERHASIL")}
-        </span>
-      );
-    }
-    if (s === "FAILED") {
-      return (
-        <span className="flex items-center gap-1 text-[10px] font-black text-rose-500 bg-rose-500/10 px-2.5 py-1 rounded-full uppercase tracking-widest border border-rose-500/20">
-          <XCircle size={10} />
-          {t("FAILED", "GAGAL")}
-        </span>
-      );
-    }
-    return (
-      <span className="flex items-center gap-1 text-[10px] font-black text-amber-500 bg-amber-500/10 px-2.5 py-1 rounded-full uppercase tracking-widest border border-amber-500/20">
-        <Clock size={10} className="animate-spin" />
-        {t("PENDING", "TERTUNDA")}
-      </span>
-    );
-  };
 
-  const getTypeLabel = (type: string) => {
-    switch (type) {
-      case "RAIN_ALERT":
-        return t("Rain Alert", "Peringatan Hujan");
-      case "DEVICE_OFFLINE":
-        return t("Device Offline", "Alat Terputus");
-      case "DEVICE_ONLINE":
-        return t("Device Online", "Alat Terhubung");
-      case "SYSTEM_HEALTH":
-        return t("System Health", "Kesehatan Sistem");
-      case "TEST":
-      default:
-        return t("Test Message", "Pesan Uji");
-    }
-  };
 
   return (
     <main className="min-h-screen bg-[#f8fafc] dark:bg-[#020617] transition-colors duration-500 pb-20">
@@ -517,141 +476,122 @@ export default function NotificationsPage({ lang = "en" }: { lang?: "en" | "id" 
                     return (
                       <div
                         key={log.id}
-                        className={`p-6 rounded-3xl border transition-all duration-300 shadow-sm hover:shadow-md ${severityBg}`}
+                        className={`group relative overflow-hidden p-6 md:p-8 rounded-[2rem] border transition-all duration-500 hover:scale-[1.01] hover:shadow-xl ${severityBg} backdrop-blur-sm flex flex-col gap-4`}
                       >
-                        <div className="flex items-start gap-4">
-                          <div className={`p-3 rounded-2xl ${iconBg} shrink-0`}>
-                            <IconComponent className="h-6 w-6" />
-                          </div>
-                          
-                          <div className="flex-1 min-w-0 space-y-1">
-                            <div className="flex items-center justify-between gap-4">
-                              <h4 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">
-                                {lang === "id" ? userNotification.title : getTypeLabel(log.type)}
+                        {/* Soft decorative background glow */}
+                        <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-current opacity-[0.03] blur-2xl group-hover:scale-125 transition-all duration-700" />
+                        
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-white/5">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-3 rounded-2xl ${iconBg} transition-transform duration-300 group-hover:rotate-12`}>
+                              <IconComponent className="h-6 w-6" />
+                            </div>
+                            <div>
+                              <h4 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">
+                                {userNotification.title}
                               </h4>
-                              <div className="flex items-center gap-2">
-                                {getStatusBadge(log.status)}
-                                {log.status === "FAILED" && (
-                                  <button
-                                    disabled={retryingId === log.id}
-                                    onClick={() => handleRetryLog(log)}
-                                    className="px-3 py-1 text-[9px] font-black uppercase tracking-widest text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors active:scale-95 disabled:opacity-50"
-                                  >
-                                    {retryingId === log.id ? t("Retry...", "Mengulang...") : t("Retry", "Ulangi")}
-                                  </button>
-                                )}
-                              </div>
+                              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                                {userNotification.summary}
+                              </p>
                             </div>
-                            
-                            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
-                              {lang === "id" ? userNotification.details : userNotification.summary}
-                            </p>
-                            
-                            <div className="flex flex-wrap items-center justify-between pt-3 border-t border-slate-100 dark:border-white/5 text-[11px] font-bold text-slate-400">
-                              <div className="flex items-center gap-1">
-                                <span>Status:</span>
-                                <span className={`uppercase ${log.status === 'SUCCESS' ? 'text-emerald-500' : 'text-slate-500'}`}>
-                                  {log.status === 'SUCCESS' ? t("Online", "Aktif") : log.status}
-                                </span>
-                                <span className="mx-1.5">•</span>
-                                <span>{userNotification.formattedTime}</span>
-                              </div>
-                              
+                          </div>
+
+                          <div className="flex items-center gap-2 self-start md:self-auto">
+                            <span className={`text-[10px] font-black tracking-widest px-3 py-1 rounded-full border ${
+                              presented.status === 'SUCCESS'
+                                ? 'text-emerald-600 bg-emerald-500/10 border-emerald-500/25 dark:text-emerald-400'
+                                : presented.status === 'FAILED'
+                                ? 'text-rose-600 bg-rose-500/10 border-rose-500/25 dark:text-rose-400'
+                                : 'text-amber-600 bg-amber-500/10 border-amber-500/25 dark:text-amber-400'
+                            }`}>
+                              [ {presented.status} ]
+                            </span>
+                            {presented.status === "FAILED" && (
                               <button
-                                onClick={() => toggleLogExpand(log.id)}
-                                className="flex items-center gap-1 text-teal-600 hover:text-teal-700 transition-colors uppercase tracking-wider text-[10px]"
+                                disabled={retryingId === log.id}
+                                onClick={() => handleRetryLog(log)}
+                                className="px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white bg-teal-600 hover:bg-teal-700 rounded-full transition-all active:scale-95 disabled:opacity-50"
                               >
-                                <Terminal className="h-3 w-3" />
-                                {isExpanded ? t("Hide Details", "Sembunyikan Detail") : t("View Details", "Lihat Detail")}
-                                {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                {retryingId === log.id ? "MENGULANG..." : "ULANGI"}
                               </button>
-                            </div>
-
-                            {/* Collapsible Developer Details Panel */}
-                            {isExpanded && (
-                              <div className="mt-4 p-5 rounded-2xl bg-[#020617] border border-slate-800 text-slate-300 font-mono text-[11px] space-y-4 animate-fadeIn">
-                                <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
-                                  <Terminal className="h-4 w-4 text-teal-500" />
-                                  <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Developer Details (Layer A)</span>
-                                </div>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  <div className="space-y-1.5">
-                                    <div className="flex justify-between border-b border-slate-900 pb-1">
-                                      <span className="text-slate-500">Device ID:</span>
-                                      <span className="text-white">{technicalPayload.deviceId}</span>
-                                    </div>
-                                    <div className="flex justify-between border-b border-slate-900 pb-1">
-                                      <span className="text-slate-500">Firestore ID:</span>
-                                      <span className="text-slate-400 truncate max-w-[150px]" title={technicalPayload.debugInfo.firestoreId}>
-                                        {technicalPayload.debugInfo.firestoreId}
-                                      </span>
-                                    </div>
-                                    <div className="flex justify-between border-b border-slate-900 pb-1">
-                                      <span className="text-slate-500">Telegram Msg ID:</span>
-                                      <span className="text-slate-400">{technicalPayload.debugInfo.telegramMessageId || "-"}</span>
-                                    </div>
-                                    <div className="flex justify-between border-b border-slate-900 pb-1">
-                                      <span className="text-slate-500">Chat ID:</span>
-                                      <span className="text-slate-400">{technicalPayload.debugInfo.chatId}</span>
-                                    </div>
-                                  </div>
-                                  
-                                  <div className="space-y-1.5">
-                                    <div className="flex justify-between border-b border-slate-900 pb-1">
-                                      <span className="text-slate-500">Temperature:</span>
-                                      <span className="text-emerald-400">{technicalPayload.sensorValues.temperature}</span>
-                                    </div>
-                                    <div className="flex justify-between border-b border-slate-900 pb-1">
-                                      <span className="text-slate-500">Humidity:</span>
-                                      <span className="text-emerald-400">{technicalPayload.sensorValues.humidity}</span>
-                                    </div>
-                                    <div className="flex justify-between border-b border-slate-900 pb-1">
-                                      <span className="text-slate-500">Light Intensity:</span>
-                                      <span className="text-emerald-400">{technicalPayload.sensorValues.light}</span>
-                                    </div>
-                                    <div className="flex justify-between border-b border-slate-900 pb-1">
-                                      <span className="text-slate-500">Rain Status:</span>
-                                      <span className="text-emerald-400">{technicalPayload.sensorValues.rain}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                                
-                                {technicalPayload.debugInfo.localhostUrls.length > 0 && (
-                                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px]">
-                                    <p className="font-bold uppercase tracking-wider mb-1">Warning: Localhost URLs Detected</p>
-                                    <ul className="list-disc list-inside space-y-0.5 font-sans">
-                                      {technicalPayload.debugInfo.localhostUrls.map((url, i) => (
-                                        <li key={i} className="truncate">{url}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-
-                                <div className="space-y-1">
-                                  <span className="text-slate-500">MQTT Metadata:</span>
-                                  <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-900 text-slate-400 whitespace-pre-wrap truncate">
-                                    Topic: {technicalPayload.mqttMetadata?.topic}
-                                    {"\n"}Broker: {technicalPayload.mqttMetadata?.broker}
-                                  </div>
-                                </div>
-
-                                <div className="space-y-1">
-                                  <span className="text-slate-500">Raw Message Payload:</span>
-                                  <pre className="p-3 rounded-xl bg-slate-950 border border-slate-900 text-slate-400 overflow-x-auto text-[10px] max-h-[150px]">
-                                    {technicalPayload.rawMessage}
-                                  </pre>
-                                </div>
-
-                                <div className="space-y-1">
-                                  <span className="text-slate-500">Firestore Raw JSON:</span>
-                                  <pre className="p-3 rounded-xl bg-slate-950 border border-slate-900 text-slate-400 overflow-x-auto text-[10px] max-h-[150px]">
-                                    {technicalPayload.debugInfo.rawPayloadJson}
-                                  </pre>
-                                </div>
-                              </div>
                             )}
                           </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <p className="text-base text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+                            {userNotification.details}
+                          </p>
+                          
+                          <div className="flex flex-wrap items-center justify-between pt-2 text-[11px] font-bold text-slate-400">
+                            <span className="text-slate-400 dark:text-slate-500">
+                              {userNotification.formattedTime}
+                            </span>
+                            
+                            <button
+                              onClick={() => toggleLogExpand(log.id)}
+                              className="flex items-center gap-1.5 text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300 transition-colors uppercase tracking-widest text-[10px]"
+                            >
+                              <Terminal className="h-3.5 w-3.5" />
+                              {isExpanded ? "Sembunyikan Detail" : "Detail Teknis"}
+                              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </button>
+                          </div>
+
+                          {/* Collapsible Technical Details Accordion */}
+                          {isExpanded && (
+                            <div className="mt-6 p-5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-300 font-mono text-[11px] space-y-4 animate-fadeIn">
+                              <div className="flex items-center gap-2 border-b border-slate-800/80 pb-2">
+                                <Terminal className="h-4 w-4 text-teal-500" />
+                                <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Detail Teknis (Layer A)</span>
+                              </div>
+                              
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                  <div className="flex justify-between border-b border-slate-900 pb-1">
+                                    <span className="text-slate-500">Device ID:</span>
+                                    <span className="text-white font-medium">{technicalPayload.deviceId}</span>
+                                  </div>
+                                  <div className="flex justify-between border-b border-slate-900 pb-1">
+                                    <span className="text-slate-500">Firestore ID:</span>
+                                    <span className="text-slate-400 truncate max-w-[180px]" title={technicalPayload.debugInfo.firestoreId}>
+                                      {technicalPayload.debugInfo.firestoreId}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between border-b border-slate-900 pb-1">
+                                    <span className="text-slate-500">Telegram Message ID:</span>
+                                    <span className="text-slate-400">{technicalPayload.debugInfo.telegramMessageId || "-"}</span>
+                                  </div>
+                                </div>
+                                
+                                <div className="space-y-1.5">
+                                  <div className="flex justify-between border-b border-slate-900 pb-1">
+                                    <span className="text-slate-500">Suhu (Temperature):</span>
+                                    <span className="text-emerald-400 font-bold">{technicalPayload.sensorValues.temperature}</span>
+                                  </div>
+                                  <div className="flex justify-between border-b border-slate-900 pb-1">
+                                    <span className="text-slate-500">Kelembapan (Humidity):</span>
+                                    <span className="text-emerald-400 font-bold">{technicalPayload.sensorValues.humidity}</span>
+                                  </div>
+                                  <div className="flex justify-between border-b border-slate-900 pb-1">
+                                    <span className="text-slate-500">Intensitas Cahaya (Light):</span>
+                                    <span className="text-emerald-400 font-bold">{technicalPayload.sensorValues.light}</span>
+                                  </div>
+                                  <div className="flex justify-between border-b border-slate-900 pb-1">
+                                    <span className="text-slate-500">Status Hujan (Rain):</span>
+                                    <span className="text-emerald-400 font-bold">{technicalPayload.sensorValues.rain}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="space-y-1.5 pt-2 border-t border-slate-900">
+                                <span className="text-slate-500 block">Raw Payload JSON:</span>
+                                <pre className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 overflow-x-auto text-[10px] max-h-[150px] custom-scrollbar">
+                                  {technicalPayload.debugInfo.rawPayloadJson}
+                                </pre>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
