@@ -110,6 +110,12 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /telegram_deliveries/{docId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

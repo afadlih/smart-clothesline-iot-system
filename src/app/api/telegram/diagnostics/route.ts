@@ -3,10 +3,11 @@ import { TelegramEnvConfigService } from "@/services/telegram/TelegramEnvConfigS
 import {
   getWebhookEnvironmentLabel,
   isTelegramWebhookEnabled,
+  resolveAppBaseUrl,
 } from "@/services/telegram/TelegramWebhookUrlResolver";
+import { TelegramWebhookHealth } from "@/services/telegram/TelegramWebhookHealth";
 import { TelegramBotApiService } from "@/services/TelegramBotApiService";
 import { logger } from "@/lib/logger";
-import { TelegramWebhookSyncService } from "@/services/telegram/TelegramWebhookSyncService";
 import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -14,14 +15,17 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
-    const syncStatus = await TelegramWebhookSyncService.getStatus(request);
-    
     const botToken = TelegramEnvConfigService.getBotToken();
     const defaultChatId = TelegramEnvConfigService.getDefaultChatId();
     const groupModeEnabled = TelegramEnvConfigService.isGroupModeEnabled();
     const allowedGroupIds = TelegramEnvConfigService.getAllowedGroupIds();
     const webhookEnabled = isTelegramWebhookEnabled();
     const vercelEnv = getWebhookEnvironmentLabel();
+    const appBaseUrl = resolveAppBaseUrl(request);
+
+    // Call our new webhook health service
+    const health = await TelegramWebhookHealth.check(request);
+    const webhookHealthy = health.healthy;
 
     let botInfo: unknown = null;
     if (botToken) {
@@ -41,23 +45,63 @@ export async function GET(request: NextRequest) {
       firestoreTelemetryContextReadable = false;
     }
 
-    const botConfigured = Boolean(botToken);
-    const defaultChatConfigured = Boolean(defaultChatId);
-    const outboundNotificationsCanWork = botConfigured && defaultChatConfigured;
+    // Retrieve last delivery stats
+    let lastDeliveryStatus: string | null = null;
+    let lastDeliveryAt: string | null = null;
+    let lastError: string | null = null;
 
-    const warnings = [...syncStatus.warnings];
+    try {
+      const qDeliveries = query(
+        collection(db, "telegram_deliveries"),
+        orderBy("createdAt", "desc"),
+        limit(1)
+      );
+      const snapDeliveries = await getDocs(qDeliveries);
+      if (!snapDeliveries.empty) {
+        const lastDoc = snapDeliveries.docs[0].data();
+        lastDeliveryStatus = lastDoc.status || null;
+        
+        let deliveryTimeMs = 0;
+        if (lastDoc.deliveredAt && typeof lastDoc.deliveredAt === "object" && "toMillis" in lastDoc.deliveredAt) {
+          deliveryTimeMs = lastDoc.deliveredAt.toMillis();
+        } else if (lastDoc.createdAt && typeof lastDoc.createdAt === "object" && "toMillis" in lastDoc.createdAt) {
+          deliveryTimeMs = lastDoc.createdAt.toMillis();
+        }
+        
+        if (deliveryTimeMs > 0) {
+          lastDeliveryAt = new Date(deliveryTimeMs).toISOString();
+        }
+        lastError = lastDoc.error || null;
+      }
+    } catch (err) {
+      logger.error("telegram", "Failed to fetch last delivery in diagnostics", err);
+    }
+
+    const botConfigured = Boolean(botToken);
+    const chatIdConfigured = Boolean(defaultChatId);
+    const outboundNotificationsCanWork = botConfigured && chatIdConfigured;
+
+    const warnings: string[] = [];
     if (!botConfigured) warnings.push("TELEGRAM_BOT_TOKEN is not configured.");
-    if (!defaultChatConfigured) warnings.push("TELEGRAM_CHAT_ID is not configured.");
+    if (!chatIdConfigured) warnings.push("TELEGRAM_CHAT_ID is not configured.");
     if (!latestTelemetryAvailable) warnings.push("No telemetry data found in Firestore.");
+    if (health.mismatchReason) warnings.push(health.mismatchReason);
 
     return NextResponse.json({
       ok: true,
       telegramMode: "notification-only",
       botConfigured,
-      defaultChatConfigured,
+      chatIdConfigured,
+      defaultChatConfigured: chatIdConfigured,
       outboundNotificationsCanWork,
+      defaultChatId, // expose for UI client test center
+      webhookHealthy,
+      webhookUrlMatch: webhookHealthy, // legacy compatibility
+      lastDeliveryStatus,
+      lastDeliveryAt,
+      lastError,
+      appBaseUrl,
       webhookEnabled,
-      webhookUrlMatch: syncStatus.webhookUrlMatch,
       groupNotificationsEnabled: groupModeEnabled,
       allowedGroupsCount: allowedGroupIds.length,
       firestoreTelemetryContextReadable,
@@ -65,10 +109,10 @@ export async function GET(request: NextRequest) {
       vercelEnv,
       botInfo,
       warnings,
+      webhookStatus: health.status,
     });
   } catch (error) {
     logger.error("telegram", "Diagnostics failed", error);
     return NextResponse.json({ ok: false, error: String(error) }, { status: 500 });
   }
 }
-

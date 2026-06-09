@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from "react";
-import { SensorData } from "@/models/SensorData";
 import { FirestoreService } from "@/services/FirestoreService";
 import { useMainStore } from "@/stores/useMainStore";
 
