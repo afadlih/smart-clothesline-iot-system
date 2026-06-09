@@ -30,6 +30,25 @@ service cloud.firestore {
           (isNumber(data.startHour) && isNumber(data.endHour))
         );
     }
+    
+    function isValidOptionalTimestampMs(v) {
+      return v == null || isValidTimestampMs(v);
+    }
+    
+    function isValidUserDevice(data) {
+      return data.deviceId is string
+        && data.deviceId.size() > 0
+        && data.deviceName is string
+        && data.deviceName.size() > 0
+        && data.source in ['esp32', 'wokwi']
+        && data.pairingCode is string
+        && isValidTimestampMs(data.pairedAt)
+        && isValidOptionalTimestampMs(data.get('lastSeenAt', null))
+        && (
+          data.get('status', null) == null
+          || data.status in ['online', 'offline', 'unknown']
+        );
+    }
 
     function isValidSensorPayload(data) {
       return isNumber(data.temperature)
@@ -69,15 +88,23 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    match /users/{userId}/devices/{deviceId}/schedules/{scheduleId} {
+    match /users/{userId}/devices/{deviceId} {
       allow read: if isOwner(userId);
       allow create, update: if isOwner(userId)
-        && isValidSchedule(request.resource.data)
-        && (
-          request.resource.data.deviceId == null
-          || request.resource.data.deviceId == deviceId
-        );
+        && request.resource.data.deviceId == deviceId
+        && isValidUserDevice(request.resource.data);
       allow delete: if isOwner(userId);
+      
+      match /schedules/{scheduleId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidSchedule(request.resource.data)
+          && (
+            request.resource.data.deviceId == null
+            || request.resource.data.deviceId == deviceId
+          );
+        allow delete: if isOwner(userId);
+      }
     }
 
     match /schedules/{docId} {
