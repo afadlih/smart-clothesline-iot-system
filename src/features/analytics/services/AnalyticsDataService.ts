@@ -1,4 +1,4 @@
-import { collection, getDocs, limit, query } from "firebase/firestore";
+import { collection, getDocs, limit, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { SensorData } from "@/models/SensorData";
 import { logger } from "@/lib/logger";
@@ -56,7 +56,7 @@ export class AnalyticsDataService {
     return value;
   }
 
-  static async getHistoricalData(range: TimeRange): Promise<AnalyticsResult> {
+  static async getHistoricalData(range: TimeRange, deviceId: string): Promise<AnalyticsResult> {
     try {
       const now = Date.now();
       let startTime = now - 60 * 60 * 1000; // default 1h
@@ -72,7 +72,8 @@ export class AnalyticsDataService {
       // Fetch more data than needed to ensure we cover the time range even with missing createdAt fields
       const q = query(
         collection(db, this.COLLECTION),
-        limit(Math.max(rangeLimit * 2, 5000)) 
+        limit(Math.max(rangeLimit * 2, 5000)), 
+        where("deviceId", "==", deviceId)
       );
 
       const snapshot = await getDocs(q);
