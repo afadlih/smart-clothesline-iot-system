@@ -9,6 +9,7 @@ import {
   query,
   setDoc,
   serverTimestamp,
+  where,
   type QueryConstraint,
   type Timestamp,
 } from "firebase/firestore";
@@ -86,11 +87,15 @@ export class FirestoreService {
     }
   }
 
-  static async getSensorHistory(maxItems: number = 20): Promise<SensorData[]> {
+  static async getSensorHistory(maxItems: number = 20, deviceId: string): Promise<SensorData[]> {
     const constraints: QueryConstraint[] = [];
 
     // Note: Removed orderBy("createdAt") because it filters out documents missing that field.
     // We will sort the results client-side instead to ensure ALL data is included.
+
+    if (deviceId) {
+      constraints.push(where("deviceId", "==", deviceId));
+    }
 
     if (maxItems > 0) {
       constraints.push(orderBy("createdAt", "desc"));

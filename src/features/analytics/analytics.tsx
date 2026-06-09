@@ -16,7 +16,7 @@ import {
 import { BarChart3, Download, RefreshCw, TrendingUp, Zap, Thermometer, Droplets, Sun as SunIcon, ShieldCheck, Database } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 import { useAnalyticsData } from "@/features/analytics/hooks/useAnalyticsData";
-import type { TimeRange } from "@/services/AnalyticsDataService";
+import type { TimeRange } from "@/features/analytics/services/AnalyticsDataService";
 
 function formatMetric(value: number | null | undefined, suffix = "", digits = 1): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "--";
