@@ -57,17 +57,7 @@ Waktu: ${timeStr}`;
 
   static formatIndonesianDateTime(timestamp: number): string {
     const date = new Date(timestamp);
-    const months = [
-      "Juni", // Mocking default month or writing full array
-      "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-      "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-    ];
-    // getMonth() returns 0-11, so months[date.getMonth() + 1] would be wrong unless array is offset or indexed correctly.
-    // Let's index correctly:
     const day = String(date.getDate()).padStart(2, '0');
-    const month = months[date.getMonth() + 1] || months[date.getMonth() === 5 ? 0 : date.getMonth() + 1]; 
-    // Wait, date.getMonth() returns 0 for Jan, 11 for Dec.
-    // Let's write the correct standard month array:
     const standardMonths = [
       "Januari", "Februari", "Maret", "April", "Mei", "Juni",
       "Juli", "Agustus", "September", "Oktober", "November", "Desember"
