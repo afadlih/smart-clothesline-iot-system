@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { FirestoreService } from "@/services/FirestoreService";
 import { useMainStore } from "@/stores/useMainStore";
+import { getActiveDeviceId } from "@/features/sensor/hooks/useSensor";
 
 // Tentukan durasi masa berlaku cache (misal: 5 menit)
 const CACHE_DURATION_MS = 5 * 60 * 1000;
@@ -10,6 +11,7 @@ export function useSensorHistory(limit: number = 20) {
   const cache = useMainStore((state) => state.firestoreHistoryCache);
   const lastFetched = useMainStore((state) => state.historyLastFetchedAt);
   const updateState = useMainStore((state) => state.updateState);
+  const activeDeviceId = getActiveDeviceId() ?? "--";
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +25,7 @@ export function useSensorHistory(limit: number = 20) {
     setLoading(true);
     setError(null);
     try {
-      const data = await FirestoreService.getSensorHistory(limit);
+      const data = await FirestoreService.getSensorHistory(limit, activeDeviceId);
       
       // Simpan data hasil fetch ke Zustand Cache
       updateState((draft) => {
@@ -35,7 +37,7 @@ export function useSensorHistory(limit: number = 20) {
     } finally {
       setLoading(false);
     }
-  }, [limit, cache, lastFetched, updateState]);
+  }, [limit, cache, lastFetched, updateState, activeDeviceId]);
   useEffect(() => {
     void fetchHistory();
   }, [fetchHistory]);

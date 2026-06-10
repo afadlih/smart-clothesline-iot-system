@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
-import { AnalyticsDataService, type TimeRange, type AnalyticsResult } from "@/services/AnalyticsDataService";
+import { AnalyticsDataService, type TimeRange, type AnalyticsResult } from "@/features/analytics/services/AnalyticsDataService";
 import { SensorData } from "@/models/SensorData";
 import axios from "axios";
 import { logger } from "@/lib/logger";
 
-let hadoopCache: AnalyticsResult | null = null;
+const hadoopCache: Record<string, AnalyticsResult> = {};
 
 function calculateStats(rows: any[]) {
   if (rows.length === 0) {
@@ -42,6 +42,11 @@ function calculateStats(rows: any[]) {
   }
 }
 
+const getActiveDeviceId = () => {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("smart-clothesline-active-device-id-v1")
+}
+
 export function useAnalyticsData(initialRange: TimeRange = "24h") {
   const [range, setRange] = useState<TimeRange>(initialRange);
   const [result, setResult] = useState<AnalyticsResult | null>(null);
@@ -49,19 +54,29 @@ export function useAnalyticsData(initialRange: TimeRange = "24h") {
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async (selectedRange: TimeRange, forceRefresh = false) => {
+    const activeDeviceId = getActiveDeviceId();
+
+    if (!activeDeviceId) {
+      setError("Silakan pilih perangkat IoT Anda terlebih dahulu.");
+      setLoading(false);
+      return;
+    }
+
+    const cacheKey = `${activeDeviceId}_${selectedRange}`;
+
     setLoading(true);
     setError(null);
     try {
       // Untuk kurun waktu 1h, 6h, dan 24h akan ambil data langsung dari firestore, dan untuk jangka waktu panjang 7d dan 30d maka akan ambil hadoop
       if (selectedRange === "7d" || selectedRange === "30d") {
-        if (hadoopCache && !forceRefresh) {
+        if (hadoopCache[cacheKey] && !forceRefresh) {
           console.log(`[Analytics] Menggunakan data Hadoop dari cache memori client.`);
-          setResult(hadoopCache);
+          setResult(hadoopCache[cacheKey]);
           setLoading(false);
           return;
         }
-        console.log(`[Analytics] Mengambil data historis dari Hadoop via WebHDFS...`);
-        const response = await axios.get("/api/analytics/report");
+        console.log(`[Analytics] Mengambil data historis dari Hadoop untuk device ${activeDeviceId}`);
+        const response = await axios.get(`/api/analytics/report?deviceId=${activeDeviceId}`);
 
         if (!response.data.success) {
           throw new Error(response.data.error || "Gagal memproses data Hadoop.");
@@ -100,11 +115,11 @@ export function useAnalyticsData(initialRange: TimeRange = "24h") {
           dataSufficiency
         };
 
-        hadoopCache = finalResult;
+        hadoopCache[cacheKey] = finalResult;
         setResult(finalResult);
       } else {
         console.log(`[Analytics] Mengambil data real-time dari Firestore...`);
-        const data = await AnalyticsDataService.getHistoricalData(selectedRange);
+        const data = await AnalyticsDataService.getHistoricalData(selectedRange, activeDeviceId);
         setResult(data);
       }
     } catch (err: any) {

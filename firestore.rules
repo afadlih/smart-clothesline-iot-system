@@ -88,6 +88,7 @@ function isValidSensorPayload(data) {
       allow update, delete: if false;
     }
 
+  // Path match check: users/{userId}/devices/{deviceId}/schedules/{scheduleId}
     match /users/{userId}/devices/{deviceId} {
       allow read: if isOwner(userId);
       allow create, update: if isOwner(userId)
